@@ -14,6 +14,60 @@ def _cargar_fuente(font_family, font_size):
     return ImageFont.load_default()
 
 
+def _renderizar_imagen(imagen, respuestas, campo):
+    respuesta = respuestas.get(campo.field_id)
+
+    if not respuesta:
+        return
+
+    ruta = Path(str(respuesta))
+    if not ruta.exists():
+        raise FileNotFoundError(
+            "No se encontró la imagen del campo %s: %s"
+            % (campo.field_id, ruta)
+        )
+
+    foto = Image.open(ruta).convert("RGB")
+    posicion = campo.position
+
+    if posicion.width <= 0 or posicion.height <= 0:
+        raise ValueError(
+            "El área de imagen del campo %s debe tener ancho y alto mayores que cero."
+            % campo.field_id
+        )
+
+    # Cover: conserva proporción, cubre todo el rectángulo y recorta el excedente.
+    escala = max(
+        float(posicion.width) / float(foto.width),
+        float(posicion.height) / float(foto.height),
+    )
+
+    nuevo_ancho = max(1, int(round(foto.width * escala)))
+    nuevo_alto = max(1, int(round(foto.height * escala)))
+
+    foto = foto.resize(
+        (nuevo_ancho, nuevo_alto),
+        Image.Resampling.LANCZOS,
+    )
+
+    izquierda = max(0, (nuevo_ancho - posicion.width) // 2)
+    arriba = max(0, (nuevo_alto - posicion.height) // 2)
+
+    foto = foto.crop(
+        (
+            izquierda,
+            arriba,
+            izquierda + posicion.width,
+            arriba + posicion.height,
+        )
+    )
+
+    imagen.paste(
+        foto,
+        (posicion.x, posicion.y),
+    )
+
+
 def renderizar_formato(formato, respuestas, salida):
     plantilla_path = Path(formato.template.path)
 
@@ -35,6 +89,10 @@ def renderizar_formato(formato, respuestas, salida):
     dibujo = ImageDraw.Draw(imagen)
 
     for campo in formato.fields:
+        if campo.field_type == "image":
+            _renderizar_imagen(imagen, respuestas, campo)
+            continue
+
         texto = respuestas.get(campo.field_id, "")
 
         if texto is None or str(texto) == "":
