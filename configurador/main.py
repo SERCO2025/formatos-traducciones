@@ -27,6 +27,7 @@ TOOL_NUMBER = FIELD_TYPE_NUMBER
 TOOL_ALPHANUMERIC = FIELD_TYPE_ALPHANUMERIC
 TOOL_IMAGE = FIELD_TYPE_IMAGE
 TOOL_ZOOM = "zoom"
+TOOL_HAND = "hand"
 
 
 class Configurador:
@@ -49,6 +50,9 @@ class Configurador:
         self.drawing_rect = None
         self.current_fdt_path = None
         self.unsaved = False
+        self._undo_stack = []
+        self._redo_stack = []
+        self._pan_last = None
 
         self._build_ui()
         self._set_status("Listo. Importe una plantilla para comenzar.")
@@ -67,6 +71,9 @@ class Configurador:
         menubar.add_cascade(label="Archivo", menu=archivo)
 
         editar = tk.Menu(menubar, tearoff=0)
+        editar.add_command(label="Deshacer", command=self.deshacer, accelerator="Ctrl+Z")
+        editar.add_command(label="Rehacer", command=self.rehacer, accelerator="Ctrl+Y")
+        editar.add_separator()
         editar.add_command(label="Eliminar campo", command=self.eliminar_seleccionado)
         editar.add_command(label="Propiedades del campo", command=self.editar_seleccionado)
         menubar.add_cascade(label="Editar", menu=editar)
@@ -79,6 +86,7 @@ class Configurador:
 
         herramientas = tk.Menu(menubar, tearoff=0)
         herramientas.add_command(label="Selección", command=lambda: self.set_tool(TOOL_SELECT))
+        herramientas.add_command(label="Manita", command=lambda: self.set_tool(TOOL_HAND))
         herramientas.add_command(label="Texto (A)", command=lambda: self.set_tool(TOOL_TEXT))
         herramientas.add_command(label="Número (1)", command=lambda: self.set_tool(TOOL_NUMBER))
         herramientas.add_command(label="Alfanumérico (A1)", command=lambda: self.set_tool(TOOL_ALPHANUMERIC))
@@ -98,6 +106,7 @@ class Configurador:
 
         tools = [
             ("↖", "Selección", TOOL_SELECT),
+            ("✋", "Manita", TOOL_HAND),
             ("A", "Texto", TOOL_TEXT),
             ("1", "Número", TOOL_NUMBER),
             ("A1", "Alfanumérico", TOOL_ALPHANUMERIC),
@@ -116,6 +125,7 @@ class Configurador:
                 relief="flat",
                 width=7,
                 height=2,
+                font=("Arial", 18 if tool in (TOOL_SELECT, TOOL_HAND) else 11),
             )
             button.pack(side="left", padx=3, pady=5)
             button.bind("<Enter>", lambda e, b=button, l=label: self._set_status(l))
@@ -152,6 +162,9 @@ class Configurador:
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
         self.canvas.bind("<MouseWheel>", self.on_mousewheel)
         self.canvas.bind("<Control-MouseWheel>", self.on_ctrl_wheel)
+        self.canvas.bind("<ButtonPress-3>", self.on_right_down)
+        self.root.bind_all("<Control-z>", lambda e: self.deshacer())
+        self.root.bind_all("<Control-y>", lambda e: self.rehacer())
 
         status = tk.Frame(self.root, bg="#111111")
         status.pack(side="bottom", fill="x")
@@ -316,7 +329,7 @@ class Configurador:
         color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
         rect = self.canvas.create_rectangle(
             x1, y1, x2, y2,
-            outline=color, width=2, dash=(5, 3),
+            outline=color, width=3,
             tags=("field", campo.field_id)
         )
         label = self.canvas.create_text(
@@ -351,6 +364,10 @@ class Configurador:
             self.cambiar_zoom(1.25)
             return
 
+        if self.tool == TOOL_HAND:
+            self._pan_last = (event.x, event.y)
+            return
+
         if self.tool == TOOL_SELECT:
             campo = self._find_field_at(event.x, event.y)
             self.selected_field = campo
@@ -364,6 +381,13 @@ class Configurador:
         self.drawing_rect = None
 
     def on_mouse_move(self, event):
+        if self.tool == TOOL_HAND and self._pan_last is not None:
+            dx = event.x - self._pan_last[0]
+            dy = event.y - self._pan_last[1]
+            self.canvas.xview_scroll(int(-dx / 2), "units")
+            self.canvas.yview_scroll(int(-dy / 2), "units")
+            self._pan_last = (event.x, event.y)
+            return
         if self.drag_start is None:
             return
         if self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
@@ -392,6 +416,9 @@ class Configurador:
         )
 
     def on_mouse_up(self, event):
+        if self.tool == TOOL_HAND:
+            self._pan_last = None
+            return
         if self.drag_start is None:
             return
 
@@ -411,6 +438,7 @@ class Configurador:
             self.drawing_rect = None
         self.drag_start = None
 
+        self._push_undo()
         campo = Field(
             field_id=self._nuevo_id(),
             question="",
@@ -421,6 +449,8 @@ class Configurador:
                 font_size_px=24,
                 color=Color(0, 0, 0),
                 alignment="left",
+                bold=False,
+                italic=False,
             ),
         )
         self.formato.agregar_campo(campo)
@@ -447,7 +477,7 @@ class Configurador:
         dialog.configure(bg="#202020")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("430x560")
+        dialog.geometry("430x650")
         dialog.resizable(False, False)
 
         def label(text):
@@ -484,6 +514,13 @@ class Configurador:
         tk.Label(row, text="Tamaño px", bg="#202020", fg="white").pack(side="left")
         size_var = tk.StringVar(value=str(campo.text_style.font_size_px))
         tk.Entry(row, textvariable=size_var, width=8, bg="#303030", fg="white", insertbackground="white").pack(side="left", padx=8)
+
+        style_row = tk.Frame(dialog, bg="#202020")
+        style_row.pack(fill="x", padx=16, pady=4)
+        bold_var = tk.BooleanVar(value=campo.text_style.bold)
+        italic_var = tk.BooleanVar(value=campo.text_style.italic)
+        tk.Checkbutton(style_row, text="Negrita", variable=bold_var, bg="#202020", fg="white", selectcolor="#303030").pack(side="left")
+        tk.Checkbutton(style_row, text="Cursiva", variable=italic_var, bg="#202020", fg="white", selectcolor="#303030").pack(side="left", padx=14)
 
         align_var = tk.StringVar(value=campo.text_style.alignment)
         tk.Label(row, text="Alineación", bg="#202020", fg="white").pack(side="left", padx=(12, 4))
@@ -561,6 +598,8 @@ class Configurador:
             campo.text_style.font_size_px = size
             campo.text_style.alignment = align_var.get()
             campo.text_style.orientation = orient_var.get()
+            campo.text_style.bold = bold_var.get()
+            campo.text_style.italic = italic_var.get()
             campo.text_style.color = color["value"]
             campo.position = Position(x, y, width, height)
 
@@ -580,19 +619,51 @@ class Configurador:
         buttons.pack(side="bottom", fill="x", padx=16, pady=16)
         tk.Button(buttons, text="Cancelar", command=dialog.destroy,
                   bg="#303030", fg="white", relief="flat").pack(side="right", padx=4)
-        tk.Button(buttons, text="Aceptar", command=aceptar,
+        tk.Button(buttons, text="OK", command=aceptar,
                   bg="#005f73", fg="white", relief="flat").pack(side="right", padx=4)
 
     def eliminar_seleccionado(self):
         if not self.formato or not self.selected_field:
             return
         campo = self.selected_field
+        self._push_undo()
         self.formato.fields.remove(campo)
         self.formato.ordenar_campos()
         self.selected_field = None
         self.unsaved = True
         self.redraw()
         self._set_status("Campo eliminado.")
+
+    def _snapshot(self):
+        import copy
+        return copy.deepcopy(self.formato)
+
+    def _push_undo(self):
+        if self.formato is not None:
+            self._undo_stack.append(self._snapshot())
+            if len(self._undo_stack) > 50:
+                self._undo_stack.pop(0)
+            self._redo_stack.clear()
+
+    def deshacer(self):
+        if not self.formato or not self._undo_stack:
+            return
+        self._redo_stack.append(self._snapshot())
+        self.formato = self._undo_stack.pop()
+        self.selected_field = None
+        self.unsaved = True
+        self.redraw()
+        self._set_status("Deshacer.")
+
+    def rehacer(self):
+        if not self.formato or not self._redo_stack:
+            return
+        self._undo_stack.append(self._snapshot())
+        self.formato = self._redo_stack.pop()
+        self.selected_field = None
+        self.unsaved = True
+        self.redraw()
+        self._set_status("Rehacer.")
 
     def cambiar_zoom(self, factor):
         self.set_zoom(self.zoom * factor)
@@ -608,12 +679,17 @@ class Configurador:
             self.zoom_label.config(text="%d %%" % int(round(self.zoom * 100)))
 
     def on_mousewheel(self, event):
-        if event.state & 0x0004:
+        if self.tool == TOOL_ZOOM or (event.state & 0x0004):
+            self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
             return
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def on_ctrl_wheel(self, event):
         self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
+
+    def on_right_down(self, event):
+        if self.tool == TOOL_ZOOM and self.formato and self.template_image is not None:
+            self.cambiar_zoom(0.87)
 
     def _confirm_unsaved(self):
         if not self.unsaved:
