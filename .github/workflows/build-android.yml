@@ -1,66 +1,60 @@
 name: Compilar APK - Formatos Traducidos
-
 on:
   workflow_dispatch:
   push:
-    branches:
-      - desarrollo
-    paths:
-      - "android/**"
-      - "shared/**"
-      - ".github/workflows/build-android.yml"
-
+    branches: [desarrollo]
+    paths: ["android/**","shared/**",".github/workflows/build-android.yml"]
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        app:
-          - configurador
-          - capturador
-
+        app: [configurador, capturador]
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
-
       - name: Instalar dependencias del sistema
         run: |
           sudo apt-get update
           sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
-
       - name: Preparar fuente Android
         run: |
           rm -rf "android/${{ matrix.app }}/shared"
           cp -R shared "android/${{ matrix.app }}/shared"
-
+      - name: Restaurar cache de Android y Buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.buildozer
+            android/${{ matrix.app }}/.buildozer
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('android/{0}/buildozer.spec', matrix.app), 'shared/**/*.py') }}
+          restore-keys: |
+            android-build-${{ runner.os }}-${{ matrix.app }}-
       - name: Instalar Buildozer
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install "buildozer" "cython==0.29.36" "virtualenv"
-
       - name: Compilar APK
         working-directory: android/${{ matrix.app }}
         run: buildozer -v android debug
-
       - name: Preparar artefactos
         run: |
           mkdir -p artifacts/${{ matrix.app }}
           cp android/${{ matrix.app }}/bin/*.apk artifacts/${{ matrix.app }}/
-
       - name: Subir artefacto a GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: android-${{ matrix.app }}
           path: artifacts/${{ matrix.app }}/*.apk
           if-no-files-found: error
-
       - name: Instalar Backblaze B2 CLI
         run: python3 -m pip install b2
-
       - name: Subir APK a Backblaze B2
         env:
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
