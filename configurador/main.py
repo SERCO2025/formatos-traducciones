@@ -53,6 +53,11 @@ class Configurador:
         self._undo_stack = []
         self._redo_stack = []
         self._pan_last = None
+        self._move_start = None
+        self._move_origin = None
+        self._move_changed = False
+        self._font_inventory = self._obtener_fuentes_instaladas()
+        self._magnifier_label = None
 
         self._build_ui()
         self._set_status("Listo. Importe una plantilla para comenzar.")
@@ -162,6 +167,8 @@ class Configurador:
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
         self.canvas.bind("<MouseWheel>", self.on_mousewheel)
         self.canvas.bind("<Control-MouseWheel>", self.on_ctrl_wheel)
+        self.canvas.bind("<Motion>", self.on_canvas_motion)
+        self.canvas.bind("<Double-Button-1>", self.on_double_click)
         self.canvas.bind("<ButtonPress-3>", self.on_right_down)
         self.root.bind_all("<Control-z>", lambda e: self.deshacer())
         self.root.bind_all("<Control-y>", lambda e: self.rehacer())
@@ -171,12 +178,90 @@ class Configurador:
         self.status_label = tk.Label(status, text="", bg="#111111", fg="#dddddd", anchor="w")
         self.status_label.pack(fill="x", padx=8, pady=5)
 
+    def _obtener_fuentes_instaladas(self):
+        fuentes = {}
+        try:
+            import winreg
+            claves = (
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
+                (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
+            )
+            for hive, subkey in claves:
+                try:
+                    key = winreg.OpenKey(hive, subkey)
+                except OSError:
+                    continue
+                try:
+                    for i in range(winreg.QueryInfoKey(key)[1]):
+                        try:
+                            nombre, archivo, _ = winreg.EnumValue(key, i)
+                        except OSError:
+                            continue
+                        nombre_l = str(nombre).lower()
+                        familia = re.sub(
+                            r"\s*\((true ?type|opentype|truetype)\)\s*$", "",
+                            str(nombre), flags=re.IGNORECASE
+                        ).strip()
+                        familia = re.sub(
+                            r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$", "",
+                            familia, flags=re.IGNORECASE
+                        ).strip()
+                        archivo = os.path.expandvars(str(archivo))
+                        if not os.path.isabs(archivo):
+                            archivo = os.path.join(
+                                os.environ.get("WINDIR", r"C:\Windows"), "Fonts", archivo
+                            )
+                        archivo = os.path.normpath(archivo)
+                        estilo = "regular"
+                        if ("bold" in nombre_l or "negrita" in nombre_l) and ("italic" in nombre_l or "cursiva" in nombre_l):
+                            estilo = "bold_italic"
+                        elif "bold" in nombre_l or "negrita" in nombre_l:
+                            estilo = "bold"
+                        elif "italic" in nombre_l or "cursiva" in nombre_l:
+                            estilo = "italic"
+                        else:
+                            base = os.path.basename(archivo.lower())
+                            if base.endswith(("bi.ttf", "bii.ttf", "bolditalic.ttf")):
+                                estilo = "bold_italic"
+                            elif base.endswith(("bd.ttf", "bold.ttf")):
+                                estilo = "bold"
+                            elif base.endswith(("i.ttf", "italic.ttf")):
+                                estilo = "italic"
+                        fuentes.setdefault(familia, {})[estilo] = archivo
+                finally:
+                    winreg.CloseKey(key)
+        except Exception:
+            pass
+        if not fuentes:
+            try:
+                import tkinter.font as tkfont
+                for familia in sorted(tkfont.families()):
+                    fuentes.setdefault(familia, {})
+            except Exception:
+                pass
+        return dict(sorted(fuentes.items(), key=lambda item: item[0].lower()))
+
+    def _ruta_fuente_seleccionada(self, familia, bold=False, italic=False):
+        datos = self._font_inventory.get(familia, {})
+        if bold and italic:
+            ruta = datos.get("bold_italic") or datos.get("bold") or datos.get("italic")
+        elif bold:
+            ruta = datos.get("bold")
+        elif italic:
+            ruta = datos.get("italic")
+        else:
+            ruta = datos.get("regular")
+        return ruta or familia
+
     def _set_status(self, text):
         if hasattr(self, "status_label"):
             self.status_label.config(text=text)
 
     def set_tool(self, tool):
         self.tool = tool
+        if tool != TOOL_ZOOM:
+            self._ocultar_lupa()
+        self.canvas.config(cursor="crosshair" if tool == TOOL_ZOOM else "")
         self._set_status("Herramienta: " + tool)
 
     def nuevo(self):
@@ -346,6 +431,9 @@ class Configurador:
             max(0, int(round((y - 20) / self.zoom))),
         )
 
+    def _event_to_canvas(self, event):
+        return self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+
     def _find_field_at(self, x, y):
         if not self.formato:
             return None
@@ -359,28 +447,40 @@ class Configurador:
     def on_mouse_down(self, event):
         if not self.formato or self.template_image is None:
             return
+        cx, cy = self._event_to_canvas(event)
+        self._move_changed = False
 
         if self.tool == TOOL_ZOOM:
             self.cambiar_zoom(1.25)
             return
-
         if self.tool == TOOL_HAND:
             self._pan_last = (event.x, event.y)
             return
-
         if self.tool == TOOL_SELECT:
-            campo = self._find_field_at(event.x, event.y)
+            campo = self._find_field_at(cx, cy)
             self.selected_field = campo
             if campo:
-                self.editar_seleccionado()
+                self._move_start = (cx, cy)
+                self._move_origin = (campo.position.x, campo.position.y)
+                self.redraw()
             else:
+                self._move_start = None
+                self._move_origin = None
                 self.redraw()
             return
 
-        self.drag_start = self._canvas_to_document(event.x, event.y)
-        self.drawing_rect = None
+        self.drag_start = self._canvas_to_document(cx, cy)
+        self.drawing_rect = self.canvas.create_rectangle(
+            cx, cy, cx, cy, outline="black", width=3
+        )
 
     def on_mouse_move(self, event):
+        cx, cy = self._event_to_canvas(event)
+        if self.tool == TOOL_ZOOM:
+            self._mostrar_lupa(event)
+        elif self._magnifier_label is not None:
+            self._ocultar_lupa()
+
         if self.tool == TOOL_HAND and self._pan_last is not None:
             dx = event.x - self._pan_last[0]
             dy = event.y - self._pan_last[1]
@@ -388,46 +488,62 @@ class Configurador:
             self.canvas.yview_scroll(int(-dy / 2), "units")
             self._pan_last = (event.x, event.y)
             return
-        if self.drag_start is None:
-            return
-        if self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
+
+        if self.tool == TOOL_SELECT and self.selected_field and self._move_start is not None:
+            dx = int(round((cx - self._move_start[0]) / self.zoom))
+            dy = int(round((cy - self._move_start[1]) / self.zoom))
+            if dx or dy:
+                if not self._move_changed:
+                    self._push_undo()
+                    self._move_changed = True
+                campo = self.selected_field
+                max_x = max(0, self.template_image.width - campo.position.width)
+                max_y = max(0, self.template_image.height - campo.position.height)
+                campo.position = Position(
+                    max(0, min(max_x, self._move_origin[0] + dx)),
+                    max(0, min(max_y, self._move_origin[1] + dy)),
+                    campo.position.width,
+                    campo.position.height,
+                )
+                self.unsaved = True
+                self.redraw()
             return
 
+        if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
+            return
         x0, y0 = self.drag_start
-        x1, y1 = self._canvas_to_document(event.x, event.y)
+        x1, y1 = self._canvas_to_document(cx, cy)
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
-        if right == left:
-            right += 1
-        if bottom == top:
-            bottom += 1
-
+        if right == left: right += 1
+        if bottom == top: bottom += 1
         if self.drawing_rect:
-            self.canvas.delete(self.drawing_rect)
-
-        self.drawing_rect = self.canvas.create_rectangle(
-            20 + left * self.zoom,
-            20 + top * self.zoom,
-            20 + right * self.zoom,
-            20 + bottom * self.zoom,
-            outline="#00ff66",
-            width=2,
-            dash=(4, 2),
-        )
+            self.canvas.coords(
+                self.drawing_rect,
+                20 + left * self.zoom, 20 + top * self.zoom,
+                20 + right * self.zoom, 20 + bottom * self.zoom
+            )
 
     def on_mouse_up(self, event):
         if self.tool == TOOL_HAND:
             self._pan_last = None
             return
+        if self.tool == TOOL_SELECT:
+            if self._move_changed:
+                self._move_changed = False
+                self._set_status("Campo movido.")
+            self._move_start = None
+            self._move_origin = None
+            return
         if self.drag_start is None:
             return
-
         if self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
             self.drag_start = None
             return
 
+        cx, cy = self._event_to_canvas(event)
         x0, y0 = self.drag_start
-        x1, y1 = self._canvas_to_document(event.x, event.y)
+        x1, y1 = self._canvas_to_document(cx, cy)
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         width = max(1, right - left)
@@ -445,12 +561,8 @@ class Configurador:
             field_type=self.tool,
             position=Position(left, top, width, height),
             text_style=TextStyle(
-                font_family="",
-                font_size_px=24,
-                color=Color(0, 0, 0),
-                alignment="left",
-                bold=False,
-                italic=False,
+                font_family="", font_size_px=24, color=Color(0, 0, 0),
+                alignment="left", bold=False, italic=False,
             ),
         )
         self.formato.agregar_campo(campo)
@@ -458,6 +570,36 @@ class Configurador:
         self.unsaved = True
         self.redraw()
         self.editar_seleccionado()
+
+    def on_double_click(self, event):
+        if self.tool != TOOL_SELECT or not self.formato:
+            return
+        cx, cy = self._event_to_canvas(event)
+        campo = self._find_field_at(cx, cy)
+        if campo:
+            self.selected_field = campo
+            self.editar_seleccionado()
+
+    def on_canvas_motion(self, event):
+        if self.tool == TOOL_ZOOM:
+            self._mostrar_lupa(event)
+        elif self._magnifier_label is not None:
+            self._ocultar_lupa()
+
+    def _mostrar_lupa(self, event):
+        if self._magnifier_label is None:
+            self._magnifier_label = tk.Label(
+                self.root, text="🔍", bg="black", fg="white",
+                font=("Segoe UI Symbol", 18), bd=0, padx=1, pady=0
+            )
+        x = event.x_root - self.root.winfo_rootx() + 8
+        y = event.y_root - self.root.winfo_rooty() + 8
+        self._magnifier_label.place(x=x, y=y)
+        self._magnifier_label.lift()
+
+    def _ocultar_lupa(self):
+        if self._magnifier_label is not None:
+            self._magnifier_label.place_forget()
 
     def _nuevo_id(self):
         base = "campo"
@@ -501,12 +643,22 @@ class Configurador:
                        bg="#202020", fg="white", selectcolor="#303030",
                        activebackground="#202020", activeforeground="white").pack(anchor="w", padx=16, pady=8)
 
-        font_frame = tk.Frame(dialog, bg="#202020")
-        font_frame.pack(fill="x", padx=16, pady=4)
-
         label("Tipografía").pack(fill="x", padx=16, pady=(8, 2))
-        font_var = tk.StringVar(value=campo.text_style.font_family)
-        tk.Entry(dialog, textvariable=font_var, bg="#303030", fg="white", insertbackground="white").pack(fill="x", padx=16)
+        font_names = list(self._font_inventory.keys())
+        stored_font = campo.text_style.font_family or ""
+        initial_family = stored_font
+        for familia, datos in self._font_inventory.items():
+            if stored_font in datos.values():
+                initial_family = familia
+                break
+        font_var = tk.StringVar(value=initial_family)
+        font_combo = ttk.Combobox(
+            dialog, textvariable=font_var, values=font_names,
+            state="readonly" if font_names else "normal", height=18
+        )
+        font_combo.pack(fill="x", padx=16)
+        if not initial_family and font_names:
+            font_combo.current(0)
 
         row = tk.Frame(dialog, bg="#202020")
         row.pack(fill="x", padx=16, pady=8)
@@ -594,7 +746,10 @@ class Configurador:
             campo.field_id = nuevo_id
             campo.question = question.get("1.0", "end-1c").strip()
             campo.required = required_var.get()
-            campo.text_style.font_family = font_var.get().strip()
+            familia_fuente = font_var.get().strip()
+            campo.text_style.font_family = self._ruta_fuente_seleccionada(
+                familia_fuente, bold_var.get(), italic_var.get()
+            )
             campo.text_style.font_size_px = size
             campo.text_style.alignment = align_var.get()
             campo.text_style.orientation = orient_var.get()
