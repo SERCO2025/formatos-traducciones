@@ -2,15 +2,28 @@
 import json
 from pathlib import Path
 
-from .models import Formato
+from .models import (
+    FIELD_TYPE_ALPHANUMERIC,
+    FIELD_TYPE_IMAGE,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_TEXT,
+    Formato,
+)
 
-FDT_VERSION = 1
+FDT_VERSION = 2
+FIELD_TYPES = {
+    FIELD_TYPE_TEXT,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_ALPHANUMERIC,
+    FIELD_TYPE_IMAGE,
+}
 
 
 def guardar_fdt(formato: Formato, ruta):
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)
 
+    formato.ordenar_campos()
     data = formato.to_dict()
     data["version"] = FDT_VERSION
 
@@ -45,6 +58,7 @@ def validar_fdt(formato: Formato):
         errores.append("La plantilla debe trabajar en modo RGB.")
 
     ids = set()
+    ordenes = set()
 
     for campo in formato.fields:
         if not campo.field_id.strip():
@@ -52,8 +66,40 @@ def validar_fdt(formato: Formato):
 
         if campo.field_id in ids:
             errores.append("Hay IDs de campo duplicados: %s" % campo.field_id)
-
         ids.add(campo.field_id)
+
+        if campo.field_type not in FIELD_TYPES:
+            errores.append(
+                "Tipo de campo no válido en %s: %s"
+                % (campo.field_id or "(sin ID)", campo.field_type)
+            )
+
+        if campo.order <= 0:
+            errores.append(
+                "El campo %s debe tener un orden de pregunta mayor que cero."
+                % (campo.field_id or "(sin ID)")
+            )
+        elif campo.order in ordenes:
+            errores.append(
+                "Hay órdenes de pregunta duplicados: %s" % campo.order
+            )
+        ordenes.add(campo.order)
+
+        if campo.position.width < 0 or campo.position.height < 0:
+            errores.append(
+                "El área del campo %s no puede tener dimensiones negativas."
+                % (campo.field_id or "(sin ID)")
+            )
+
+        if campo.field_type == FIELD_TYPE_NUMBER:
+            campo.validation.numeric_only = True
+            campo.validation.alphanumeric_only = False
+        elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
+            campo.validation.numeric_only = False
+            campo.validation.alphanumeric_only = True
+        else:
+            campo.validation.numeric_only = False
+            campo.validation.alphanumeric_only = False
 
     if errores:
         raise ValueError("\n".join(errores))
