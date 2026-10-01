@@ -329,7 +329,7 @@ class Configurador:
         color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
         rect = self.canvas.create_rectangle(
             x1, y1, x2, y2,
-            outline=color, width=3,
+            outline="black", width=3,
             tags=("field", campo.field_id)
         )
         label = self.canvas.create_text(
