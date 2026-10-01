@@ -1,0 +1,73 @@
+name: Compilar APK - Formatos Traducidos
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - desarrollo
+    paths:
+      - "android/**"
+      - "shared/**"
+      - ".github/workflows/build-android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - configurador
+          - capturador
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
+
+      - name: Preparar fuente Android
+        run: |
+          rm -rf "android/${{ matrix.app }}/shared"
+          cp -R shared "android/${{ matrix.app }}/shared"
+
+      - name: Instalar Buildozer
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "buildozer" "cython==0.29.36" "virtualenv"
+
+      - name: Compilar APK
+        working-directory: android/${{ matrix.app }}
+        run: buildozer -v android debug
+
+      - name: Preparar artefactos
+        run: |
+          mkdir -p artifacts/${{ matrix.app }}
+          cp android/${{ matrix.app }}/bin/*.apk artifacts/${{ matrix.app }}/
+
+      - name: Subir artefacto a GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.app }}
+          path: artifacts/${{ matrix.app }}/*.apk
+          if-no-files-found: error
+
+      - name: Instalar Backblaze B2 CLI
+        run: python3 -m pip install b2
+
+      - name: Subir APK a Backblaze B2
+        env:
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: |
+          test -n "$B2_APPLICATION_KEY_ID"
+          test -n "$B2_APPLICATION_KEY"
+          b2 account authorize "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
+          APK="$(find artifacts/${{ matrix.app }} -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          b2 file upload "Formatos-Traducciones" "$APK" "android/${{ matrix.app }}/v0.1.0/$(basename "$APK")"
