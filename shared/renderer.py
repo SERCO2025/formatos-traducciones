@@ -4,13 +4,23 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
-def _cargar_fuente(font_family, font_size):
+def _cargar_fuente(font_family, font_size, bold=False, italic=False):
+    import os
+    candidatos = []
     if font_family:
+        base, ext = os.path.splitext(font_family)
+        if bold and italic:
+            candidatos.extend([base + "-BoldItalic" + ext, base + " Bold Italic" + ext])
+        elif bold:
+            candidatos.extend([base + "-Bold" + ext, base + " Bold" + ext])
+        elif italic:
+            candidatos.extend([base + "-Italic" + ext, base + " Italic" + ext])
+        candidatos.append(font_family)
+    for ruta in candidatos:
         try:
-            return ImageFont.truetype(font_family, font_size)
+            return ImageFont.truetype(ruta, font_size)
         except (OSError, IOError):
             pass
-
     return ImageFont.load_default()
 
 
@@ -105,6 +115,8 @@ def renderizar_formato(formato, respuestas, salida):
         fuente = _cargar_fuente(
             estilo.font_family,
             estilo.font_size_px,
+            estilo.bold,
+            estilo.italic,
         )
 
         color = (
