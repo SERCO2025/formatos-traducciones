@@ -36,13 +36,31 @@ jobs:
           key: android-build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('android/{0}/buildozer.spec', matrix.app), 'shared/**/*.py') }}
           restore-keys: |
             android-build-${{ runner.os }}-${{ matrix.app }}-
-      - name: Instalar Buildozer
+      - name: Instalar Buildozer fijo y aceptar licencias Android
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PYTHONUNBUFFERED: "1"
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install "buildozer" "cython==0.29.36" "virtualenv"
+          python3 -m pip install "buildozer==1.5.0" "cython==0.29.36" "virtualenv"
+          SDKMANAGER="$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses || true
+          fi
+      - name: Preparar SDK Android y aceptar todas las licencias
+        working-directory: android/${{ matrix.app }}
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK/licenses"
+          if [ -x "$SDK/tools/bin/sdkmanager" ]; then
+            yes | "$SDK/tools/bin/sdkmanager" --licenses || true
+          fi
       - name: Compilar APK
         working-directory: android/${{ matrix.app }}
-        run: buildozer -v android debug
+        env:
+          PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+        run: |
+          yes | buildozer -v android debug
       - name: Preparar artefactos
         run: |
           mkdir -p artifacts/${{ matrix.app }}
