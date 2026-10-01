@@ -88,6 +88,8 @@ class TextStyle:
     color: Color = field(default_factory=Color)
     orientation: str = "horizontal"
     alignment: str = "left"
+    bold: bool = False
+    italic: bool = False
 
     def to_dict(self):
         return {
@@ -96,6 +98,8 @@ class TextStyle:
             "color": self.color.to_dict(),
             "orientation": self.orientation,
             "alignment": self.alignment,
+            "bold": self.bold,
+            "italic": self.italic,
         }
 
     @classmethod
@@ -107,6 +111,8 @@ class TextStyle:
             color=Color.from_dict(data.get("color", {})),
             orientation=str(data.get("orientation", "horizontal")),
             alignment=str(data.get("alignment", "left")),
+            bold=bool(data.get("bold", False)),
+            italic=bool(data.get("italic", False)),
         )
 
 
