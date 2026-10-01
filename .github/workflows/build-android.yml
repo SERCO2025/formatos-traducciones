@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [desarrollo]
-    paths: ["android/**","shared/**",".github/workflows/build-android.yml"]
+    paths: ["android/**", "shared/**", ".github/workflows/build-android.yml"]
 permissions:
   contents: read
 jobs:
@@ -14,60 +14,91 @@ jobs:
       matrix:
         app: [configurador, capturador]
     steps:
-      - name: Descargar repositorio
+      - name: Descargar proyecto
         uses: actions/checkout@v4
+      - name: Preparar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Instalar dependencias del sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev \
+            libssl-dev
+      - name: Preparar pip y herramientas de compilación
+        run: |
+          python -m pip install --upgrade "pip<25"
+          python -m pip install "setuptools<81"
+          python -m pip install "cython==0.29.34"
+      - name: Instalar Buildozer
+        run: |
+          python -m pip install --upgrade buildozer
       - name: Preparar fuente Android
         run: |
           rm -rf "android/${{ matrix.app }}/shared"
           cp -R shared "android/${{ matrix.app }}/shared"
-      - name: Restaurar cache de Android y Buildozer
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.buildozer
-            android/${{ matrix.app }}/.buildozer
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: android-build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('android/{0}/buildozer.spec', matrix.app), 'shared/**/*.py') }}
-          restore-keys: |
-            android-build-${{ runner.os }}-${{ matrix.app }}-
-      - name: Instalar Buildozer fijo
-        env:
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-          PYTHONUNBUFFERED: "1"
+      - name: Limpiar compilaciones anteriores
+        working-directory: android/${{ matrix.app }}
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "buildozer==1.5.0" "cython==0.29.36" "virtualenv"
-      - name: Preparar SDK Android y aceptar licencias
+          rm -rf .buildozer
+          rm -rf bin
+      - name: Configurar entorno para python-for-android
         working-directory: android/${{ matrix.app }}
         env:
+          P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
+          P4A_RELEASE_BRANCH: "develop"
           PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
         run: |
-          buildozer -v android update
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          if [ -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            mkdir -p "$SDK/tools/bin"
-            ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
-          fi
-          SDKMANAGER="$SDK/tools/bin/sdkmanager"
-          if [ -x "$SDKMANAGER" ]; then
-            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          fi
+          echo "Python utilizado:"
+          python --version
+          echo "pip utilizado:"
+          python -m pip --version
+          echo "Buildozer utilizado:"
+          buildozer --version
       - name: Compilar APK
         working-directory: android/${{ matrix.app }}
         env:
+          P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
+          P4A_RELEASE_BRANCH: "develop"
           PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          buildozer -v android debug
+          yes | buildozer android debug
+      - name: Verificar APK generado
+        working-directory: android/${{ matrix.app }}
+        run: |
+          echo "Contenido de bin/:"
+          ls -lah bin/
+          APK="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK" ]; then
+            echo "ERROR: No se generó ningún APK."
+            exit 1
+          fi
+          echo "APK generado correctamente:"
+          echo "$APK"
       - name: Preparar artefactos
         run: |
-          mkdir -p artifacts/${{ matrix.app }}
-          cp android/${{ matrix.app }}/bin/*.apk artifacts/${{ matrix.app }}/
+          mkdir -p "artifacts/${{ matrix.app }}"
+          cp android/${{ matrix.app }}/bin/*.apk "artifacts/${{ matrix.app }}/"
       - name: Subir artefacto a GitHub Actions
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +106,7 @@ jobs:
           path: artifacts/${{ matrix.app }}/*.apk
           if-no-files-found: error
       - name: Instalar Backblaze B2 CLI
-        run: python3 -m pip install b2
+        run: python -m pip install b2
       - name: Subir APK a Backblaze B2
         env:
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
@@ -84,5 +115,5 @@ jobs:
           test -n "$B2_APPLICATION_KEY_ID"
           test -n "$B2_APPLICATION_KEY"
           b2 account authorize "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
-          APK="$(find artifacts/${{ matrix.app }} -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          APK="$(find artifacts/${{ matrix.app }} -maxdepth 1 -type f -name '*.apk' -print -quit)"
           b2 file upload "Formatos-Traducciones" "$APK" "android/${{ matrix.app }}/v0.1.0/$(basename "$APK")"
