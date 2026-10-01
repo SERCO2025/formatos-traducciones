@@ -1,47 +1,41 @@
 name: Compilar EXE - Formatos Traducidos
-
 on:
   workflow_dispatch:
   push:
-    branches:
-      - desarrollo
-    paths:
-      - "shared/**"
-      - "configurador/**"
-      - "capturador/**"
-      - "requirements-pc.txt"
-      - ".github/workflows/build-pc.yml"
-
+    branches: [desarrollo]
+    paths: ["shared/**","configurador/**","capturador/**","requirements-pc.txt",".github/workflows/build-pc.yml"]
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
-
-      - name: Configurar Python
+      - name: Configurar Python con cache de pip
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+          cache: "pip"
+          cache-dependency-path: requirements-pc.txt
+      - name: Restaurar cache adicional de compilación
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~AppDataLocalpipCache
+          key: pc-build-${{ runner.os }}-py311-${{ hashFiles('requirements-pc.txt') }}
+          restore-keys: |
+            pc-build-${{ runner.os }}-py311-
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-pc.txt
-
       - name: Verificar sintaxis
         run: python -m compileall shared configurador capturador
-
       - name: Compilar Configurador
         run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Configurador --paths . configurador/main.py
-
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Capturador --paths . capturador/main.py
-
       - name: Preparar artefactos
         shell: pwsh
         run: |
@@ -49,17 +43,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts/pc/capturador | Out-Null
           Copy-Item dist/FormatosTraducidos-Configurador.exe artifacts/pc/configurador/
           Copy-Item dist/FormatosTraducidos-Capturador.exe artifacts/pc/capturador/
-
       - name: Subir artefactos a GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: pc-exe
           path: artifacts/pc/**/*.exe
           if-no-files-found: error
-
       - name: Instalar Backblaze B2 CLI
         run: python -m pip install b2
-
       - name: Subir EXE a Backblaze B2
         shell: pwsh
         env:
