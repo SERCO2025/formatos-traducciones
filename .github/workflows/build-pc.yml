@@ -1,0 +1,73 @@
+name: Compilar EXE - Formatos Traducidos
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - desarrollo
+    paths:
+      - "shared/**"
+      - "configurador/**"
+      - "capturador/**"
+      - "requirements-pc.txt"
+      - ".github/workflows/build-pc.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-pc.txt
+
+      - name: Verificar sintaxis
+        run: python -m compileall shared configurador capturador
+
+      - name: Compilar Configurador
+        run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Configurador --paths . configurador/main.py
+
+      - name: Compilar Capturador
+        run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Capturador --paths . capturador/main.py
+
+      - name: Preparar artefactos
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/pc/configurador | Out-Null
+          New-Item -ItemType Directory -Force -Path artifacts/pc/capturador | Out-Null
+          Copy-Item dist/FormatosTraducidos-Configurador.exe artifacts/pc/configurador/
+          Copy-Item dist/FormatosTraducidos-Capturador.exe artifacts/pc/capturador/
+
+      - name: Subir artefactos a GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-exe
+          path: artifacts/pc/**/*.exe
+          if-no-files-found: error
+
+      - name: Instalar Backblaze B2 CLI
+        run: python -m pip install b2
+
+      - name: Subir EXE a Backblaze B2
+        shell: pwsh
+        env:
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:B2_APPLICATION_KEY_ID)) { throw "Falta B2_APPLICATION_KEY_ID" }
+          if ([string]::IsNullOrWhiteSpace($env:B2_APPLICATION_KEY)) { throw "Falta B2_APPLICATION_KEY" }
+          b2 account authorize $env:B2_APPLICATION_KEY_ID $env:B2_APPLICATION_KEY
+          b2 file upload "Formatos-Traducciones" "artifacts/pc/configurador/FormatosTraducidos-Configurador.exe" "pc/configurador/v0.1.0/FormatosTraducidos-Configurador.exe"
+          b2 file upload "Formatos-Traducciones" "artifacts/pc/capturador/FormatosTraducidos-Capturador.exe" "pc/capturador/v0.1.0/FormatosTraducidos-Capturador.exe"
