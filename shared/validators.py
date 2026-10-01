@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import re
 
 
 def validar_respuesta(campo, respuesta):
@@ -10,6 +11,10 @@ def validar_respuesta(campo, respuesta):
     if campo.validation.numeric_only and respuesta.strip():
         if not respuesta.strip().isdigit():
             return False, "Este campo solo permite números."
+
+    if campo.validation.alphanumeric_only and respuesta.strip():
+        if not respuesta.strip().isalnum():
+            return False, "Este campo solo permite letras y números."
 
     return True, ""
 
