@@ -26,8 +26,9 @@ def main():
     formato = cargar_fdt("formato_prueba.fdt")
     respuestas = capturar_respuestas(formato)
 
+    # Los campos de imagen esperan que respuestas[field_id] contenga
+    # la ruta de la imagen seleccionada por el usuario.
     plantilla = input("Ruta de la plantilla: ").strip()
-
     formato.template.path = plantilla
 
     salida = renderizar_formato(
