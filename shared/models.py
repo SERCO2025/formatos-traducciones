@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import List
+
+
+FIELD_TYPE_TEXT = "text"
+FIELD_TYPE_NUMBER = "number"
+FIELD_TYPE_ALPHANUMERIC = "alphanumeric"
+FIELD_TYPE_IMAGE = "image"
+
+FIELD_TYPES = (
+    FIELD_TYPE_TEXT,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_ALPHANUMERIC,
+    FIELD_TYPE_IMAGE,
+)
 
 
 @dataclass
@@ -14,6 +27,7 @@ class Color:
 
     @classmethod
     def from_dict(cls, data):
+        data = data or {}
         return cls(
             r=int(data.get("r", 0)),
             g=int(data.get("g", 0)),
@@ -38,6 +52,7 @@ class Position:
 
     @classmethod
     def from_dict(cls, data):
+        data = data or {}
         return cls(
             x=int(data.get("x", 0)),
             y=int(data.get("y", 0)),
@@ -49,13 +64,21 @@ class Position:
 @dataclass
 class Validation:
     numeric_only: bool = False
+    alphanumeric_only: bool = False
 
     def to_dict(self):
-        return {"numeric_only": self.numeric_only}
+        return {
+            "numeric_only": self.numeric_only,
+            "alphanumeric_only": self.alphanumeric_only,
+        }
 
     @classmethod
     def from_dict(cls, data):
-        return cls(numeric_only=bool(data.get("numeric_only", False)))
+        data = data or {}
+        return cls(
+            numeric_only=bool(data.get("numeric_only", False)),
+            alphanumeric_only=bool(data.get("alphanumeric_only", False)),
+        )
 
 
 @dataclass
@@ -77,6 +100,7 @@ class TextStyle:
 
     @classmethod
     def from_dict(cls, data):
+        data = data or {}
         return cls(
             font_family=str(data.get("font_family", "")),
             font_size_px=int(data.get("font_size_px", 24)),
@@ -90,7 +114,8 @@ class TextStyle:
 class Field:
     field_id: str
     question: str
-    field_type: str = "text"
+    field_type: str = FIELD_TYPE_TEXT
+    order: int = 0
     required: bool = False
     validation: Validation = field(default_factory=Validation)
     position: Position = field(default_factory=Position)
@@ -102,6 +127,7 @@ class Field:
             "field_id": self.field_id,
             "question": self.question,
             "field_type": self.field_type,
+            "order": self.order,
             "required": self.required,
             "validation": self.validation.to_dict(),
             "position": self.position.to_dict(),
@@ -111,10 +137,12 @@ class Field:
 
     @classmethod
     def from_dict(cls, data):
+        data = data or {}
         return cls(
             field_id=str(data.get("field_id", "")),
             question=str(data.get("question", "")),
-            field_type=str(data.get("field_type", "text")),
+            field_type=str(data.get("field_type", FIELD_TYPE_TEXT)),
+            order=int(data.get("order", 0)),
             required=bool(data.get("required", False)),
             validation=Validation.from_dict(data.get("validation", {})),
             position=Position.from_dict(data.get("position", {})),
@@ -142,6 +170,7 @@ class TemplateInfo:
 
     @classmethod
     def from_dict(cls, data):
+        data = data or {}
         return cls(
             path=str(data.get("path", "")),
             width=int(data.get("width", 0)),
@@ -156,9 +185,19 @@ class Formato:
     name: str
     template: TemplateInfo
     fields: List[Field] = field(default_factory=list)
-    version: int = 1
+    version: int = 2
+
+    def ordenar_campos(self):
+        self.fields.sort(key=lambda item: (item.order if item.order > 0 else 10**9))
+        for numero, campo in enumerate(self.fields, start=1):
+            campo.order = numero
+
+    def agregar_campo(self, campo):
+        campo.order = len(self.fields) + 1
+        self.fields.append(campo)
 
     def to_dict(self):
+        self.ordenar_campos()
         return {
             "version": self.version,
             "name": self.name,
@@ -168,9 +207,12 @@ class Formato:
 
     @classmethod
     def from_dict(cls, data):
-        return cls(
+        data = data or {}
+        formato = cls(
             version=int(data.get("version", 1)),
             name=str(data.get("name", "")),
             template=TemplateInfo.from_dict(data.get("template", {})),
             fields=[Field.from_dict(item) for item in data.get("fields", [])],
         )
+        formato.ordenar_campos()
+        return formato
