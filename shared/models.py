@@ -188,7 +188,17 @@ class Formato:
     version: int = 2
 
     def ordenar_campos(self):
-        self.fields.sort(key=lambda item: (item.order if item.order > 0 else 10**9))
+        # FDT v1 no tenia "order"; en ese caso se conserva el orden
+        # original de la lista y se le asigna numeracion nueva.
+        if self.fields and all(item.order <= 0 for item in self.fields):
+            for numero, campo in enumerate(self.fields, start=1):
+                campo.order = numero
+            return
+
+        self.fields.sort(
+            key=lambda item: item.order if item.order > 0 else 10**9
+        )
+
         for numero, campo in enumerate(self.fields, start=1):
             campo.order = numero
 
