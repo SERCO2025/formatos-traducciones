@@ -106,7 +106,7 @@ class Configurador:
         menubar.add_cascade(label="Ayuda", menu=ayuda)
         self.root.config(menu=menubar)
 
-        toolbar = tk.Frame(self.root, bg="#171717", height=52)
+        toolbar = tk.Frame(self.root, bg="#171717", height=46)
         toolbar.pack(side="top", fill="x")
 
         tools = [
@@ -128,9 +128,9 @@ class Configurador:
                 activebackground="#444444",
                 activeforeground="white",
                 relief="flat",
-                width=7,
-                height=2,
-                font=("Arial", 18 if tool in (TOOL_SELECT, TOOL_HAND) else 11),
+                width=4,
+                height=1,
+                font=("Arial", 16 if tool in (TOOL_SELECT, TOOL_HAND) else 11),
             )
             button.pack(side="left", padx=3, pady=5)
             button.bind("<Enter>", lambda e, b=button, l=label: self._set_status(l))
@@ -279,11 +279,15 @@ class Configurador:
         self.unsaved = False
         self._set_status("Nuevo formato.")
 
-    def importar_plantilla(self):
-        ruta = filedialog.askopenfilename(
-            title="Importar plantilla",
-            filetypes=[("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp"), ("Todos", "*.*")]
-        )
+    def importar_plantilla(self, ruta=None):
+        if not ruta:
+            ruta = filedialog.askopenfilename(
+                title="Importar plantilla",
+                filetypes=[
+                    ("Todos los archivos", "*.*"),
+                    ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.jfif"),
+                ]
+            )
         if not ruta:
             return
 
@@ -325,10 +329,17 @@ class Configurador:
 
     def abrir(self):
         ruta = filedialog.askopenfilename(
-            title="Abrir formato",
-            filetypes=[("Formato FDT", "*.fdt"), ("Todos", "*.*")]
+            title="Abrir formato o plantilla",
+            filetypes=[
+                ("Todos los archivos", "*.*"),
+                ("Formato FDT", "*.fdt"),
+                ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.jfif"),
+            ]
         )
         if not ruta:
+            return
+        if os.path.splitext(ruta)[1].lower() != ".fdt":
+            self.importar_plantilla(ruta)
             return
         try:
             from shared.fdt import cargar_fdt
