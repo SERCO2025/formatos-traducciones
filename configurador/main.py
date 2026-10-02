@@ -173,7 +173,7 @@ class Configurador:
         )
 
         self.field_dock = tk.Frame(body, bg="#181818", width=270)
-        self.field_dock.grid(row=0, column=1, sticky="nsew", padx=(2, 0))
+        self.field_dock.grid(row=0, column=2, sticky="nsew", padx=(2, 0))
         self.field_dock.grid_propagate(False)
 
         field_header = tk.Frame(self.field_dock, bg="#242424", height=34)
@@ -214,6 +214,7 @@ class Configurador:
         body.rowconfigure(0, weight=1)
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=0)
+        body.columnconfigure(2, weight=0)
         body.rowconfigure(0, weight=1)
 
         self.canvas.bind("<ButtonPress-1>", self.on_mouse_down)
@@ -413,24 +414,46 @@ class Configurador:
 
     def _dock_field_panel(self, side):
         self.field_dock.grid_forget()
+        self.canvas.grid_forget()
+        self.vbar.grid_forget()
+        self.hbar.grid_forget()
+        body = self.canvas.master
         self.field_dock_side = side
+
+        for col in (0, 1, 2):
+            body.columnconfigure(col, weight=0)
+        for row in (0, 1, 2):
+            body.rowconfigure(row, weight=0)
+
         if side == "left":
-            self.field_dock.grid(row=0, column=0, sticky="nsew", padx=(0, 2))
+            self.field_dock.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2))
             self.canvas.grid(row=0, column=1, sticky="nsew")
-            self.canvas.master.columnconfigure(0, weight=0)
-            self.canvas.master.columnconfigure(1, weight=1)
+            self.vbar.grid(row=0, column=2, sticky="ns")
+            self.hbar.grid(row=1, column=1, sticky="ew")
+            body.columnconfigure(1, weight=1)
+            body.rowconfigure(0, weight=1)
         elif side == "right":
             self.canvas.grid(row=0, column=0, sticky="nsew")
-            self.field_dock.grid(row=0, column=1, sticky="nsew", padx=(2, 0))
-            self.canvas.master.columnconfigure(0, weight=1)
-            self.canvas.master.columnconfigure(1, weight=0)
+            self.vbar.grid(row=0, column=1, sticky="ns")
+            self.field_dock.grid(row=0, column=2, rowspan=2, sticky="nsew", padx=(2, 0))
+            self.hbar.grid(row=1, column=0, sticky="ew")
+            body.columnconfigure(0, weight=1)
+            body.rowconfigure(0, weight=1)
+        elif side == "top":
+            self.field_dock.grid(row=0, column=0, columnspan=3, sticky="nsew", pady=(0, 2))
+            self.canvas.grid(row=1, column=0, sticky="nsew")
+            self.vbar.grid(row=1, column=1, sticky="ns")
+            self.hbar.grid(row=2, column=0, sticky="ew")
+            body.columnconfigure(0, weight=1)
+            body.rowconfigure(1, weight=1)
         else:
-            self.canvas.grid_forget()
-            self.field_dock.grid(row=0 if side == "top" else 1, column=0, sticky="nsew")
-            self.canvas.grid(row=1 if side == "top" else 0, column=0, sticky="nsew")
-            self.canvas.master.rowconfigure(0, weight=1)
-            self.canvas.master.rowconfigure(1, weight=1)
-            self.canvas.master.columnconfigure(0, weight=1)
+            self.canvas.grid(row=0, column=0, sticky="nsew")
+            self.vbar.grid(row=0, column=1, sticky="ns")
+            self.hbar.grid(row=1, column=0, sticky="ew")
+            self.field_dock.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(2, 0))
+            body.columnconfigure(0, weight=1)
+            body.rowconfigure(0, weight=1)
+
         self._refresh_field_list()
 
     def _obtener_fuentes_instaladas(self):
