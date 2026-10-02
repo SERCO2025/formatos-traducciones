@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
+import re
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -26,7 +27,6 @@ def _cargar_fuente(font_family, font_size, bold=False, italic=False):
 
 def _renderizar_imagen(imagen, respuestas, campo):
     respuesta = respuestas.get(campo.field_id)
-
     if not respuesta:
         return
 
@@ -39,59 +39,36 @@ def _renderizar_imagen(imagen, respuestas, campo):
 
     foto = Image.open(ruta).convert("RGB")
     posicion = campo.position
-
     if posicion.width <= 0 or posicion.height <= 0:
         raise ValueError(
             "El área de imagen del campo %s debe tener ancho y alto mayores que cero."
             % campo.field_id
         )
 
-    # Cover: conserva proporción, cubre todo el rectángulo y recorta el excedente.
     escala = max(
         float(posicion.width) / float(foto.width),
         float(posicion.height) / float(foto.height),
     )
-
     nuevo_ancho = max(1, int(round(foto.width * escala)))
     nuevo_alto = max(1, int(round(foto.height * escala)))
-
-    foto = foto.resize(
-        (nuevo_ancho, nuevo_alto),
-        Image.Resampling.LANCZOS,
-    )
+    foto = foto.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
 
     izquierda = max(0, (nuevo_ancho - posicion.width) // 2)
     arriba = max(0, (nuevo_alto - posicion.height) // 2)
-
     foto = foto.crop(
-        (
-            izquierda,
-            arriba,
-            izquierda + posicion.width,
-            arriba + posicion.height,
-        )
+        (izquierda, arriba,
+         izquierda + posicion.width, arriba + posicion.height)
     )
-
-    imagen.paste(
-        foto,
-        (posicion.x, posicion.y),
-    )
+    imagen.paste(foto, (posicion.x, posicion.y))
 
 
-def renderizar_formato(formato, respuestas, salida):
+def renderizar_imagen(formato, respuestas):
     plantilla_path = Path(formato.template.path)
-
     if not plantilla_path.exists():
-        raise FileNotFoundError(
-            "No se encontró la plantilla: %s" % plantilla_path
-        )
+        raise FileNotFoundError("No se encontró la plantilla: %s" % plantilla_path)
 
     imagen = Image.open(plantilla_path).convert("RGB")
-
-    if imagen.size != (
-        formato.template.width,
-        formato.template.height,
-    ):
+    if imagen.size != (formato.template.width, formato.template.height):
         raise ValueError(
             "Las dimensiones reales de la plantilla no coinciden con el FDT."
         )
@@ -104,26 +81,37 @@ def renderizar_formato(formato, respuestas, salida):
             continue
 
         texto = respuestas.get(campo.field_id, "")
-
         if texto is None or str(texto) == "":
             continue
 
         texto = str(texto)
         estilo = campo.text_style
         posicion = campo.position
-
         fuente = _cargar_fuente(
             estilo.font_family,
             estilo.font_size_px,
             estilo.bold,
             estilo.italic,
         )
+        color = (estilo.color.r, estilo.color.g, estilo.color.b)
 
-        color = (
-            estilo.color.r,
-            estilo.color.g,
-            estilo.color.b,
-        )
+        if estilo.orientation == "vertical":
+            caja = Image.new(
+                "RGBA",
+                (max(1, posicion.height), max(1, posicion.width)),
+                (0, 0, 0, 0),
+            )
+            caja_draw = ImageDraw.Draw(caja)
+            caja_draw.text(
+                (0, 0),
+                texto,
+                fill=color,
+                font=fuente,
+                anchor="la",
+            )
+            caja = caja.rotate(90, expand=True)
+            imagen.paste(caja, (posicion.x, posicion.y), caja)
+            continue
 
         if estilo.alignment == "center":
             xy = (posicion.x + posicion.width // 2, posicion.y)
@@ -135,17 +123,15 @@ def renderizar_formato(formato, respuestas, salida):
             xy = (posicion.x, posicion.y)
             anchor = "la"
 
-        dibujo.text(
-            xy,
-            texto,
-            fill=color,
-            font=fuente,
-            anchor=anchor,
-        )
+        dibujo.text(xy, texto, fill=color, font=fuente, anchor=anchor)
 
+    return imagen
+
+
+def renderizar_formato(formato, respuestas, salida):
+    imagen = renderizar_imagen(formato, respuestas)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
-
     imagen.save(
         salida,
         format="JPEG",
@@ -153,5 +139,33 @@ def renderizar_formato(formato, respuestas, salida):
         subsampling=0,
         dpi=(formato.template.dpi, formato.template.dpi),
     )
-
     return salida
+
+
+def construir_nombre_archivo(formato, respuestas):
+    configuracion = getattr(formato, "output_naming", None)
+    if configuracion is None:
+        return "resultado.jpg"
+
+    partes = []
+    texto = str(getattr(configuracion, "name_text", "") or "").strip()
+    if texto:
+        partes.append(texto)
+
+    for field_id in list(getattr(configuracion, "field_ids", []))[:4]:
+        if not field_id:
+            continue
+        valor = respuestas.get(field_id, "")
+        if valor is None:
+            continue
+        valor = str(valor).strip()
+        if valor:
+            partes.append(valor)
+
+    nombre = "_".join(partes).strip(" ._")
+    if not nombre:
+        nombre = "resultado"
+
+    nombre = re.sub(r'[\\/:*?"<>|]+', "_", nombre)
+    nombre = re.sub(r"\s+", " ", nombre).strip()
+    return nombre + ".jpg"
