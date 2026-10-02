@@ -28,7 +28,7 @@ _EXTRACTED_DIRS = []
 def _is_zip_fdt(ruta):
     try:
         with open(ruta, "rb") as archivo:
-            return archivo.read(4) == b"PK\\x03\\x04"
+            return archivo.read(4) == b"PK\x03\x04"
     except (OSError, IOError):
         return False
 
@@ -203,6 +203,6 @@ def validar_fdt(formato: Formato):
             campo.validation.alphanumeric_only = False
 
     if errores:
-        raise ValueError("\\n".join(errores))
+        raise ValueError("\n".join(errores))
 
     return True
