@@ -210,9 +210,17 @@ class CapturadorApp:
             return
         try:
             imagen = renderizar_imagen(self.formato, self._respuestas_para_preview())
+            campo = self.formato.fields[self.indice]
+            p = campo.position
+            margen = max(20, min(100, int(max(p.width, p.height) * 0.20)))
+            izquierda = max(0, p.x - margen)
+            arriba = max(0, p.y - margen)
+            derecha = min(imagen.width, p.x + p.width + margen)
+            abajo = min(imagen.height, p.y + p.height + margen)
+            vista_campo = imagen.crop((izquierda, arriba, derecha, abajo))
             self._mostrar_imagen_en_label(
                 self.preview_label,
-                imagen,
+                vista_campo,
                 "_preview_photo",
             )
         except Exception as exc:
