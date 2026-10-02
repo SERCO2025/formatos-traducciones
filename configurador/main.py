@@ -4,7 +4,7 @@ import re
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from shared.fdt import guardar_fdt, validar_fdt
 from shared.models import (
@@ -58,6 +58,11 @@ class Configurador:
         self._move_changed = False
         self._font_inventory = self._obtener_fuentes_instaladas()
         self._magnifier_label = None
+        self._icon_images = {}
+        self._field_drag_index = None
+        self.field_panel_visible = False
+        self.toolbar_dock_side = "top"
+        self.field_dock_side = "right"
 
         self._build_ui()
         self._set_status("Listo. Importe una plantilla para comenzar.")
@@ -97,6 +102,12 @@ class Configurador:
         herramientas.add_command(label="Alfanumérico (A1)", command=lambda: self.set_tool(TOOL_ALPHANUMERIC))
         herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE))
         herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM))
+        herramientas.add_separator()
+        herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel)
+        herramientas.add_command(label="Acoplar herramientas arriba", command=lambda: self._dock_toolbar("top"))
+        herramientas.add_command(label="Acoplar herramientas abajo", command=lambda: self._dock_toolbar("bottom"))
+        herramientas.add_command(label="Acoplar herramientas izquierda", command=lambda: self._dock_toolbar("left"))
+        herramientas.add_command(label="Acoplar herramientas derecha", command=lambda: self._dock_toolbar("right"))
         menubar.add_cascade(label="Herramientas", menu=herramientas)
 
         ayuda = tk.Menu(menubar, tearoff=0)
@@ -106,44 +117,52 @@ class Configurador:
         menubar.add_cascade(label="Ayuda", menu=ayuda)
         self.root.config(menu=menubar)
 
-        toolbar = tk.Frame(self.root, bg="#171717", height=46)
-        toolbar.pack(side="top", fill="x")
+        self.toolbar_host = tk.Frame(self.root, bg="#171717", height=42)
+        self.toolbar_host.pack(side="top", fill="x")
+
+        grip = tk.Label(self.toolbar_host, text="⋮⋮", bg="#171717", fg="#888888",
+                        font=("Arial", 11), cursor="fleur")
+        grip.pack(side="left", padx=(4, 2))
+        grip.bind("<ButtonPress-1>", self._dock_start)
+        grip.bind("<B1-Motion>", self._dock_motion)
+        grip.bind("<ButtonRelease-1>", self._dock_release)
 
         tools = [
-            ("↖", "Selección", TOOL_SELECT),
-            ("✋", "Manita", TOOL_HAND),
-            ("A", "Texto", TOOL_TEXT),
-            ("1", "Número", TOOL_NUMBER),
-            ("A1", "Alfanumérico", TOOL_ALPHANUMERIC),
-            ("IMG", "Imagen", TOOL_IMAGE),
-            ("🔍", "Lupa", TOOL_ZOOM),
+            ("mouse-pointer", "Selección", TOOL_SELECT),
+            ("hand-paper", "Manita", TOOL_HAND),
+            ("font", "Texto", TOOL_TEXT),
+            ("hashtag", "Número", TOOL_NUMBER),
+            ("id-card", "Alfanumérico", TOOL_ALPHANUMERIC),
+            ("image", "Imagen", TOOL_IMAGE),
+            ("search-plus", "Lupa", TOOL_ZOOM),
         ]
-        for symbol, label, tool in tools:
+        for icon, label, tool in tools:
             button = tk.Button(
-                toolbar,
-                text=symbol,
+                self.toolbar_host,
+                image=self._icon_image(icon, 15),
                 command=lambda t=tool: self.set_tool(t),
-                bg="#262626",
-                fg="white",
-                activebackground="#444444",
-                activeforeground="white",
-                relief="flat",
-                width=4,
-                height=1,
-                font=("Arial", 16 if tool in (TOOL_SELECT, TOOL_HAND) else 11),
+                bg="#262626", fg="white",
+                activebackground="#444444", activeforeground="white",
+                relief="flat", width=30, height=28, bd=0,
             )
-            button.pack(side="left", padx=3, pady=5)
-            button.bind("<Enter>", lambda e, b=button, l=label: self._set_status(l))
+            button._icon_ref = self._icon_images.get((icon, 15))
+            button.pack(side="left", padx=2, pady=5)
+            button.bind("<Enter>", lambda e, l=label: self._set_status(l))
             button.bind("<Leave>", lambda e: self._set_status("Herramienta: " + self.tool))
 
-        zoom_frame = tk.Frame(toolbar, bg="#171717")
-        zoom_frame.pack(side="right", padx=8)
-        tk.Button(zoom_frame, text="−", command=lambda: self.cambiar_zoom(0.8),
-                  bg="#262626", fg="white", relief="flat", width=3).pack(side="left")
-        self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=7)
-        self.zoom_label.pack(side="left")
-        tk.Button(zoom_frame, text="+", command=lambda: self.cambiar_zoom(1.25),
-                  bg="#262626", fg="white", relief="flat", width=3).pack(side="left")
+        zoom_frame = tk.Frame(self.toolbar_host, bg="#171717")
+        zoom_frame.pack(side="right", padx=6)
+        for icon, command in (
+            ("minus", lambda: self.cambiar_zoom(0.8)),
+            ("plus", lambda: self.cambiar_zoom(1.25)),
+        ):
+            b = tk.Button(zoom_frame, image=self._icon_image(icon, 13), command=command,
+                          bg="#262626", fg="white", relief="flat", bd=0,
+                          width=28, height=28)
+            b._icon_ref = self._icon_images.get((icon, 13))
+            b.pack(side="left", padx=2, pady=4)
+        self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
+        self.zoom_label.pack(side="left", padx=2)
 
         body = tk.Frame(self.root, bg="black")
         body.pack(fill="both", expand=True)
@@ -152,6 +171,39 @@ class Configurador:
             body, bg="black", highlightthickness=0,
             scrollregion=(0, 0, 0, 0)
         )
+
+        self.field_dock = tk.Frame(body, bg="#181818", width=270)
+        self.field_dock.grid(row=0, column=1, sticky="nsew", padx=(2, 0))
+        self.field_dock.grid_propagate(False)
+
+        field_header = tk.Frame(self.field_dock, bg="#242424", height=34)
+        field_header.pack(fill="x")
+        tk.Label(field_header, text="Campos", bg="#242424", fg="white",
+                 font=("Arial", 10, "bold")).pack(side="left", padx=8, pady=7)
+        close_btn = tk.Button(field_header, image=self._icon_image("times", 11),
+                              command=self.toggle_field_panel, bg="#242424",
+                              activebackground="#444444", relief="flat", bd=0)
+        close_btn._icon_ref = self._icon_images.get(("times", 11))
+        close_btn.pack(side="right", padx=5)
+        field_header.bind("<ButtonPress-1>", self._field_dock_start)
+        field_header.bind("<B1-Motion>", self._field_dock_motion)
+        field_header.bind("<ButtonRelease-1>", self._field_dock_release)
+
+        self.field_list = tk.Listbox(
+            self.field_dock, bg="#101010", fg="#eeeeee",
+            selectbackground="#005f73", selectforeground="white",
+            activestyle="none", borderwidth=0, highlightthickness=0,
+            font=("Arial", 10)
+        )
+        self.field_list.pack(fill="both", expand=True, padx=4, pady=4)
+        self.field_list.bind("<Double-Button-1>", self._field_list_double_click)
+        self.field_list.bind("<ButtonPress-1>", self._field_list_press)
+        self.field_list.bind("<B1-Motion>", self._field_list_motion)
+        self.field_list.bind("<ButtonRelease-1>", self._field_list_release)
+        self.field_list.bind("<<ListboxSelect>>", self._field_list_select)
+
+        self.field_dock.grid_remove()
+        self.field_panel_visible = False
         self.vbar = ttk.Scrollbar(body, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(body, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=self.vbar.set, xscrollcommand=self.hbar.set)
@@ -161,6 +213,8 @@ class Configurador:
         self.hbar.grid(row=1, column=0, sticky="ew")
         body.rowconfigure(0, weight=1)
         body.columnconfigure(0, weight=1)
+        body.columnconfigure(1, weight=0)
+        body.rowconfigure(0, weight=1)
 
         self.canvas.bind("<ButtonPress-1>", self.on_mouse_down)
         self.canvas.bind("<B1-Motion>", self.on_mouse_move)
@@ -177,6 +231,207 @@ class Configurador:
         status.pack(side="bottom", fill="x")
         self.status_label = tk.Label(status, text="", bg="#111111", fg="#dddddd", anchor="w")
         self.status_label.pack(fill="x", padx=8, pady=5)
+
+    def _icon_font_path(self):
+        try:
+            import fontawesome_free
+            base = os.path.dirname(fontawesome_free.__file__)
+            candidatos = [
+                os.path.join(base, "static", "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
+                os.path.join(base, "webfonts", "fa-solid-900.ttf"),
+            ]
+            for ruta in candidatos:
+                if os.path.exists(ruta):
+                    return ruta
+        except Exception:
+            pass
+        return None
+
+    def _icon_image(self, nombre, size=15):
+        clave = (nombre, size)
+        if clave in self._icon_images:
+            return self._icon_images[clave]
+        mapa = {
+            "mouse-pointer": 0xF245, "hand-paper": 0xF256, "font": 0xF031,
+            "hashtag": 0xF292, "id-card": 0xF2C2, "image": 0xF03E,
+            "search-plus": 0xF00E, "minus": 0xF068, "plus": 0xF067,
+            "times": 0xF00D, "list": 0xF03A, "folder-open": 0xF07C,
+            "save": 0xF0C7, "undo": 0xF0E2, "redo": 0xF01E,
+            "file": 0xF15B,
+        }
+        code = mapa.get(nombre, 0xF111)
+        font_path = self._icon_font_path()
+        try:
+            if font_path:
+                font = ImageFont.truetype(font_path, size)
+                box = font.getbbox(chr(code))
+                w = max(size + 4, box[2] - box[0] + 4)
+                h = max(size + 4, box[3] - box[1] + 4)
+                img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(img)
+                draw.text((2 - box[0], 2 - box[1]), chr(code), font=font, fill="white")
+                result = ImageTk.PhotoImage(img)
+                self._icon_images[clave] = result
+                return result
+        except Exception:
+            pass
+        return None
+
+    def toggle_field_panel(self):
+        if self.field_panel_visible:
+            self.field_dock.grid_remove()
+            self.field_panel_visible = False
+        else:
+            self.field_dock.grid()
+            self.field_panel_visible = True
+            self._refresh_field_list()
+        self._set_status("Lista de campos " + ("activada." if self.field_panel_visible else "oculta."))
+
+    def _refresh_field_list(self):
+        if not hasattr(self, "field_list"):
+            return
+        self.field_list.delete(0, "end")
+        if not self.formato:
+            return
+        self.formato.ordenar_campos()
+        for campo in self.formato.fields:
+            pregunta = campo.question.strip() or "(sin pregunta)"
+            self.field_list.insert("end", "%02d  %s  —  %s" % (
+                campo.order, campo.field_id, pregunta
+            ))
+        if self.selected_field:
+            for i, campo in enumerate(self.formato.fields):
+                if campo is self.selected_field:
+                    self.field_list.selection_clear(0, "end")
+                    self.field_list.selection_set(i)
+                    self.field_list.see(i)
+                    break
+
+    def _field_list_select(self, event=None):
+        if not self.formato:
+            return
+        sel = self.field_list.curselection()
+        if not sel:
+            return
+        self.selected_field = self.formato.fields[sel[0]]
+        self.redraw()
+
+    def _field_list_double_click(self, event):
+        self._field_list_select()
+        self.editar_seleccionado()
+
+    def _field_list_press(self, event):
+        self._field_drag_index = self.field_list.nearest(event.y)
+
+    def _field_list_motion(self, event):
+        if self._field_drag_index is None or not self.formato:
+            return
+        nuevo = self.field_list.nearest(event.y)
+        if nuevo < 0 or nuevo >= len(self.formato.fields) or nuevo == self._field_drag_index:
+            return
+        self._push_undo()
+        campo = self.formato.fields.pop(self._field_drag_index)
+        self.formato.fields.insert(nuevo, campo)
+        self.formato.ordenar_campos()
+        self._field_drag_index = nuevo
+        self.unsaved = True
+        self._refresh_field_list()
+        self.field_list.selection_set(nuevo)
+        self.redraw()
+
+    def _field_list_release(self, event):
+        self._field_drag_index = None
+        self._set_status("Orden de preguntas actualizado.")
+
+    def _dock_toolbar(self, side):
+        self.toolbar_host.pack_forget()
+        self.toolbar_dock_side = side
+        self.toolbar_host.pack(
+            side=side,
+            fill="x" if side in ("top", "bottom") else "y",
+            before=self.root.winfo_children()[0] if side == "top" and self.root.winfo_children() else None
+        )
+
+    def _dock_start(self, event):
+        self._dock_dragging = True
+
+    def _dock_motion(self, event):
+        if not getattr(self, "_dock_dragging", False):
+            return
+
+    def _dock_release(self, event):
+        if not getattr(self, "_dock_dragging", False):
+            return
+        self._dock_dragging = False
+        x = event.x_root
+        y = event.y_root
+        left = self.root.winfo_rootx()
+        top = self.root.winfo_rooty()
+        right = left + self.root.winfo_width()
+        bottom = top + self.root.winfo_height()
+        margin = 90
+        if y - top < margin:
+            side = "top"
+        elif bottom - y < margin:
+            side = "bottom"
+        elif x - left < margin:
+            side = "left"
+        elif right - x < margin:
+            side = "right"
+        else:
+            side = self.toolbar_dock_side
+        self._dock_toolbar(side)
+
+    def _field_dock_start(self, event):
+        self._field_dock_dragging = True
+
+    def _field_dock_motion(self, event):
+        return
+
+    def _field_dock_release(self, event):
+        if not getattr(self, "_field_dock_dragging", False):
+            return
+        self._field_dock_dragging = False
+        x = event.x_root
+        y = event.y_root
+        left = self.root.winfo_rootx()
+        top = self.root.winfo_rooty()
+        right = left + self.root.winfo_width()
+        bottom = top + self.root.winfo_height()
+        margin = 90
+        if y - top < margin:
+            side = "top"
+        elif bottom - y < margin:
+            side = "bottom"
+        elif x - left < margin:
+            side = "left"
+        elif right - x < margin:
+            side = "right"
+        else:
+            side = self.field_dock_side
+        self._dock_field_panel(side)
+
+    def _dock_field_panel(self, side):
+        self.field_dock.grid_forget()
+        self.field_dock_side = side
+        if side == "left":
+            self.field_dock.grid(row=0, column=0, sticky="nsew", padx=(0, 2))
+            self.canvas.grid(row=0, column=1, sticky="nsew")
+            self.canvas.master.columnconfigure(0, weight=0)
+            self.canvas.master.columnconfigure(1, weight=1)
+        elif side == "right":
+            self.canvas.grid(row=0, column=0, sticky="nsew")
+            self.field_dock.grid(row=0, column=1, sticky="nsew", padx=(2, 0))
+            self.canvas.master.columnconfigure(0, weight=1)
+            self.canvas.master.columnconfigure(1, weight=0)
+        else:
+            self.canvas.grid_forget()
+            self.field_dock.grid(row=0 if side == "top" else 1, column=0, sticky="nsew")
+            self.canvas.grid(row=1 if side == "top" else 0, column=0, sticky="nsew")
+            self.canvas.master.rowconfigure(0, weight=1)
+            self.canvas.master.rowconfigure(1, weight=1)
+            self.canvas.master.columnconfigure(0, weight=1)
+        self._refresh_field_list()
 
     def _obtener_fuentes_instaladas(self):
         fuentes = {}
@@ -320,6 +575,7 @@ class Configurador:
             if self.zoom <= 0:
                 self.zoom = 0.25
             self.redraw()
+            self._refresh_field_list()
             self.unsaved = True
             self._set_status(
                 "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
@@ -357,6 +613,7 @@ class Configurador:
                 (self.canvas.winfo_height() - 40) / plantilla.height,
             )))
             self.redraw()
+            self._refresh_field_list()
             self.unsaved = False
             self._set_status("Formato abierto: " + os.path.basename(ruta))
         except Exception as exc:
@@ -580,6 +837,7 @@ class Configurador:
         self.selected_field = campo
         self.unsaved = True
         self.redraw()
+        self._refresh_field_list()
         self.editar_seleccionado()
 
     def on_double_click(self, event):
@@ -780,6 +1038,7 @@ class Configurador:
             self.unsaved = True
             dialog.destroy()
             self.redraw()
+            self._refresh_field_list()
 
         buttons = tk.Frame(dialog, bg="#202020")
         buttons.pack(side="bottom", fill="x", padx=16, pady=16)
@@ -798,6 +1057,7 @@ class Configurador:
         self.selected_field = None
         self.unsaved = True
         self.redraw()
+        self._refresh_field_list()
         self._set_status("Campo eliminado.")
 
     def _snapshot(self):
@@ -819,6 +1079,7 @@ class Configurador:
         self.selected_field = None
         self.unsaved = True
         self.redraw()
+        self._refresh_field_list()
         self._set_status("Deshacer.")
 
     def rehacer(self):
@@ -829,6 +1090,7 @@ class Configurador:
         self.selected_field = None
         self.unsaved = True
         self.redraw()
+        self._refresh_field_list()
         self._set_status("Rehacer.")
 
     def cambiar_zoom(self, factor):
