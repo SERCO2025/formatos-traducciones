@@ -34,6 +34,70 @@ def _is_zip_fdt(ruta):
         return False
 
 
+def _resolver_fuente_para_empaquetar(font_family):
+    import os
+
+    solicitado = str(font_family or "").strip()
+    if not solicitado:
+        return None
+    if os.path.isfile(solicitado):
+        return solicitado
+
+    objetivo = os.path.basename(solicitado).lower()
+    objetivo = os.path.splitext(objetivo)[0]
+    objetivo = re.sub(r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$", "", objetivo, flags=re.IGNORECASE)
+    objetivo = re.sub(r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$", "", objetivo, flags=re.IGNORECASE).strip()
+
+    try:
+        import winreg
+        claves = (
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+            (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+        )
+        for hive, subkey in claves:
+            try:
+                key = winreg.OpenKey(hive, subkey)
+            except OSError:
+                continue
+            try:
+                for i in range(winreg.QueryInfoKey(key)[1]):
+                    try:
+                        nombre, archivo, _ = winreg.EnumValue(key, i)
+                    except OSError:
+                        continue
+                    nombre_base = re.sub(
+                        r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$",
+                        "",
+                        str(nombre),
+                        flags=re.IGNORECASE,
+                    )
+                    nombre_base = re.sub(
+                        r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$",
+                        "",
+                        nombre_base,
+                        flags=re.IGNORECASE,
+                    ).strip().lower()
+
+                    archivo = os.path.expandvars(str(archivo))
+                    if not os.path.isabs(archivo):
+                        archivo = os.path.join(
+                            os.environ.get("WINDIR", r"C:\\Windows"),
+                            "Fonts",
+                            archivo,
+                        )
+                    archivo = os.path.normpath(archivo)
+                    archivo_base = os.path.splitext(os.path.basename(archivo))[0].lower()
+
+                    if (objetivo == nombre_base or objetivo == archivo_base) and os.path.isfile(archivo):
+                        return archivo
+            finally:
+                winreg.CloseKey(key)
+    except Exception:
+        pass
+
+    return None
+
+
 def guardar_fdt(formato: Formato, ruta):
     """
     Guarda un FDT autocontenido como ZIP con extension .fdt.
@@ -65,9 +129,10 @@ def guardar_fdt(formato: Formato, ruta):
         if not fuente:
             continue
 
-        fuente_path = Path(fuente)
-        if not fuente_path.exists() or not fuente_path.is_file():
+        fuente_resuelta = _resolver_fuente_para_empaquetar(fuente)
+        if not fuente_resuelta:
             continue
+        fuente_path = Path(fuente_resuelta)
 
         clave = str(fuente_path.resolve())
         if clave not in fuentes_empaquetadas:
