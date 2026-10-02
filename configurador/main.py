@@ -244,14 +244,13 @@ class Configurador:
             bases = []
             base = os.path.dirname(fontawesome_free.__file__)
             bases.append(base)
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                bases.append(os.path.join(meipass, "assets"))
 
             # En un EXE de PyInstaller --onefile los datos quedan bajo
             # _MEIPASS; buscar también ahí evita depender de una sola
             # estructura interna del paquete Font Awesome.
-            meipass = getattr(sys, "_MEIPASS", None)
-            if meipass:
-                bases.append(os.path.join(meipass, "fontawesome_free"))
-                bases.append(meipass)
 
             candidatos = []
             for raiz in bases:
