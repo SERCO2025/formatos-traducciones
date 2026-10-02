@@ -140,13 +140,13 @@ class Configurador:
         for icon, label, tool in tools:
             button = tk.Button(
                 self.toolbar_host,
-                image=self._icon_image(icon, 60),
+                image=self._icon_image(icon, 120),
                 command=lambda t=tool: self.set_tool(t),
                 bg="#262626", fg="white",
                 activebackground="#444444", activeforeground="white",
-                relief="flat", width=5, height=5, padx=8, pady=8, bd=0,
+                relief="flat", width=20, height=20, padx=14, pady=14, bd=0,
             )
-            button._icon_ref = self._icon_images.get((icon, 60))
+            button._icon_ref = self._icon_images.get((icon, 120))
             button.pack(side="left", padx=2, pady=5)
             self._tool_buttons.append(button)
             button.bind("<Enter>", lambda e, l=label: self._set_status(l))
@@ -158,10 +158,10 @@ class Configurador:
             ("minus", lambda: self.cambiar_zoom(0.8)),
             ("plus", lambda: self.cambiar_zoom(1.25)),
         ):
-            b = tk.Button(zoom_frame, image=self._icon_image(icon, 52), command=command,
+            b = tk.Button(zoom_frame, image=self._icon_image(icon, 104), command=command,
                           bg="#262626", fg="white", relief="flat", bd=0,
-                          width=5, height=5, padx=8, pady=8)
-            b._icon_ref = self._icon_images.get((icon, 52))
+                          width=20, height=20, padx=14, pady=14)
+            b._icon_ref = self._icon_images.get((icon, 104))
             b.pack(side="left", padx=2, pady=4)
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
         self.zoom_label.pack(side="left", padx=2)
@@ -182,10 +182,10 @@ class Configurador:
         field_header.pack(fill="x")
         tk.Label(field_header, text="Campos", bg="#242424", fg="white",
                  font=("Arial", 10, "bold")).pack(side="left", padx=8, pady=7)
-        close_btn = tk.Button(field_header, image=self._icon_image("times", 44),
+        close_btn = tk.Button(field_header, image=self._icon_image("times", 88),
                               command=self.toggle_field_panel, bg="#242424",
                               activebackground="#444444", relief="flat", bd=0)
-        close_btn._icon_ref = self._icon_images.get(("times", 44))
+        close_btn._icon_ref = self._icon_images.get(("times", 88))
         close_btn.pack(side="right", padx=5)
         field_header.bind("<ButtonPress-1>", self._field_dock_start)
         field_header.bind("<B1-Motion>", self._field_dock_motion)
