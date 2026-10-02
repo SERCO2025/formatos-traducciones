@@ -52,8 +52,34 @@ def guardar_fdt(formato: Formato, ruta):
             "No se encontró la imagen de plantilla: %s" % template_path
         )
 
-    # La ruta almacenada dentro del FDT es interna al contenedor.
+    # Las rutas almacenadas dentro del FDT son internas al contenedor.
     data["template"]["path"] = "template/" + template_path.name
+
+    # Las tipografías utilizadas por los campos también quedan dentro del FDT.
+    # Esto evita que el renderizador dependa de que la misma fuente exista
+    # físicamente en el equipo donde se abre el formato.
+    fuentes_empaquetadas = {}
+    for campo_data in data.get("fields", []):
+        fuente = str(campo_data.get("text_style", {}).get("font_family", "") or "").strip()
+        if not fuente:
+            continue
+
+        fuente_path = Path(fuente)
+        if not fuente_path.exists() or not fuente_path.is_file():
+            continue
+
+        clave = str(fuente_path.resolve())
+        if clave not in fuentes_empaquetadas:
+            nombre_seguro = re.sub(r"[^A-Za-z0-9._-]+", "_", fuente_path.name)
+            nombre_interno = "fonts/%s_%s" % (
+                str(campo_data.get("field_id", "campo")),
+                nombre_seguro,
+            )
+            fuentes_empaquetadas[clave] = (
+                fuente_path,
+                nombre_interno,
+            )
+        campo_data["text_style"]["font_family"] = fuentes_empaquetadas[clave][1]
 
     temp_path = ruta.with_suffix(ruta.suffix + ".tmp")
     if temp_path.exists():
@@ -71,6 +97,9 @@ def guardar_fdt(formato: Formato, ruta):
                 str(template_path),
                 "template/" + template_path.name,
             )
+
+            for fuente_path, nombre_interno in fuentes_empaquetadas.values():
+                paquete.write(str(fuente_path), nombre_interno)
 
             # Si existe una carpeta de recursos con el mismo nombre base
             # de la plantilla, se integra completa al FDT.
@@ -128,6 +157,16 @@ def cargar_fdt(ruta):
 
             plantilla = imagenes[0]
             data.setdefault("template", {})["path"] = str(plantilla)
+
+            # Convertir las rutas internas de fuentes a rutas reales extraídas.
+            for campo_data in data.get("fields", []):
+                estilo = campo_data.get("text_style", {})
+                fuente = str(estilo.get("font_family", "") or "").strip()
+                if fuente.startswith("fonts/"):
+                    fuente_extraida = directorio / fuente
+                    if fuente_extraida.is_file():
+                        estilo["font_family"] = str(fuente_extraida)
+
             formato = Formato.from_dict(data)
             validar_fdt(formato)
             return formato
