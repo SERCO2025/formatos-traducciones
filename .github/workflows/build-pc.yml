@@ -52,7 +52,7 @@ jobs:
           Write-Host "Fuente preparada en assets\fa-solid-900.ttf"
 
       - name: Compilar Configurador
-        run: pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets/fa-solid-900.ttf:assets" --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets/fa-solid-900.ttf;assets" --name FormatosTraducidos-Configurador --paths . configurador/main.py
 
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Capturador --paths . capturador/main.py
