@@ -34,7 +34,8 @@ jobs:
       - name: Verificar sintaxis
         run: python -m compileall shared configurador capturador
       - name: Compilar Configurador
-        run: pyinstaller --clean --noconfirm --onefile --windowed --collect-all fontawesome_free --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: python -c "import fontawesome_free, pathlib; p=pathlib.Path(fontawesome_free.__file__).parent; f=next(p.rglob('fa-solid-900.ttf')); pathlib.Path('assets').mkdir(exist_ok=True); pathlib.Path('assets/fa-solid-900.ttf').write_bytes(f.read_bytes())"
+          pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets/fa-solid-900.ttf:assets" --name FormatosTraducidos-Configurador --paths . configurador/main.py
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Capturador --paths . capturador/main.py
       - name: Preparar artefactos
