@@ -144,7 +144,7 @@ class Configurador:
                 command=lambda t=tool: self.set_tool(t),
                 bg="#262626", fg="white",
                 activebackground="#444444", activeforeground="white",
-                relief="flat", width=2, height=2, padx=7, pady=5, bd=0,
+                relief="flat", width=5, height=5, padx=8, pady=8, bd=0,
             )
             button._icon_ref = self._icon_images.get((icon, 60))
             button.pack(side="left", padx=2, pady=5)
@@ -160,7 +160,7 @@ class Configurador:
         ):
             b = tk.Button(zoom_frame, image=self._icon_image(icon, 52), command=command,
                           bg="#262626", fg="white", relief="flat", bd=0,
-                          width=2, height=2, padx=7, pady=5)
+                          width=5, height=5, padx=8, pady=8)
             b._icon_ref = self._icon_images.get((icon, 52))
             b.pack(side="left", padx=2, pady=4)
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
