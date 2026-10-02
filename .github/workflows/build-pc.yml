@@ -34,7 +34,7 @@ jobs:
       - name: Verificar sintaxis
         run: python -m compileall shared configurador capturador
       - name: Compilar Configurador
-        run: pyinstaller --clean --noconfirm --onefile --windowed --collect-data fontawesome_free --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --collect-all fontawesome_free --name FormatosTraducidos-Configurador --paths . configurador/main.py
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Capturador --paths . capturador/main.py
       - name: Preparar artefactos
