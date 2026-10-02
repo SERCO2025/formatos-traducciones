@@ -52,6 +52,9 @@ def guardar_fdt(formato: Formato, ruta):
             "No se encontró la imagen de plantilla: %s" % template_path
         )
 
+    # La ruta almacenada dentro del FDT es interna al contenedor.
+    data["template"]["path"] = "template/" + template_path.name
+
     temp_path = ruta.with_suffix(ruta.suffix + ".tmp")
     if temp_path.exists():
         temp_path.unlink()
