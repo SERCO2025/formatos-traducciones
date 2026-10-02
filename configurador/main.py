@@ -18,6 +18,7 @@ from shared.models import (
     Position,
     TemplateInfo,
     TextStyle,
+    OutputNaming,
 )
 
 
@@ -28,6 +29,7 @@ TOOL_ALPHANUMERIC = FIELD_TYPE_ALPHANUMERIC
 TOOL_IMAGE = FIELD_TYPE_IMAGE
 TOOL_ZOOM = "zoom"
 TOOL_HAND = "hand"
+TOOL_MEASURE = "measure"
 
 
 class ToolTip:
@@ -118,9 +120,14 @@ class Configurador:
         self._magnifier_label = None
         self._icon_images = {}
         self._field_drag_index = None
+        self._field_drop_index = None
+        self._field_drop_indicator = None
+        self._field_resize_start = None
         self.field_panel_visible = False
         self.toolbar_dock_side = "top"
         self.field_dock_side = "right"
+        self.field_dock_min_width = 190
+        self.field_dock_max_width = 700
 
         self._build_ui()
         self._set_status("Listo. Importe una plantilla para comenzar.")
@@ -154,14 +161,16 @@ class Configurador:
 
         herramientas = tk.Menu(menubar, tearoff=0)
         herramientas.add_command(label="Selección", command=lambda: self.set_tool(TOOL_SELECT))
-        herramientas.add_command(label="Manita", command=lambda: self.set_tool(TOOL_HAND))
+        herramientas.add_command(label="Desplazar", command=lambda: self.set_tool(TOOL_HAND))
         herramientas.add_command(label="Texto (A)", command=lambda: self.set_tool(TOOL_TEXT))
         herramientas.add_command(label="Número (1)", command=lambda: self.set_tool(TOOL_NUMBER))
         herramientas.add_command(label="Alfanumérico (A1)", command=lambda: self.set_tool(TOOL_ALPHANUMERIC))
         herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE))
         herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM))
+        herramientas.add_command(label="Medida", command=lambda: self.set_tool(TOOL_MEASURE))
         herramientas.add_separator()
         herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel)
+        herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado)
         herramientas.add_command(label="Acoplar herramientas arriba", command=lambda: self._dock_toolbar("top"))
         herramientas.add_command(label="Acoplar herramientas abajo", command=lambda: self._dock_toolbar("bottom"))
         herramientas.add_command(label="Acoplar herramientas izquierda", command=lambda: self._dock_toolbar("left"))
@@ -188,12 +197,13 @@ class Configurador:
         self._tool_buttons = []
         tools = [
             ("mouse-pointer", "Selección", TOOL_SELECT),
-            ("hand-paper", "Manita", TOOL_HAND),
+            ("hand-paper", "Desplazar", TOOL_HAND),
             ("font", "Texto", TOOL_TEXT),
             ("hashtag", "Número", TOOL_NUMBER),
             ("id-card", "Alfanumérico", TOOL_ALPHANUMERIC),
             ("image", "Imagen", TOOL_IMAGE),
             ("search-plus", "Lupa", TOOL_ZOOM),
+            ("arrows-alt", "Medida", TOOL_MEASURE),
         ]
         for icon, label, tool in tools:
             button = tk.Button(
@@ -265,6 +275,13 @@ class Configurador:
         self.field_list.bind("<B1-Motion>", self._field_list_motion)
         self.field_list.bind("<ButtonRelease-1>", self._field_list_release)
         self.field_list.bind("<<ListboxSelect>>", self._field_list_select)
+
+        self._field_drop_indicator = tk.Frame(self.field_dock, bg="white", height=3)
+        self._field_drop_indicator.place_forget()
+        self._field_resize_grip = tk.Frame(self.field_dock, bg="#666666", cursor="sb_h_double_arrow", width=5)
+        self._field_resize_grip.bind("<ButtonPress-1>", self._field_resize_start_event)
+        self._field_resize_grip.bind("<B1-Motion>", self._field_resize_motion_event)
+        self._field_resize_grip.bind("<ButtonRelease-1>", self._field_resize_end_event)
 
         self.field_dock.grid_remove()
         self.field_panel_visible = False
@@ -355,7 +372,7 @@ class Configurador:
         mapa = {
             "mouse-pointer": 0xF245, "hand-paper": 0xF256, "font": 0xF031,
             "hashtag": 0xF292, "id-card": 0xF2C2, "image": 0xF03E,
-            "search-plus": 0xF00E, "minus": 0xF068, "plus": 0xF067,
+            "search-plus": 0xF00E, "arrows-alt": 0xF0B2, "minus": 0xF068, "plus": 0xF067,
             "times": 0xF00D, "list": 0xF03A, "folder-open": 0xF07C,
             "save": 0xF0C7, "undo": 0xF0E2, "redo": 0xF01E,
             "file": 0xF15B,
@@ -386,6 +403,8 @@ class Configurador:
             self.field_dock.grid()
             self.field_panel_visible = True
             self._refresh_field_list()
+        if self.field_panel_visible:
+            self._position_field_resize_grip()
         self._set_status("Lista de campos " + ("activada." if self.field_panel_visible else "oculta."))
 
     def _refresh_field_list(self):
@@ -422,26 +441,78 @@ class Configurador:
         self.editar_seleccionado()
 
     def _field_list_press(self, event):
+        if not self.formato or not self.formato.fields:
+            return
         self._field_drag_index = self.field_list.nearest(event.y)
+        self._field_drop_index = self._field_drag_index
+        self._show_field_drop_indicator(self._field_drop_index)
 
     def _field_list_motion(self, event):
         if self._field_drag_index is None or not self.formato:
             return
-        nuevo = self.field_list.nearest(event.y)
-        if nuevo < 0 or nuevo >= len(self.formato.fields) or nuevo == self._field_drag_index:
+        count = len(self.formato.fields)
+        idx = self.field_list.nearest(event.y)
+        bbox = self.field_list.bbox(idx) if 0 <= idx < count else None
+        if bbox:
+            top, height = bbox[1], bbox[3]
+            target = idx + 1 if event.y >= top + height / 2 else idx
+        else:
+            target = count
+        target = max(0, min(count, target))
+        if target == self._field_drop_index:
             return
-        self._push_undo()
-        campo = self.formato.fields.pop(self._field_drag_index)
-        self.formato.fields.insert(nuevo, campo)
-        self.formato.ordenar_campos()
-        self._field_drag_index = nuevo
-        self.unsaved = True
-        self._refresh_field_list()
-        self.field_list.selection_set(nuevo)
-        self.redraw()
+        self._field_drop_index = target
+        self._show_field_drop_indicator(target)
+
+    def _show_field_drop_indicator(self, target):
+        if not self._field_drop_indicator or not self.field_list.winfo_ismapped():
+            return
+        count = len(self.formato.fields) if self.formato else 0
+        if count == 0:
+            self._field_drop_indicator.place_forget()
+            return
+        if target <= 0:
+            bbox = self.field_list.bbox(0)
+            y = bbox[1] if bbox else 0
+        elif target >= count:
+            y = max(0, self.field_list.winfo_height() - 4)
+        else:
+            bbox = self.field_list.bbox(target)
+            y = bbox[1] if bbox else 0
+        self._field_drop_indicator.place(
+            in_=self.field_list,
+            x=2,
+            y=y,
+            relwidth=1.0,
+            width=-4,
+            height=3,
+        )
+        self._field_drop_indicator.lift()
 
     def _field_list_release(self, event):
+        source = self._field_drag_index
+        target = self._field_drop_index
         self._field_drag_index = None
+        self._field_drop_index = None
+        if self._field_drop_indicator:
+            self._field_drop_indicator.place_forget()
+
+        if source is None or target is None or not self.formato:
+            return
+        if target == source or target == source + 1:
+            self._set_status("Orden de preguntas sin cambios.")
+            return
+
+        self._push_undo()
+        campo = self.formato.fields.pop(source)
+        if target > source:
+            target -= 1
+        self.formato.fields.insert(target, campo)
+        self.formato.ordenar_campos()
+        self.selected_field = campo
+        self.unsaved = True
+        self._refresh_field_list()
+        self.redraw()
         self._set_status("Orden de preguntas actualizado.")
 
     def _dock_toolbar(self, side):
@@ -562,7 +633,54 @@ class Configurador:
             body.columnconfigure(0, weight=1)
             body.rowconfigure(0, weight=1)
 
+        self._position_field_resize_grip()
         self._refresh_field_list()
+
+    def _position_field_resize_grip(self):
+        if not hasattr(self, "_field_resize_grip"):
+            return
+        self._field_resize_grip.place_forget()
+        if self.field_dock_side == "right":
+            self._field_resize_grip.config(cursor="sb_h_double_arrow")
+            self._field_resize_grip.place(x=0, y=0, width=5, relheight=1.0)
+        elif self.field_dock_side == "left":
+            self._field_resize_grip.config(cursor="sb_h_double_arrow")
+            self._field_resize_grip.place(relx=1.0, x=-5, y=0, width=5, relheight=1.0)
+        elif self.field_dock_side == "top":
+            self._field_resize_grip.config(cursor="sb_v_double_arrow")
+            self._field_resize_grip.place(x=0, rely=1.0, y=-5, relwidth=1.0, height=5)
+        else:
+            self._field_resize_grip.config(cursor="sb_v_double_arrow")
+            self._field_resize_grip.place(x=0, y=0, relwidth=1.0, height=5)
+
+    def _field_resize_start_event(self, event):
+        self._field_resize_start = (
+            event.x_root, event.y_root,
+            self.field_dock.winfo_width(), self.field_dock.winfo_height()
+        )
+
+    def _field_resize_motion_event(self, event):
+        if not self._field_resize_start:
+            return
+        sx, sy, sw, sh = self._field_resize_start
+        body = self.field_dock.master
+        if self.field_dock_side == "right":
+            width = max(self.field_dock_min_width, min(self.field_dock_max_width, sw - (event.x_root - sx)))
+            self.field_dock.config(width=width)
+        elif self.field_dock_side == "left":
+            width = max(self.field_dock_min_width, min(self.field_dock_max_width, sw + (event.x_root - sx)))
+            self.field_dock.config(width=width)
+        elif self.field_dock_side == "top":
+            height = max(120, min(650, sh + (event.y_root - sy)))
+            self.field_dock.config(height=height)
+        else:
+            height = max(120, min(650, sh - (event.y_root - sy)))
+            self.field_dock.config(height=height)
+        body.update_idletasks()
+        self._position_field_resize_grip()
+
+    def _field_resize_end_event(self, event):
+        self._field_resize_start = None
 
     def _obtener_fuentes_instaladas(self):
         fuentes = {}
@@ -648,7 +766,13 @@ class Configurador:
         if tool != TOOL_ZOOM:
             self._ocultar_lupa()
         self.canvas.config(cursor="crosshair" if tool == TOOL_ZOOM else "")
-        self._set_status("Herramienta: " + tool)
+        nombres = {
+            TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
+            TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
+            TOOL_ALPHANUMERIC: "Alfanumérico", TOOL_IMAGE: "Imagen",
+            TOOL_ZOOM: "Lupa", TOOL_MEASURE: "Medida",
+        }
+        self._set_status("Herramienta: " + nombres.get(tool, tool))
 
     def nuevo(self):
         if not self._confirm_unsaved():
@@ -954,15 +1078,20 @@ class Configurador:
         self.drag_start = None
 
         self._push_undo()
+        import copy
+        if self.formato.fields:
+            estilo_anterior = copy.deepcopy(self.formato.fields[-1].text_style)
+        else:
+            estilo_anterior = TextStyle(
+                font_family="", font_size_px=24, color=Color(0, 0, 0),
+                alignment="left", bold=False, italic=False,
+            )
         campo = Field(
             field_id=self._nuevo_id(),
             question="",
             field_type=self.tool,
             position=Position(left, top, width, height),
-            text_style=TextStyle(
-                font_family="", font_size_px=24, color=Color(0, 0, 0),
-                alignment="left", bold=False, italic=False,
-            ),
+            text_style=estilo_anterior,
         )
         self.formato.agregar_campo(campo)
         self.selected_field = campo
