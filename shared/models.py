@@ -187,10 +187,37 @@ class TemplateInfo:
 
 
 @dataclass
+class OutputNaming:
+    name_text: str = ""
+    field_ids: List[str] = field(default_factory=lambda: ["", "", "", ""])
+
+    def to_dict(self):
+        values = list(self.field_ids[:4])
+        while len(values) < 4:
+            values.append("")
+        return {
+            "name_text": self.name_text,
+            "field_ids": values,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        data = data or {}
+        values = list(data.get("field_ids", []))[:4]
+        while len(values) < 4:
+            values.append("")
+        return cls(
+            name_text=str(data.get("name_text", "")),
+            field_ids=[str(value) for value in values],
+        )
+
+
+@dataclass
 class Formato:
     name: str
     template: TemplateInfo
     fields: List[Field] = field(default_factory=list)
+    output_naming: OutputNaming = field(default_factory=OutputNaming)
     version: int = 2
 
     def ordenar_campos(self):
@@ -219,6 +246,7 @@ class Formato:
             "name": self.name,
             "template": self.template.to_dict(),
             "fields": [item.to_dict() for item in self.fields],
+            "output_naming": self.output_naming.to_dict(),
         }
 
     @classmethod
@@ -229,6 +257,7 @@ class Formato:
             name=str(data.get("name", "")),
             template=TemplateInfo.from_dict(data.get("template", {})),
             fields=[Field.from_dict(item) for item in data.get("fields", [])],
+            output_naming=OutputNaming.from_dict(data.get("output_naming", {})),
         )
         formato.ordenar_campos()
         return formato
