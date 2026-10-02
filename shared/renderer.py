@@ -5,6 +5,16 @@ import re
 from PIL import Image, ImageDraw, ImageFont
 
 
+def _normalizar_nombre_fuente(valor):
+    import os
+    texto = str(valor or "").strip().lower()
+    texto = os.path.basename(texto)
+    texto = os.path.splitext(texto)[0]
+    texto = re.sub(r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$", "", texto)
+    texto = re.sub(r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$", "", texto)
+    return texto.strip()
+
+
 def _buscar_fuente_instalada(font_family):
     import os
 
@@ -15,16 +25,18 @@ def _buscar_fuente_instalada(font_family):
     if os.path.isfile(solicitado):
         return solicitado
 
-    nombre_archivo = os.path.basename(solicitado).lower()
-    familia = os.path.splitext(nombre_archivo)[0].lower()
+    objetivo = _normalizar_nombre_fuente(solicitado)
+    if not objetivo:
+        return None
 
-    # En Windows, consultar el registro permite resolver nombres de familia
-    # y archivos de fuente aunque el FDT provenga de otra máquina.
+    candidatos = []
+
+    # Registro de Windows: primero por nombre de familia y después por archivo.
     try:
         import winreg
         claves = (
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
-            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+            (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
         )
         for hive, subkey in claves:
             try:
@@ -41,27 +53,43 @@ def _buscar_fuente_instalada(font_family):
                     archivo = os.path.expandvars(str(archivo))
                     if not os.path.isabs(archivo):
                         archivo = os.path.join(
-                            os.environ.get("WINDIR", r"C:\Windows"),
+                            os.environ.get("WINDIR", r"C:\\Windows"),
                             "Fonts",
                             archivo,
                         )
                     archivo = os.path.normpath(archivo)
+                    if not os.path.isfile(archivo):
+                        continue
 
-                    nombre_registro = str(nombre).lower()
-                    base_registro = os.path.basename(archivo).lower()
-                    if (
-                        solicitado.lower() == nombre_registro
-                        or solicitado.lower() == base_registro
-                        or nombre_archivo == base_registro
-                        or familia in base_registro
-                    ) and os.path.isfile(archivo):
+                    nombre_normalizado = _normalizar_nombre_fuente(nombre)
+                    archivo_normalizado = _normalizar_nombre_fuente(archivo)
+                    if objetivo == nombre_normalizado or objetivo == archivo_normalizado:
                         return archivo
+
+                    candidatos.append(archivo)
             finally:
                 winreg.CloseKey(key)
     except Exception:
         pass
 
-    return None
+    # Último intento: recorrer las carpetas estándar de fuentes de Windows.
+    carpetas = [
+        os.path.join(os.environ.get("WINDIR", r"C:\\Windows"), "Fonts"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
+    ]
+    for carpeta in carpetas:
+        if not carpeta or not os.path.isdir(carpeta):
+            continue
+        try:
+            for raiz, _, archivos in os.walk(carpeta):
+                for archivo in archivos:
+                    ruta = os.path.join(raiz, archivo)
+                    if _normalizar_nombre_fuente(ruta) == objetivo:
+                        return ruta
+        except OSError:
+            pass
+
+    return candidatos[0] if len(candidatos) == 1 else None
 
 
 def _cargar_fuente(font_family, font_size, bold=False, italic=False):
@@ -73,60 +101,44 @@ def _cargar_fuente(font_family, font_size, bold=False, italic=False):
         font_size = 24
     font_size = max(1, font_size)
 
-    fuente_resuelta = _buscar_fuente_instalada(font_family)
+    solicitado = str(font_family or "").strip()
     candidatos = []
 
-    if fuente_resuelta:
-        base, ext = os.path.splitext(fuente_resuelta)
-        if bold and italic:
-            candidatos.extend([
-                base + "-BoldItalic" + ext,
-                base + " Bold Italic" + ext,
-            ])
-        elif bold:
-            candidatos.extend([
-                base + "-Bold" + ext,
-                base + " Bold" + ext,
-            ])
-        elif italic:
-            candidatos.extend([
-                base + "-Italic" + ext,
-                base + " Italic" + ext,
-            ])
+    # Los FDT nuevos contienen la ruta física de la fuente extraída.
+    if solicitado and os.path.isfile(solicitado):
+        candidatos.append(solicitado)
+
+    fuente_resuelta = _buscar_fuente_instalada(solicitado)
+    if fuente_resuelta and fuente_resuelta not in candidatos:
         candidatos.append(fuente_resuelta)
 
-    # Compatibilidad con FDT antiguos que almacenaban directamente una ruta.
-    if font_family and str(font_family) not in candidatos:
-        base, ext = os.path.splitext(str(font_family))
-        if bold and italic:
-            candidatos.extend([
-                base + "-BoldItalic" + ext,
-                base + " Bold Italic" + ext,
-            ])
-        elif bold:
-            candidatos.extend([
-                base + "-Bold" + ext,
-                base + " Bold" + ext,
-            ])
-        elif italic:
-            candidatos.extend([
-                base + "-Italic" + ext,
-                base + " Italic" + ext,
-            ])
-        candidatos.append(str(font_family))
+    # Compatibilidad con FDT antiguos que almacenaban directamente una ruta
+    # o el nombre de familia.
+    if solicitado:
+        base, ext = os.path.splitext(solicitado)
+        variantes = []
+        if ext:
+            if bold and italic:
+                variantes.extend([base + "-BoldItalic" + ext, base + " Bold Italic" + ext])
+            elif bold:
+                variantes.extend([base + "-Bold" + ext, base + " Bold" + ext])
+            elif italic:
+                variantes.extend([base + "-Italic" + ext, base + " Italic" + ext])
+        variantes.append(solicitado)
+        for variante in variantes:
+            if variante not in candidatos:
+                candidatos.append(variante)
 
     for ruta in candidatos:
         try:
-            if os.path.isfile(ruta):
-                return ImageFont.truetype(ruta, font_size)
             return ImageFont.truetype(ruta, font_size)
         except (OSError, IOError, ValueError):
-            pass
+            continue
 
     raise FileNotFoundError(
         "No se pudo cargar la tipografía '%s'. "
         "El formato conserva el tamaño de %d px, pero la fuente no está disponible."
-        % (font_family or "(sin fuente)", font_size)
+        % (solicitado or "(sin fuente)", font_size)
     )
 
 def _renderizar_imagen(imagen, respuestas, campo):
