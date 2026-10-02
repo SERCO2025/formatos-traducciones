@@ -12,6 +12,7 @@ jobs:
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
+
       - name: Configurar Python con cache de pip
         uses: actions/setup-python@v5
         with:
@@ -19,6 +20,7 @@ jobs:
           architecture: "x86"
           cache: "pip"
           cache-dependency-path: requirements-pc.txt
+
       - name: Restaurar cache adicional de compilación
         uses: actions/cache@v4
         with:
@@ -27,17 +29,34 @@ jobs:
           key: pc-build-${{ runner.os }}-py37-x86-${{ hashFiles('requirements-pc.txt') }}
           restore-keys: |
             pc-build-${{ runner.os }}-py37-x86-
+
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade "pip<24.1"
           python -m pip install -r requirements-pc.txt
+
       - name: Verificar sintaxis
         run: python -m compileall shared configurador capturador
+
+      - name: Preparar fuente Font Awesome
+        shell: pwsh
+        run: |
+          $font = Get-ChildItem "$env:pythonLocation\Lib\site-packages" -Filter "fa-solid-900.ttf" -Recurse -File | Select-Object -First 1
+          if ($null -eq $font) {
+            throw "No se encontró fa-solid-900.ttf dentro de site-packages."
+          }
+          New-Item -ItemType Directory -Force -Path assets | Out-Null
+          Copy-Item $font.FullName "assets\fa-solid-900.ttf" -Force
+          Write-Host "Fuente encontrada:"
+          Write-Host $font.FullName
+          Write-Host "Fuente preparada en assets\fa-solid-900.ttf"
+
       - name: Compilar Configurador
-        run: python -c "import fontawesome_free, pathlib; p=pathlib.Path(fontawesome_free.__file__).parent; f=next(p.rglob('fa-solid-900.ttf')); pathlib.Path('assets').mkdir(exist_ok=True); pathlib.Path('assets/fa-solid-900.ttf').write_bytes(f.read_bytes())"
-          pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets/fa-solid-900.ttf:assets" --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets/fa-solid-900.ttf:assets" --name FormatosTraducidos-Configurador --paths . configurador/main.py
+
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Capturador --paths . capturador/main.py
+
       - name: Preparar artefactos
         shell: pwsh
         run: |
@@ -45,14 +64,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts/pc/capturador | Out-Null
           Copy-Item dist/FormatosTraducidos-Configurador.exe artifacts/pc/configurador/
           Copy-Item dist/FormatosTraducidos-Capturador.exe artifacts/pc/capturador/
+
       - name: Subir artefactos a GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: pc-exe
           path: artifacts/pc/**/*.exe
           if-no-files-found: error
+
       - name: Instalar Backblaze B2 CLI
         run: python -m pip install b2
+
       - name: Subir EXE a Backblaze B2
         shell: pwsh
         env:
