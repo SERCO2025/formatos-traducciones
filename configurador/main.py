@@ -30,6 +30,64 @@ TOOL_ZOOM = "zoom"
 TOOL_HAND = "hand"
 
 
+class ToolTip:
+    def __init__(self, widget, text, delay=500):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tipwindow = None
+        self.after_id = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _schedule(self, event=None):
+        self._cancel()
+        self.after_id = self.widget.after(self.delay, self._show)
+
+    def _cancel(self):
+        if self.after_id is not None:
+            try:
+                self.widget.after_cancel(self.after_id)
+            except Exception:
+                pass
+            self.after_id = None
+
+    def _show(self):
+        self.after_id = None
+        if self.tipwindow is not None:
+            return
+        try:
+            x = self.widget.winfo_rootx() + self.widget.winfo_width() // 2
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+            self.tipwindow = tk.Toplevel(self.widget)
+            self.tipwindow.wm_overrideredirect(True)
+            self.tipwindow.wm_geometry("+%d+%d" % (x, y))
+            label = tk.Label(
+                self.tipwindow,
+                text=self.text,
+                bg="#303030",
+                fg="white",
+                relief="solid",
+                borderwidth=1,
+                padx=8,
+                pady=5,
+                font=("Arial", 9),
+            )
+            label.pack()
+        except tk.TclError:
+            self.tipwindow = None
+
+    def _hide(self, event=None):
+        self._cancel()
+        if self.tipwindow is not None:
+            try:
+                self.tipwindow.destroy()
+            except tk.TclError:
+                pass
+            self.tipwindow = None
+
+
 class Configurador:
     def __init__(self, root):
         self.root = root
@@ -140,15 +198,16 @@ class Configurador:
         for icon, label, tool in tools:
             button = tk.Button(
                 self.toolbar_host,
-                image=self._icon_image(icon, 20),
+                image=self._icon_image(icon, 17),
                 command=lambda t=tool: self.set_tool(t),
                 bg="#262626", fg="white",
                 activebackground="#444444", activeforeground="white",
                 relief="flat", width=20, height=20, padx=4, pady=4, bd=0,
             )
-            button._icon_ref = self._icon_images.get((icon, 20))
+            button._icon_ref = self._icon_images.get((icon, 17))
             button.pack(side="left", padx=2, pady=5)
             self._tool_buttons.append(button)
+            ToolTip(button, label)
             button.bind("<Enter>", lambda e, l=label: self._set_status(l))
             button.bind("<Leave>", lambda e: self._set_status("Herramienta: " + self.tool))
 
@@ -158,12 +217,14 @@ class Configurador:
             ("minus", lambda: self.cambiar_zoom(0.8)),
             ("plus", lambda: self.cambiar_zoom(1.25)),
         ):
-            b = tk.Button(zoom_frame, image=self._icon_image(icon, 16), command=command,
+            b = tk.Button(zoom_frame, image=self._icon_image(icon, 14), command=command,
                           bg="#262626", fg="white", relief="flat", bd=0,
                           width=16, height=16, padx=4, pady=4)
-            b._icon_ref = self._icon_images.get((icon, 16))
+            b._icon_ref = self._icon_images.get((icon, 14))
             b.pack(side="left", padx=2, pady=4)
+            ToolTip(b, "Alejar" if icon == "minus" else "Acercar")
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
+        ToolTip(self.zoom_label, "Nivel de zoom actual")
         self.zoom_label.pack(side="left", padx=2)
 
         body = tk.Frame(self.root, bg="black")
@@ -187,6 +248,7 @@ class Configurador:
                               activebackground="#444444", relief="flat", bd=0)
         close_btn._icon_ref = self._icon_images.get(("times", 88))
         close_btn.pack(side="right", padx=5)
+        ToolTip(close_btn, "Cerrar lista de campos")
         field_header.bind("<ButtonPress-1>", self._field_dock_start)
         field_header.bind("<B1-Motion>", self._field_dock_motion)
         field_header.bind("<ButtonRelease-1>", self._field_dock_release)
