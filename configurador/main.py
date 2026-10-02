@@ -127,6 +127,7 @@ class Configurador:
         grip.bind("<B1-Motion>", self._dock_motion)
         grip.bind("<ButtonRelease-1>", self._dock_release)
 
+        self._tool_buttons = []
         tools = [
             ("mouse-pointer", "Selección", TOOL_SELECT),
             ("hand-paper", "Manita", TOOL_HAND),
@@ -147,6 +148,7 @@ class Configurador:
             )
             button._icon_ref = self._icon_images.get((icon, 15))
             button.pack(side="left", padx=2, pady=5)
+            self._tool_buttons.append(button)
             button.bind("<Enter>", lambda e, l=label: self._set_status(l))
             button.bind("<Leave>", lambda e: self._set_status("Herramienta: " + self.tool))
 
@@ -347,10 +349,18 @@ class Configurador:
     def _dock_toolbar(self, side):
         self.toolbar_host.pack_forget()
         self.toolbar_dock_side = side
+
+        vertical = side in ("left", "right")
+        for button in getattr(self, "_tool_buttons", []):
+            button.pack_forget()
+            button.pack(
+                side="top" if vertical else "left",
+                padx=2, pady=2
+            )
+
         self.toolbar_host.pack(
             side=side,
-            fill="x" if side in ("top", "bottom") else "y",
-            before=self.root.winfo_children()[0] if side == "top" and self.root.winfo_children() else None
+            fill="y" if vertical else "x"
         )
 
     def _dock_start(self, event):
