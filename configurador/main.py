@@ -144,7 +144,7 @@ class Configurador:
                 command=lambda t=tool: self.set_tool(t),
                 bg="#262626", fg="white",
                 activebackground="#444444", activeforeground="white",
-                relief="flat", width=30, height=28, bd=0,
+                relief="flat", width=2, height=2, padx=7, pady=5, bd=0,
             )
             button._icon_ref = self._icon_images.get((icon, 15))
             button.pack(side="left", padx=2, pady=5)
@@ -160,7 +160,7 @@ class Configurador:
         ):
             b = tk.Button(zoom_frame, image=self._icon_image(icon, 13), command=command,
                           bg="#262626", fg="white", relief="flat", bd=0,
-                          width=28, height=28)
+                          width=2, height=2, padx=7, pady=5)
             b._icon_ref = self._icon_images.get((icon, 13))
             b.pack(side="left", padx=2, pady=4)
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
@@ -237,14 +237,41 @@ class Configurador:
 
     def _icon_font_path(self):
         try:
+            import sys
+            import glob
             import fontawesome_free
+
+            bases = []
             base = os.path.dirname(fontawesome_free.__file__)
-            candidatos = [
-                os.path.join(base, "static", "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
-                os.path.join(base, "webfonts", "fa-solid-900.ttf"),
-            ]
+            bases.append(base)
+
+            # En un EXE de PyInstaller --onefile los datos quedan bajo
+            # _MEIPASS; buscar también ahí evita depender de una sola
+            # estructura interna del paquete Font Awesome.
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                bases.append(os.path.join(meipass, "fontawesome_free"))
+                bases.append(meipass)
+
+            candidatos = []
+            for raiz in bases:
+                candidatos.extend([
+                    os.path.join(raiz, "static", "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
+                    os.path.join(raiz, "webfonts", "fa-solid-900.ttf"),
+                    os.path.join(raiz, "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
+                ])
+
+            for raiz in bases:
+                candidatos.extend(glob.glob(os.path.join(
+                    raiz, "**", "fa-solid-900.ttf"
+                ), recursive=True))
+
+            vistos = set()
             for ruta in candidatos:
-                if os.path.exists(ruta):
+                if ruta in vistos:
+                    continue
+                vistos.add(ruta)
+                if os.path.isfile(ruta):
                     return ruta
         except Exception:
             pass
