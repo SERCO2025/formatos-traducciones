@@ -219,7 +219,14 @@ class Configurador:
             self._tool_buttons.append(button)
             ToolTip(button, label)
             button.bind("<Enter>", lambda e, l=label: self._set_status(l))
-            button.bind("<Leave>", lambda e: self._set_status("Herramienta: " + self.tool))
+            button.bind("<Leave>", lambda e: self._set_status(
+                "Herramienta: " + {
+                    TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
+                    TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
+                    TOOL_ALPHANUMERIC: "Alfanumérico", TOOL_IMAGE: "Imagen",
+                    TOOL_ZOOM: "Lupa", TOOL_MEASURE: "Medida",
+                }.get(self.tool, self.tool)
+            ))
 
         zoom_frame = tk.Frame(self.toolbar_host, bg="#171717")
         zoom_frame.pack(side="right", padx=6)
@@ -480,11 +487,9 @@ class Configurador:
             bbox = self.field_list.bbox(target)
             y = bbox[1] if bbox else 0
         self._field_drop_indicator.place(
-            in_=self.field_list,
-            x=2,
-            y=y,
-            relwidth=1.0,
-            width=-4,
+            x=self.field_list.winfo_x() + 2,
+            y=self.field_list.winfo_y() + y,
+            width=max(10, self.field_list.winfo_width() - 4),
             height=3,
         )
         self._field_drop_indicator.lift()
