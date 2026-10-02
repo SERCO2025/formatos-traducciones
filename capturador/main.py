@@ -291,9 +291,19 @@ class CapturadorApp:
 
 
 def main():
-    root = tk.Tk()
-    app = CapturadorApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = CapturadorApp(root)
+        root.mainloop()
+    except Exception as exc:
+        try:
+            messagebox.showerror(
+                "Error al iniciar el Capturador",
+                "La aplicación no pudo iniciar correctamente.\\n\\n%s" % exc,
+            )
+        except Exception:
+            pass
+        raise
 
 
 if __name__ == "__main__":
