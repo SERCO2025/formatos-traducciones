@@ -236,44 +236,54 @@ class Configurador:
         self.status_label.pack(fill="x", padx=8, pady=5)
 
     def _icon_font_path(self):
-        try:
-            import sys
-            import glob
-            import fontawesome_free
+        import glob
+        import sys
 
-            bases = []
-            base = os.path.dirname(fontawesome_free.__file__)
-            bases.append(base)
-            meipass = getattr(sys, "_MEIPASS", None)
-            if meipass:
-                bases.append(os.path.join(meipass, "assets"))
+        candidatos = []
 
-            # En un EXE de PyInstaller --onefile los datos quedan bajo
-            # _MEIPASS; buscar también ahí evita depender de una sola
-            # estructura interna del paquete Font Awesome.
+        # En el EXE de PyInstaller la fuente se incluye explícitamente
+        # en assets/ y se extrae bajo _MEIPASS.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidatos.append(os.path.join(meipass, "assets", "fa-solid-900.ttf"))
 
-            candidatos = []
-            for raiz in bases:
-                candidatos.extend([
-                    os.path.join(raiz, "static", "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
-                    os.path.join(raiz, "webfonts", "fa-solid-900.ttf"),
-                    os.path.join(raiz, "fontawesome_free", "webfonts", "fa-solid-900.ttf"),
-                ])
+        # Fallback para ejecución normal desde el entorno de desarrollo.
+        site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+        candidatos.extend([
+            os.path.join(
+                site_packages,
+                "fontawesome-free",
+                "static",
+                "fontawesome_free",
+                "js-packages",
+                "@fortawesome",
+                "fontawesome-free",
+                "webfonts",
+                "fa-solid-900.ttf",
+            ),
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "assets",
+                "fa-solid-900.ttf",
+            ),
+        ])
 
-            for raiz in bases:
-                candidatos.extend(glob.glob(os.path.join(
-                    raiz, "**", "fa-solid-900.ttf"
-                ), recursive=True))
+        for raiz in [site_packages]:
+            if os.path.isdir(raiz):
+                candidatos.extend(glob.glob(
+                    os.path.join(raiz, "**", "fa-solid-900.ttf"),
+                    recursive=True
+                ))
 
-            vistos = set()
-            for ruta in candidatos:
-                if ruta in vistos:
-                    continue
-                vistos.add(ruta)
-                if os.path.isfile(ruta):
-                    return ruta
-        except Exception:
-            pass
+        vistos = set()
+        for ruta in candidatos:
+            ruta = os.path.normpath(ruta)
+            if ruta in vistos:
+                continue
+            vistos.add(ruta)
+            if os.path.isfile(ruta):
+                return ruta
+
         return None
 
     def _icon_image(self, nombre, size=15):
