@@ -948,6 +948,79 @@ class Configurador:
         )
         self.field_items[campo.field_id] = (rect, label)
 
+        if campo is self.selected_field and self.tool == TOOL_MEASURE:
+            self._draw_resize_handles(campo, x1, y1, x2, y2)
+
+    def _draw_resize_handles(self, campo, x1, y1, x2, y2):
+        size = 8
+        puntos = (
+            ("nw", x1, y1), ("n", (x1 + x2) / 2, y1),
+            ("ne", x2, y1), ("e", x2, (y1 + y2) / 2),
+            ("se", x2, y2), ("s", (x1 + x2) / 2, y2),
+            ("sw", x1, y2), ("w", x1, (y1 + y2) / 2),
+        )
+        for nombre, cx, cy in puntos:
+            self.canvas.create_rectangle(
+                cx - size / 2, cy - size / 2,
+                cx + size / 2, cy + size / 2,
+                fill="white", outline="black", width=1,
+                tags=("resize_handle", campo.field_id, nombre),
+            )
+
+    def _hit_resize_handle(self, campo, cx, cy):
+        p = campo.position
+        puntos = {
+            "nw": (p.x, p.y), "n": (p.x + p.width / 2, p.y),
+            "ne": (p.x + p.width, p.y), "e": (p.x + p.width, p.y + p.height / 2),
+            "se": (p.x + p.width, p.y + p.height), "s": (p.x + p.width / 2, p.y + p.height),
+            "sw": (p.x, p.y + p.height), "w": (p.x, p.y + p.height / 2),
+        }
+        dx, dy = self._canvas_to_document(cx, cy)
+        tolerancia = max(6, int(round(10 / max(self.zoom, 0.01))))
+        for nombre, (hx, hy) in puntos.items():
+            if abs(dx - hx) <= tolerancia and abs(dy - hy) <= tolerancia:
+                return nombre
+        return None
+
+    def _resize_selected_field(self, dx, dy):
+        campo = self.selected_field
+        origen = self._field_resize_origin
+        if not campo or not origen:
+            return
+        x, y, w, h = origen
+        handle = self._field_resize_handle
+
+        if "w" in handle:
+            x += dx
+            w -= dx
+        if "e" in handle:
+            w += dx
+        if "n" in handle:
+            y += dy
+            h -= dy
+        if "s" in handle:
+            h += dy
+
+        w = max(1, w)
+        h = max(1, h)
+        if "w" in handle:
+            x = origen[0] + origen[2] - w
+        if "n" in handle:
+            y = origen[1] + origen[3] - h
+
+        x = max(0, x)
+        y = max(0, y)
+        if x + w > self.template_image.width:
+            w = self.template_image.width - x
+        if y + h > self.template_image.height:
+            h = self.template_image.height - y
+        if w <= 0 or h <= 0:
+            return
+
+        campo.position = Position(int(x), int(y), int(w), int(h))
+        self.unsaved = True
+        self.redraw()
+
     def _canvas_to_document(self, x, y):
         return (
             max(0, int(round((x - 20) / self.zoom))),
@@ -979,6 +1052,23 @@ class Configurador:
         if self.tool == TOOL_HAND:
             self._pan_last = (event.x, event.y)
             return
+        if self.tool == TOOL_MEASURE:
+            campo = self._find_field_at(cx, cy)
+            if campo:
+                self.selected_field = campo
+                self._field_resize_handle = self._hit_resize_handle(campo, cx, cy)
+                if self._field_resize_handle:
+                    self._push_undo()
+                    self._field_resize_origin = (
+                        campo.position.x, campo.position.y,
+                        campo.position.width, campo.position.height
+                    )
+                    self._field_resize_start = (cx, cy)
+                else:
+                    self._field_resize_origin = None
+                    self._field_resize_start = None
+                self.redraw()
+            return
         if self.tool == TOOL_SELECT:
             campo = self._find_field_at(cx, cy)
             self.selected_field = campo
@@ -1003,6 +1093,12 @@ class Configurador:
             self._mostrar_lupa(event)
         elif self._magnifier_label is not None:
             self._ocultar_lupa()
+
+        if self.tool == TOOL_MEASURE and self._field_resize_handle and self._field_resize_start:
+            dx = int(round((cx - self._field_resize_start[0]) / self.zoom))
+            dy = int(round((cy - self._field_resize_start[1]) / self.zoom))
+            self._resize_selected_field(dx, dy)
+            return
 
         if self.tool == TOOL_HAND and self._pan_last is not None:
             dx = event.x - self._pan_last[0]
@@ -1050,6 +1146,11 @@ class Configurador:
     def on_mouse_up(self, event):
         if self.tool == TOOL_HAND:
             self._pan_last = None
+            return
+        if self.tool == TOOL_MEASURE:
+            self._field_resize_handle = None
+            self._field_resize_start = None
+            self._field_resize_origin = None
             return
         if self.tool == TOOL_SELECT:
             if self._move_changed:
@@ -1129,6 +1230,103 @@ class Configurador:
     def _ocultar_lupa(self):
         if self._magnifier_label is not None:
             self._magnifier_label.place_forget()
+
+    def configurar_archivo_terminado(self):
+        if not self.formato:
+            messagebox.showwarning("Archivo terminado", "Primero importe una plantilla.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Archivo terminado")
+        dialog.configure(bg="#202020")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("560x390")
+        dialog.resizable(False, False)
+
+        tk.Label(
+            dialog,
+            text="Configuración del nombre del archivo resultante",
+            bg="#202020", fg="white",
+            font=("Arial", 12, "bold"),
+        ).pack(anchor="w", padx=18, pady=(18, 12))
+
+        tk.Label(dialog, text="Nombre base del archivo",
+                 bg="#202020", fg="white").pack(anchor="w", padx=18)
+        name_var = tk.StringVar(
+            value=getattr(self.formato.output_naming, "name_text", "")
+        )
+        tk.Entry(
+            dialog, textvariable=name_var,
+            bg="#303030", fg="white", insertbackground="white",
+        ).pack(fill="x", padx=18, pady=(4, 12))
+
+        fields = ["<nada>"] + [
+            "%02d — %s — %s" % (
+                campo.order,
+                campo.field_id,
+                campo.question.strip() or "(sin pregunta)",
+            )
+            for campo in self.formato.fields
+        ]
+        ids = [""] + [campo.field_id for campo in self.formato.fields]
+
+        tk.Label(
+            dialog,
+            text="Campos que se incorporarán al nombre (máximo 4)",
+            bg="#202020", fg="white",
+        ).pack(anchor="w", padx=18, pady=(4, 6))
+
+        variables = []
+        for numero in range(4):
+            fila = tk.Frame(dialog, bg="#202020")
+            fila.pack(fill="x", padx=18, pady=3)
+            tk.Label(
+                fila, text="Parte %d" % (numero + 1),
+                width=9, anchor="w", bg="#202020", fg="white",
+            ).pack(side="left")
+            var = tk.StringVar(value="<nada>")
+            combo = ttk.Combobox(
+                fila, textvariable=var, values=fields,
+                state="readonly", width=58,
+            )
+            combo.pack(side="left", fill="x", expand=True)
+            variables.append((var, ids))
+            stored_id = self.formato.output_naming.field_ids[numero] if numero < len(self.formato.output_naming.field_ids) else ""
+            if stored_id:
+                for indice, campo in enumerate(self.formato.fields, start=1):
+                    if campo.field_id == stored_id:
+                        combo.current(indice)
+                        break
+
+        def aceptar():
+            seleccionados = []
+            for var, mapping in variables:
+                valor = var.get()
+                if valor == "<nada>" or not valor:
+                    seleccionados.append("")
+                    continue
+                indice = fields.index(valor)
+                seleccionados.append(mapping[indice])
+
+            self.formato.output_naming = OutputNaming(
+                name_text=name_var.get().strip(),
+                field_ids=seleccionados,
+            )
+            self.unsaved = True
+            dialog.destroy()
+            self._set_status("Configuración de archivo terminado guardada.")
+
+        botones = tk.Frame(dialog, bg="#202020")
+        botones.pack(side="bottom", fill="x", padx=18, pady=16)
+        tk.Button(
+            botones, text="Cancelar", command=dialog.destroy,
+            bg="#303030", fg="white", relief="flat",
+        ).pack(side="right", padx=4)
+        tk.Button(
+            botones, text="Aceptar", command=aceptar,
+            bg="#005f73", fg="white", relief="flat",
+        ).pack(side="right", padx=4)
 
     def _nuevo_id(self):
         base = "campo"
