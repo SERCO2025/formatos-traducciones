@@ -34,9 +34,9 @@ jobs:
       - name: Verificar sintaxis
         run: python -m compileall shared configurador capturador
       - name: Compilar Configurador
-        run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Configurador --paths . configurador/main.py
       - name: Compilar Capturador
-        run: pyinstaller --clean --noconfirm --onefile --name FormatosTraducidos-Capturador --paths . capturador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --name FormatosTraducidos-Capturador --paths . capturador/main.py
       - name: Preparar artefactos
         shell: pwsh
         run: |
