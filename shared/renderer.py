@@ -131,7 +131,37 @@ def _cargar_fuente(font_family, font_size, bold=False, italic=False):
 
     for ruta in candidatos:
         try:
-            return ImageFont.truetype(ruta, font_size)
+            fuente = ImageFont.truetype(ruta, font_size)
+
+            # Pillow recibe el tamaño de una fuente en píxeles, pero ese
+            # parámetro corresponde al tamaño tipográfico interno, no a la
+            # altura visible de las letras. Para que el valor configurado en
+            # el FDT sea una medida visual coherente en píxeles, calibramos
+            # contra un conjunto representativo de glifos.
+            muestra = "HgjÁy"
+            caja = fuente.getbbox(muestra)
+            alto_visible = max(1, caja[3] - caja[1])
+            if alto_visible != font_size:
+                tamano_calibrado = max(
+                    1,
+                    int(round(font_size * float(font_size) / float(alto_visible)))
+                )
+                fuente_calibrada = ImageFont.truetype(ruta, tamano_calibrado)
+                caja_calibrada = fuente_calibrada.getbbox(muestra)
+                alto_calibrado = max(1, caja_calibrada[3] - caja_calibrada[1])
+
+                # Una segunda corrección elimina el pequeño error de redondeo
+                # que puede quedar en tamaños pequeños.
+                if alto_calibrado != font_size:
+                    tamano_calibrado = max(
+                        1,
+                        int(round(tamano_calibrado * float(font_size) / float(alto_calibrado)))
+                    )
+                    fuente_calibrada = ImageFont.truetype(ruta, tamano_calibrado)
+
+                return fuente_calibrada
+
+            return fuente
         except (OSError, IOError, ValueError):
             continue
 
@@ -231,15 +261,27 @@ def renderizar_imagen(formato, respuestas):
 
         if estilo.alignment == "center":
             xy = (posicion.x + posicion.width // 2, posicion.y)
-            anchor = "ma"
+            anchor = "mt"
         elif estilo.alignment == "right":
             xy = (posicion.x + posicion.width, posicion.y)
-            anchor = "ra"
+            anchor = "rt"
         else:
             xy = (posicion.x, posicion.y)
-            anchor = "la"
+            anchor = "lt"
 
-        dibujo.text(xy, texto, fill=color, font=fuente, anchor=anchor)
+        if "\n" in texto:
+            dibujo.multiline_text(
+                xy,
+                texto,
+                fill=color,
+                font=fuente,
+                anchor=anchor,
+                align="center" if estilo.alignment == "center" else (
+                    "right" if estilo.alignment == "right" else "left"
+                ),
+            )
+        else:
+            dibujo.text(xy, texto, fill=color, font=fuente, anchor=anchor)
 
     return imagen
 
