@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import uuid
 
 from kivy.app import App
 from kivy.graphics import Color, Line, Rectangle
@@ -47,17 +48,27 @@ TOOLS = [
 
 
 class CampoWidget(FloatLayout):
-    def __init__(self, campo, scale=1.0, **kwargs):
+    def __init__(self, campo, scale=1.0, template_widget=None, **kwargs):
         super().__init__(**kwargs)
         self.campo = campo
         self.scale = scale
+        self.template_widget = template_widget
         self.size_hint = (None, None)
         self.actualizar()
 
     def actualizar(self):
         p = self.campo.position
         self.size = (p.width * self.scale, p.height * self.scale)
-        self.pos = (p.x * self.scale, p.y * self.scale)
+
+        if self.template_widget is not None:
+            # El modelo FDT usa coordenadas con origen arriba-izquierda.
+            # Kivy usa origen abajo-izquierda, por lo que hay que invertir
+            # el eje Y y respetar la posicion real de la plantilla.
+            x = self.template_widget.x + p.x * self.scale
+            y = self.template_widget.y + self.template_widget.height - (p.y + p.height) * self.scale
+            self.pos = (x, y)
+        else:
+            self.pos = (p.x * self.scale, p.y * self.scale)
 
         self.canvas.before.clear()
         with self.canvas.before:
@@ -103,7 +114,7 @@ class CanvasEditor(FloatLayout):
         self.add_widget(self.template_widget)
 
         for campo in self.app.formato.fields:
-            self.add_widget(CampoWidget(campo, self.scale))
+            self.add_widget(CampoWidget(campo, self.scale, self.template_widget))
 
     def _document_point(self, touch):
         if not self.template_widget:
@@ -244,18 +255,35 @@ class ConfiguradorApp(App):
 
     def importar(self):
         if ANDROID_AVAILABLE:
-            self._abrir_selector_android("image")
+            self._abrir_selector_android("image", guardar=False)
         else:
             self._file_popup("Importar plantilla", self._importar_ruta, imagenes=True)
 
-    def _abrir_selector_android(self, tipo):
+    def _abrir_selector_android(self, tipo, guardar=False):
         try:
             Intent = autoclass("android.content.Intent")
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-            intent.setType("image/*" if tipo == "image" else "application/octet-stream")
+            intent = Intent(
+                Intent.ACTION_CREATE_DOCUMENT if guardar else Intent.ACTION_OPEN_DOCUMENT
+            )
+            if tipo == "image":
+                intent.setType("image/*")
+            else:
+                # Los FDT son contenedores ZIP con extension .fdt. No todos
+                # los gestores de archivos Android registran ese MIME, por
+                # lo que se usa */* para no ocultar los archivos.
+                intent.setType("*/*")
+
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            self._android_callback = tipo
+            if not guardar:
+                intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            else:
+                nombre = "formato.fdt"
+                if self.formato and self.formato.name.strip():
+                    nombre = self.formato.name.strip() + ".fdt"
+                intent.putExtra(Intent.EXTRA_TITLE, nombre)
+
+            self._android_callback = (tipo, guardar)
             activity.startActivityForResult(intent, 4001)
         except Exception as exc:
             self.estado.text = "Error al abrir selector: " + str(exc)
@@ -263,29 +291,61 @@ class ConfiguradorApp(App):
     def _on_android_activity_result(self, request_code, result_code, intent):
         if request_code != 4001 or not self._android_callback:
             return
-        tipo = self._android_callback
+
+        tipo, guardar = self._android_callback
         self._android_callback = None
+
         try:
             Activity = autoclass("android.app.Activity")
             if result_code != Activity.RESULT_OK or intent is None:
                 return
+
             uri = intent.getData()
             if uri is None:
+                self.estado.text = "No se recibió ningún archivo del selector de Android."
                 return
+
+            if guardar:
+                self._guardar_fdt_uri(uri)
+                return
+
             ruta = self._copiar_uri_a_cache(uri, tipo)
             if tipo == "image":
                 self._importar_ruta(ruta)
+            elif tipo == "fdt":
+                self._abrir_ruta(ruta)
         except Exception as exc:
             self.estado.text = "Error al seleccionar archivo: " + str(exc)
+
+    def _nombre_display_uri(self, resolver, uri):
+        try:
+            OpenableColumns = autoclass("android.provider.OpenableColumns")
+            cursor = resolver.query(uri, None, None, None, None)
+            if cursor is None:
+                return ""
+            try:
+                indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if indice >= 0 and cursor.moveToFirst():
+                    valor = cursor.getString(indice)
+                    return str(valor or "")
+            finally:
+                cursor.close()
+        except Exception:
+            return ""
+        return ""
 
     def _copiar_uri_a_cache(self, uri, tipo):
         actividad = activity.mActivity
         resolver = actividad.getContentResolver()
         flujo = resolver.openInputStream(uri)
+        if flujo is None:
+            raise IOError("Android no pudo abrir el archivo seleccionado.")
+
         try:
-            nombre = "plantilla_importada"
-            extension = ".bin"
-            if tipo == "image":
+            nombre_original = self._nombre_display_uri(resolver, uri)
+            extension = os.path.splitext(nombre_original)[1].lower()
+
+            if tipo == "image" and not extension:
                 mime = resolver.getType(uri)
                 extensiones = {
                     "image/jpeg": ".jpg",
@@ -294,21 +354,80 @@ class ConfiguradorApp(App):
                     "image/webp": ".webp",
                     "image/tiff": ".tif",
                 }
-                extension = extensiones.get(str(mime).lower(), ".img")
-            ruta = os.path.join(actividad.getCacheDir().getAbsolutePath(), nombre + extension)
+                extension = extensiones.get(str(mime or "").lower(), ".jpg")
+            elif tipo == "fdt":
+                extension = ".fdt"
+
+            if not extension:
+                extension = ".bin"
+
+            nombre = "archivo_importado_" + uuid.uuid4().hex + extension
+            ruta = os.path.join(
+                actividad.getCacheDir().getAbsolutePath(),
+                nombre,
+            )
+
+            # Usamos un byte[] Java real para evitar problemas de conversion
+            # entre bytearray de Python y java.io.InputStream en distintos
+            # dispositivos/versiones de Android.
+            from jnius import jarray
+            buffer = jarray("b", [0] * 65536)
             salida = open(ruta, "wb")
             try:
-                buffer = bytearray(65536)
                 while True:
                     cantidad = flujo.read(buffer)
                     if cantidad <= 0:
                         break
-                    salida.write(buffer[:cantidad])
+                    salida.write(bytes(buffer[:cantidad]))
             finally:
                 salida.close()
+
+            if not os.path.isfile(ruta) or os.path.getsize(ruta) <= 0:
+                raise IOError("El archivo seleccionado está vacío o no pudo copiarse.")
             return ruta
         finally:
             flujo.close()
+
+    def _guardar_fdt_uri(self, uri):
+        if not self.formato:
+            self.estado.text = "Primero importe una plantilla."
+            return
+
+        actividad = activity.mActivity
+        resolver = actividad.getContentResolver()
+        temporal = os.path.join(
+            actividad.getCacheDir().getAbsolutePath(),
+            "fdt_guardado_" + uuid.uuid4().hex + ".fdt",
+        )
+
+        try:
+            validar_fdt(self.formato)
+            guardar_fdt(self.formato, temporal)
+
+            entrada = open(temporal, "rb")
+            salida = resolver.openOutputStream(uri)
+            if salida is None:
+                raise IOError("Android no pudo abrir el destino para guardar el FDT.")
+
+            try:
+                from jnius import jarray
+                buffer = jarray("b", [0] * 65536)
+                while True:
+                    datos = entrada.read(65536)
+                    if not datos:
+                        break
+                    salida.write(jarray("b", datos))
+            finally:
+                entrada.close()
+                salida.close()
+
+            self.estado.text = "FDT guardado correctamente en el archivo seleccionado."
+        finally:
+            try:
+                if os.path.exists(temporal):
+                    os.remove(temporal)
+            except OSError:
+                pass
 
     def _importar_ruta(self, ruta):
         try:
@@ -337,7 +456,10 @@ class ConfiguradorApp(App):
             self.estado.text = "Error al importar: " + str(exc)
 
     def abrir(self):
-        self._file_popup("Abrir FDT", self._abrir_ruta)
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("fdt", guardar=False)
+        else:
+            self._file_popup("Abrir FDT", self._abrir_ruta)
 
     def _abrir_ruta(self, ruta):
         try:
@@ -362,7 +484,10 @@ class ConfiguradorApp(App):
         if not self.formato:
             self.estado.text = "Primero importe una plantilla."
             return
-        self._file_popup("Guardar FDT", self._guardar_ruta, guardar=True)
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("fdt", guardar=True)
+        else:
+            self._file_popup("Guardar FDT", self._guardar_ruta, guardar=True)
 
     def _guardar_ruta(self, ruta):
         try:
