@@ -10,8 +10,8 @@ def _normalizar_nombre_fuente(valor):
     texto = str(valor or "").strip().lower()
     texto = os.path.basename(texto)
     texto = os.path.splitext(texto)[0]
-    texto = re.sub(r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$", "", texto)
-    texto = re.sub(r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$", "", texto)
+    texto = re.sub(r"\s*\((true ?type|opentype|truetype)\)\s*$", "", texto)
+    texto = re.sub(r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$", "", texto)
     return texto.strip()
 
 
@@ -35,8 +35,8 @@ def _buscar_fuente_instalada(font_family):
     try:
         import winreg
         claves = (
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
-            (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
         )
         for hive, subkey in claves:
             try:
@@ -53,7 +53,7 @@ def _buscar_fuente_instalada(font_family):
                     archivo = os.path.expandvars(str(archivo))
                     if not os.path.isabs(archivo):
                         archivo = os.path.join(
-                            os.environ.get("WINDIR", r"C:\\Windows"),
+                            os.environ.get("WINDIR", r"C:\Windows"),
                             "Fonts",
                             archivo,
                         )
@@ -74,7 +74,7 @@ def _buscar_fuente_instalada(font_family):
 
     # Último intento: recorrer las carpetas estándar de fuentes de Windows.
     carpetas = [
-        os.path.join(os.environ.get("WINDIR", r"C:\\Windows"), "Fonts"),
+        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
         os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
     ]
     for carpeta in carpetas:
