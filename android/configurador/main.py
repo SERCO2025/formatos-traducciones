@@ -10,6 +10,7 @@ from kivy.uix.button import Button
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
+from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
 from kivy.uix.image import Image as KivyImage
@@ -204,17 +205,16 @@ class ConfiguradorApp(App):
 
     def build(self):
         root = BoxLayout(orientation="vertical")
-        menu = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(3), padding=dp(3))
-        for texto, accion in (
-            ("Nuevo", self.nuevo),
-            ("Abrir", self.abrir),
-            ("Guardar", self.guardar),
-            ("Guardar como FDT", self.guardar_como_fdt),
-            ("Importar", self.importar),
-        ):
-            menu.add_widget(Button(text=texto, on_release=lambda _, f=accion: f()))
 
-        root.add_widget(menu)
+        barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)))
+        barra.add_widget(Button(text="☰", size_hint_x=None, width=dp(58), font_size="28sp", on_release=lambda _: self.abrir_menu()))
+        titulo = Label(text="Configurador de Formatos", halign="left", valign="middle", font_size="17sp")
+        titulo.bind(size=lambda instancia, valor: setattr(instancia, "text_size", valor))
+        barra.add_widget(titulo)
+        self.estado_menu = Label(text="Listo", size_hint_x=None, width=dp(72), font_size="12sp", halign="right", valign="middle")
+        self.estado_menu.bind(size=lambda instancia, valor: setattr(instancia, "text_size", valor))
+        barra.add_widget(self.estado_menu)
+        root.add_widget(barra)
 
         tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3))
         for simbolo, tool in TOOLS:
@@ -243,9 +243,54 @@ class ConfiguradorApp(App):
         root.add_widget(self.estado)
         return root
 
+    def abrir_menu(self):
+        panel = ModalView(size_hint=(0.86, 1), pos_hint={"x": 0, "y": 0}, auto_dismiss=True, background_color=(0.05, 0.05, 0.05, 0.98), background="")
+        contenido = BoxLayout(orientation="vertical", spacing=dp(7), padding=dp(10))
+        encabezado = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6))
+        encabezado.add_widget(Label(text="MENÚ", font_size="20sp", halign="left", valign="middle"))
+        encabezado.add_widget(Button(text="×", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
+        contenido.add_widget(encabezado)
+
+        def seccion(texto):
+            contenido.add_widget(Label(text=texto, size_hint_y=None, height=dp(30), halign="left", valign="middle", font_size="13sp"))
+
+        def opcion(texto, accion):
+            boton = Button(text=texto, size_hint_y=None, height=dp(48), halign="left", valign="middle", font_size="15sp")
+            boton.bind(size=lambda instancia, valor: setattr(instancia, "text_size", (valor[0] - dp(20), valor[1])))
+            boton.bind(on_release=lambda _: (panel.dismiss(), accion()))
+            contenido.add_widget(boton)
+
+        seccion("ARCHIVO")
+        opcion("Nuevo formato", self.nuevo)
+        opcion("Abrir formato FDT", self.abrir)
+        opcion("Importar plantilla", self.importar)
+        opcion("Guardar", self.guardar)
+        opcion("Guardar como FDT", self.guardar_como_fdt)
+        seccion("HERRAMIENTAS")
+        opcion("Lista de campos", self.mostrar_lista_campos)
+        seccion("EDICIÓN")
+        opcion("Deshacer", self.deshacer)
+        opcion("Rehacer", self.rehacer)
+        contenido.add_widget(Label(text="Configurador de Formatos Traducidos", size_hint_y=None, height=dp(38), font_size="11sp"))
+        panel.add_widget(contenido)
+        panel.open()
+
+    def mostrar_lista_campos(self):
+        self.estado.text = "Lista de campos: función disponible en la siguiente actualización."
+        self.estado_menu.text = "Campos"
+
+    def deshacer(self):
+        self.estado.text = "Deshacer: función disponible en la siguiente actualización."
+        self.estado_menu.text = "Editar"
+
+    def rehacer(self):
+        self.estado.text = "Rehacer: función disponible en la siguiente actualización."
+        self.estado_menu.text = "Editar"
+
     def set_tool(self, tool):
         self.tool = tool
         self.estado.text = "Herramienta: " + str(tool)
+        self.estado_menu.text = str(tool)
 
     def nuevo(self):
         self.formato = None
@@ -284,7 +329,9 @@ class ConfiguradorApp(App):
                 intent.putExtra(Intent.EXTRA_TITLE, nombre)
 
             self._android_callback = (tipo, guardar)
-            activity.startActivityForResult(intent, 4001)
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            actividad = PythonActivity.mActivity
+            actividad.startActivityForResult(intent, 4001)
         except Exception as exc:
             self.estado.text = "Error al abrir selector: " + str(exc)
 
