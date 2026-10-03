@@ -224,8 +224,7 @@ class CapturadorApp:
                 "_preview_photo",
             )
         except Exception as exc:
-            self.preview_label.config(image="", text="Vista previa no disponible")
-            self._preview_photo = None
+            # Conservar la última vista previa válida si ocurre un error temporal.
             self.estado.config(text="Vista previa: %s" % exc)
 
     def _mostrar_imagen_en_label(self, label, imagen, atributo):
