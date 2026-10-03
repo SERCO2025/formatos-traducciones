@@ -623,7 +623,7 @@ class ConfiguradorApp(App):
 
     def seleccionar(self, campo):
         self.seleccionado = campo
-        self.editor.cargar_plantilla(self.formato.template.path)
+        self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
 
     def mostrar_propiedades(self, campo):
         layout = BoxLayout(orientation="vertical", spacing=dp(7), padding=dp(10))
@@ -662,7 +662,7 @@ class ConfiguradorApp(App):
                 if alineacion.text in ("left", "center", "right", "justify"):
                     campo.text_style.alignment = alineacion.text
             self.formato.ordenar_campos()
-            self.editor.cargar_plantilla(self.formato.template.path)
+            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
             popup.dismiss()
             self.estado.text = "Campo %d configurado." % campo.order
 
@@ -682,7 +682,7 @@ class ConfiguradorApp(App):
             return
         self.scale = max(0.05, min(5.0, value))
         self.editor.scale = self.scale
-        self.editor.cargar_plantilla(self.formato.template.path)
+        self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
         self.actualizar_zoom()
 
     def actualizar_zoom(self):
