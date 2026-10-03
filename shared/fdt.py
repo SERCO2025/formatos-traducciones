@@ -34,7 +34,7 @@ def _is_zip_fdt(ruta):
         return False
 
 
-def _resolver_fuente_para_empaquetar(font_family):
+def _resolver_fuente_para_empaquetar(font_family, bold=False, italic=False):
     import os
 
     solicitado = str(font_family or "").strip()
@@ -43,10 +43,37 @@ def _resolver_fuente_para_empaquetar(font_family):
     if os.path.isfile(solicitado):
         return solicitado
 
-    objetivo = os.path.basename(solicitado).lower()
-    objetivo = os.path.splitext(objetivo)[0]
-    objetivo = re.sub(r"\s*\((true ?type|opentype|truetype)\)\s*$", "", objetivo, flags=re.IGNORECASE)
-    objetivo = re.sub(r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$", "", objetivo, flags=re.IGNORECASE).strip()
+    def normalizar_base(valor):
+        texto = os.path.basename(str(valor or "")).lower()
+        texto = os.path.splitext(texto)[0]
+        texto = re.sub(
+            r"\s*\((true ?type|opentype|truetype)\)\s*$",
+            "",
+            texto,
+            flags=re.IGNORECASE,
+        )
+        texto = re.sub(
+            r"[\s_-]+(bold\s+italic|italic|bold|negrita|cursiva)\s*$",
+            "",
+            texto,
+            flags=re.IGNORECASE,
+        ).strip()
+        return texto
+
+    def estilo_de_nombre(valor):
+        texto = os.path.basename(str(valor or "")).lower()
+        texto = re.sub(
+            r"\s*\((true ?type|opentype|truetype)\)\s*$",
+            "",
+            texto,
+            flags=re.IGNORECASE,
+        )
+        tiene_bold = bool(re.search(r"(^|[\s_-])(bold|negrita)(?=$|[\s_-])", texto, re.IGNORECASE))
+        tiene_italic = bool(re.search(r"(^|[\s_-])(italic|cursiva)(?=$|[\s_-])", texto, re.IGNORECASE))
+        return tiene_bold, tiene_italic
+
+    objetivo = normalizar_base(solicitado)
+    candidatos = []
 
     try:
         import winreg
@@ -65,19 +92,8 @@ def _resolver_fuente_para_empaquetar(font_family):
                         nombre, archivo, _ = winreg.EnumValue(key, i)
                     except OSError:
                         continue
-                    nombre_base = re.sub(
-                        r"\s*\((true ?type|opentype|truetype)\)\s*$",
-                        "",
-                        str(nombre),
-                        flags=re.IGNORECASE,
-                    )
-                    nombre_base = re.sub(
-                        r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$",
-                        "",
-                        nombre_base,
-                        flags=re.IGNORECASE,
-                    ).strip().lower()
 
+                    nombre = str(nombre)
                     archivo = os.path.expandvars(str(archivo))
                     if not os.path.isabs(archivo):
                         archivo = os.path.join(
@@ -86,14 +102,33 @@ def _resolver_fuente_para_empaquetar(font_family):
                             archivo,
                         )
                     archivo = os.path.normpath(archivo)
-                    archivo_base = os.path.splitext(os.path.basename(archivo))[0].lower()
+                    if not os.path.isfile(archivo):
+                        continue
 
-                    if (objetivo == nombre_base or objetivo == archivo_base) and os.path.isfile(archivo):
-                        return archivo
+                    nombre_base = normalizar_base(nombre)
+                    archivo_base = normalizar_base(archivo)
+                    if objetivo != nombre_base and objetivo != archivo_base:
+                        continue
+
+                    nombre_bold, nombre_italic = estilo_de_nombre(nombre)
+                    archivo_bold, archivo_italic = estilo_de_nombre(archivo)
+                    candidato_bold = nombre_bold or archivo_bold
+                    candidato_italic = nombre_italic or archivo_italic
+
+                    candidatos.append(
+                        (
+                            0 if (candidato_bold == bool(bold) and candidato_italic == bool(italic)) else 1,
+                            archivo,
+                        )
+                    )
             finally:
                 winreg.CloseKey(key)
     except Exception:
         pass
+
+    if candidatos:
+        candidatos.sort(key=lambda item: item[0])
+        return candidatos[0][1]
 
     return None
 
@@ -129,10 +164,15 @@ def guardar_fdt(formato: Formato, ruta):
         if not fuente:
             continue
 
-        fuente_resuelta = _resolver_fuente_para_empaquetar(fuente)
+        estilo_data = campo_data.get("text_style", {}) or {}
+        fuente_resuelta = _resolver_fuente_para_empaquetar(
+            fuente,
+            bool(estilo_data.get("bold", False)),
+            bool(estilo_data.get("italic", False)),
+        )
         if not fuente_resuelta:
             field_id = str(campo_data.get("field_id", "campo") or "campo")
-            pregunta = str(campo_data.get("prompt", "") or "").strip()
+            pregunta = str(campo_data.get("question", "") or "").strip()
             detalle = " (%s)" % pregunta if pregunta else ""
             raise FileNotFoundError(
                 "No se pudo empaquetar la tipografía '%s' del campo %s%s. "
@@ -190,7 +230,8 @@ def guardar_fdt(formato: Formato, ruta):
                     "Contenedor autocontenido.\n"
                     "format.json = configuración del formato\n"
                     "template/ = imagen de plantilla\n"
-                    "fonts/ = tipografias utilizadas por los campos\n"\n                    "resources/ = archivos adicionales del formato\n"
+                    "fonts/ = tipografias utilizadas por los campos\n"
+                    "resources/ = archivos adicionales del formato\n"
                 ).encode("utf-8"),
             )
 
