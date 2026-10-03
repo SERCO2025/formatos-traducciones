@@ -270,15 +270,28 @@ def renderizar_imagen(formato, respuestas):
             anchor = "lt"
 
         if "\n" in texto:
+            # Pillow no admite anchor en multiline_text(). Calculamos
+            # manualmente la posición horizontal para conservar la alineación.
+            alineacion = "center" if estilo.alignment == "center" else (
+                "right" if estilo.alignment == "right" else "left"
+            )
+            caja_texto = dibujo.multiline_textbbox(
+                (0, 0), texto, font=fuente, align=alineacion
+            )
+            ancho_texto = max(0, caja_texto[2] - caja_texto[0])
+            if estilo.alignment == "center":
+                x_texto = posicion.x + (posicion.width - ancho_texto) // 2 - caja_texto[0]
+            elif estilo.alignment == "right":
+                x_texto = posicion.x + posicion.width - ancho_texto - caja_texto[0]
+            else:
+                x_texto = posicion.x - caja_texto[0]
+
             dibujo.multiline_text(
-                xy,
+                (x_texto, posicion.y),
                 texto,
                 fill=color,
                 font=fuente,
-                anchor=anchor,
-                align="center" if estilo.alignment == "center" else (
-                    "right" if estilo.alignment == "right" else "left"
-                ),
+                align=alineacion,
             )
         else:
             dibujo.text(xy, texto, fill=color, font=fuente, anchor=anchor)
