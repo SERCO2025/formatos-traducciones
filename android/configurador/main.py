@@ -199,6 +199,7 @@ class ConfiguradorApp(App):
         self.editor = None
         self.seleccionado = None
         self.estado = None
+        self._visual_template_path = None
         self._android_callback = None
         if ANDROID_AVAILABLE:
             activity.bind(on_activity_result=self._on_android_activity_result)
@@ -301,6 +302,7 @@ class ConfiguradorApp(App):
     def nuevo(self):
         self.formato = None
         self.seleccionado = None
+        self._visual_template_path = None
         self.editor.clear_widgets()
         self.estado.text = "Nuevo formato."
 
@@ -524,7 +526,8 @@ class ConfiguradorApp(App):
             ))
             self.scale = max(0.05, self.scale)
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(visual_ruta)
+            self._visual_template_path = visual_ruta
+            self.editor.cargar_plantilla(self._visual_template_path)
             self.actualizar_zoom()
             self.estado.text = "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
         except Exception as exc:
@@ -540,13 +543,16 @@ class ConfiguradorApp(App):
         try:
             from shared.fdt import cargar_fdt
             self.formato = cargar_fdt(ruta)
+            from PIL import Image
+            imagen = Image.open(self.formato.template.path).convert("RGB")
+            self._visual_template_path = self._crear_imagen_visual(self.formato.template.path, imagen)
             self.scale = min(1.0, 0.8 * min(
                 (self.width - dp(40)) / self.formato.template.width,
                 (self.height - dp(140)) / self.formato.template.height,
             ))
             self.scale = max(0.05, self.scale)
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(self.formato.template.path)
+            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
             self.actualizar_zoom()
             self.estado.text = "FDT abierto."
         except Exception as exc:
