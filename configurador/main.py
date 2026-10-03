@@ -7,6 +7,7 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from shared.fdt import guardar_fdt, validar_fdt
+from shared.renderer import _cargar_fuente
 from shared.models import (
     FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
@@ -119,6 +120,7 @@ class Configurador:
         self._font_inventory = self._obtener_fuentes_instaladas()
         self._magnifier_label = None
         self._icon_images = {}
+        self._field_preview_images = {}
         self._field_drag_index = None
         self._field_drop_index = None
         self._field_drop_indicator = None
@@ -915,6 +917,7 @@ class Configurador:
     def redraw(self):
         self.canvas.delete("all")
         self.field_items.clear()
+        self._field_preview_images.clear()
         if self.template_image is None:
             return
 
@@ -945,13 +948,74 @@ class Configurador:
             outline="black", width=3,
             tags=("field", campo.field_id)
         )
+
+        objetos = [rect]
+
+        # Al seleccionar un campo de texto se muestra una muestra real con
+        # la misma fuente y el mismo cálculo de tamaño que usará el renderer.
+        # Así el configurador deja de mostrar una referencia tipográfica
+        # diferente a la del documento final.
+        if (
+            campo is self.selected_field
+            and campo.field_type != FIELD_TYPE_IMAGE
+            and campo.text_style.font_family
+        ):
+            try:
+                fuente = _cargar_fuente(
+                    campo.text_style.font_family,
+                    campo.text_style.font_size_px,
+                    campo.text_style.bold,
+                    campo.text_style.italic,
+                )
+                muestra = {
+                    FIELD_TYPE_NUMBER: "123456",
+                    FIELD_TYPE_ALPHANUMERIC: "A1B2C3",
+                }.get(campo.field_type, "Texto")
+                color_rgb = (
+                    campo.text_style.color.r,
+                    campo.text_style.color.g,
+                    campo.text_style.color.b,
+                    255,
+                )
+                ancho = max(1, int(round(p.width)))
+                alto = max(1, int(round(p.height)))
+                capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
+                capa_draw = ImageDraw.Draw(capa)
+                if campo.text_style.alignment == "center":
+                    xy = (ancho // 2, 0)
+                    anchor = "mt"
+                elif campo.text_style.alignment == "right":
+                    xy = (ancho, 0)
+                    anchor = "rt"
+                else:
+                    xy = (0, 0)
+                    anchor = "lt"
+                capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
+                visible_capa = capa.resize(
+                    (
+                        max(1, int(round(ancho * self.zoom))),
+                        max(1, int(round(alto * self.zoom))),
+                    ),
+                    Image.Resampling.LANCZOS,
+                )
+                preview = ImageTk.PhotoImage(visible_capa)
+                self._field_preview_images[campo.field_id] = preview
+                image_id = self.canvas.create_image(
+                    x1, y1, image=preview, anchor="nw",
+                    tags=("field_preview", campo.field_id),
+                )
+                objetos.append(image_id)
+            except Exception:
+                pass
+
         label = self.canvas.create_text(
             x1 + 4, y1 + 4,
             text="%d  %s" % (campo.order, campo.field_type),
             fill=color, anchor="nw",
             tags=("field", campo.field_id)
         )
-        self.field_items[campo.field_id] = (rect, label)
+        objetos.append(label)
+        self.field_items[campo.field_id] = tuple(objetos)
 
         if campo is self.selected_field and self.tool == TOOL_MEASURE:
             self._draw_resize_handles(campo, x1, y1, x2, y2)
