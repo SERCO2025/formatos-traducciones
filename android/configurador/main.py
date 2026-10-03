@@ -428,13 +428,19 @@ class ConfiguradorApp(App):
             # dispositivos/versiones de Android.
             from jnius import jarray
             buffer = jarray("b", [0] * 65536)
-            salida = open(ruta, "wb")
+
+            # No convertimos el byte[] Java a bytes de Python. En algunos
+            # dispositivos esa conversion produce un archivo vacio/corrupto.
+            # Leemos y escribimos directamente con las APIs Java.
+            FileOutputStream = autoclass("java.io.FileOutputStream")
+            salida = FileOutputStream(ruta)
             try:
                 while True:
                     cantidad = flujo.read(buffer)
                     if cantidad <= 0:
                         break
-                    salida.write(bytes(buffer[:cantidad]))
+                    salida.write(buffer, 0, cantidad)
+                salida.flush()
             finally:
                 salida.close()
 
