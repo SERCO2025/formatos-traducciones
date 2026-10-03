@@ -388,7 +388,8 @@ class ConfiguradorApp(App):
         return ""
 
     def _copiar_uri_a_cache(self, uri, tipo):
-        actividad = activity.mActivity
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        actividad = PythonActivity.mActivity
         resolver = actividad.getContentResolver()
         flujo = resolver.openInputStream(uri)
         if flujo is None:
@@ -446,7 +447,8 @@ class ConfiguradorApp(App):
             self.estado.text = "Primero importe una plantilla."
             return
 
-        actividad = activity.mActivity
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        actividad = PythonActivity.mActivity
         resolver = actividad.getContentResolver()
         temporal = os.path.join(
             actividad.getCacheDir().getAbsolutePath(),
