@@ -13,6 +13,14 @@ from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
 from kivy.uix.image import Image as KivyImage
 
+try:
+    from android import activity
+    from jnius import autoclass
+    ANDROID_AVAILABLE = True
+except Exception:
+    activity = None
+    ANDROID_AVAILABLE = False
+
 from shared.fdt import guardar_fdt, validar_fdt
 from shared.models import (
     FIELD_TYPE_ALPHANUMERIC,
@@ -179,6 +187,9 @@ class ConfiguradorApp(App):
         self.editor = None
         self.seleccionado = None
         self.estado = None
+        self._android_callback = None
+        if ANDROID_AVAILABLE:
+            activity.bind(on_activity_result=self._on_android_activity_result)
 
     def build(self):
         root = BoxLayout(orientation="vertical")
@@ -232,7 +243,72 @@ class ConfiguradorApp(App):
         self.estado.text = "Nuevo formato."
 
     def importar(self):
-        self._file_popup("Importar plantilla", self._importar_ruta, imagenes=True)
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("image")
+        else:
+            self._file_popup("Importar plantilla", self._importar_ruta, imagenes=True)
+
+    def _abrir_selector_android(self, tipo):
+        try:
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.setType("image/*" if tipo == "image" else "application/octet-stream")
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            self._android_callback = tipo
+            activity.startActivityForResult(intent, 4001)
+        except Exception as exc:
+            self.estado.text = "Error al abrir selector: " + str(exc)
+
+    def _on_android_activity_result(self, request_code, result_code, intent):
+        if request_code != 4001 or not self._android_callback:
+            return
+        tipo = self._android_callback
+        self._android_callback = None
+        try:
+            Activity = autoclass("android.app.Activity")
+            if result_code != Activity.RESULT_OK or intent is None:
+                return
+            uri = intent.getData()
+            if uri is None:
+                return
+            ruta = self._copiar_uri_a_cache(uri, tipo)
+            if tipo == "image":
+                self._importar_ruta(ruta)
+        except Exception as exc:
+            self.estado.text = "Error al seleccionar archivo: " + str(exc)
+
+    def _copiar_uri_a_cache(self, uri, tipo):
+        actividad = activity.mActivity
+        resolver = actividad.getContentResolver()
+        flujo = resolver.openInputStream(uri)
+        try:
+            nombre = "plantilla_importada"
+            extension = ".bin"
+            if tipo == "image":
+                mime = resolver.getType(uri)
+                extensiones = {
+                    "image/jpeg": ".jpg",
+                    "image/png": ".png",
+                    "image/bmp": ".bmp",
+                    "image/webp": ".webp",
+                    "image/tiff": ".tif",
+                }
+                extension = extensiones.get(str(mime).lower(), ".img")
+            ruta = os.path.join(actividad.getCacheDir().getAbsolutePath(), nombre + extension)
+            salida = open(ruta, "wb")
+            try:
+                buffer = bytearray(65536)
+                while True:
+                    cantidad = flujo.read(buffer)
+                    if cantidad <= 0:
+                        break
+                    salida.write(buffer[:cantidad])
+            finally:
+                salida.close()
+            return ruta
+        finally:
+            flujo.close()
 
     def _importar_ruta(self, ruta):
         try:
