@@ -484,10 +484,29 @@ class ConfiguradorApp(App):
             except OSError:
                 pass
 
+    def _crear_imagen_visual(self, ruta, imagen):
+        """
+        Crea una copia PNG RGB exclusivamente para la vista de Kivy.
+        El archivo original sigue siendo la plantilla real del FDT.
+        Esto evita problemas de decodificacion de JPG/PNG desde algunos
+        proveedores de documentos de Android.
+        """
+        visual = os.path.join(
+            os.path.dirname(ruta),
+            "vista_" + uuid.uuid4().hex + ".png",
+        )
+        imagen.save(visual, format="PNG")
+        if not os.path.isfile(visual) or os.path.getsize(visual) <= 0:
+            raise IOError("No se pudo crear la imagen de vista previa.")
+        return visual
+
     def _importar_ruta(self, ruta):
         try:
             from PIL import Image
+
             imagen = Image.open(ruta).convert("RGB")
+            visual_ruta = self._crear_imagen_visual(ruta, imagen)
+
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(
@@ -498,13 +517,14 @@ class ConfiguradorApp(App):
                     mode="RGB",
                 ),
             )
+
             self.scale = min(1.0, 0.8 * min(
                 (self.width - dp(40)) / imagen.width,
                 (self.height - dp(140)) / imagen.height,
             ))
             self.scale = max(0.05, self.scale)
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(ruta)
+            self.editor.cargar_plantilla(visual_ruta)
             self.actualizar_zoom()
             self.estado.text = "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
         except Exception as exc:
