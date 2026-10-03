@@ -45,14 +45,14 @@ def _resolver_fuente_para_empaquetar(font_family):
 
     objetivo = os.path.basename(solicitado).lower()
     objetivo = os.path.splitext(objetivo)[0]
-    objetivo = re.sub(r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$", "", objetivo, flags=re.IGNORECASE)
-    objetivo = re.sub(r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$", "", objetivo, flags=re.IGNORECASE).strip()
+    objetivo = re.sub(r"\s*\((true ?type|opentype|truetype)\)\s*$", "", objetivo, flags=re.IGNORECASE)
+    objetivo = re.sub(r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$", "", objetivo, flags=re.IGNORECASE).strip()
 
     try:
         import winreg
         claves = (
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
-            (winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
         )
         for hive, subkey in claves:
             try:
@@ -66,13 +66,13 @@ def _resolver_fuente_para_empaquetar(font_family):
                     except OSError:
                         continue
                     nombre_base = re.sub(
-                        r"\\s*\\((true ?type|opentype|truetype)\\)\\s*$",
+                        r"\s*\((true ?type|opentype|truetype)\)\s*$",
                         "",
                         str(nombre),
                         flags=re.IGNORECASE,
                     )
                     nombre_base = re.sub(
-                        r"\\s+(bold\\s+italic|italic|bold|negrita|cursiva)\\s*$",
+                        r"\s+(bold\s+italic|italic|bold|negrita|cursiva)\s*$",
                         "",
                         nombre_base,
                         flags=re.IGNORECASE,
@@ -81,7 +81,7 @@ def _resolver_fuente_para_empaquetar(font_family):
                     archivo = os.path.expandvars(str(archivo))
                     if not os.path.isabs(archivo):
                         archivo = os.path.join(
-                            os.environ.get("WINDIR", r"C:\\Windows"),
+                            os.environ.get("WINDIR", r"C:\Windows"),
                             "Fonts",
                             archivo,
                         )
