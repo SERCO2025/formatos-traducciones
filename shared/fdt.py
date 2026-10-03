@@ -131,7 +131,14 @@ def guardar_fdt(formato: Formato, ruta):
 
         fuente_resuelta = _resolver_fuente_para_empaquetar(fuente)
         if not fuente_resuelta:
-            continue
+            field_id = str(campo_data.get("field_id", "campo") or "campo")
+            pregunta = str(campo_data.get("prompt", "") or "").strip()
+            detalle = " (%s)" % pregunta if pregunta else ""
+            raise FileNotFoundError(
+                "No se pudo empaquetar la tipografía '%s' del campo %s%s. "
+                "Instale la fuente en el equipo donde se configura el formato " 
+                "y vuelva a guardar el FDT." % (fuente, field_id, detalle)
+            )
         fuente_path = Path(fuente_resuelta)
 
         clave = str(fuente_path.resolve())
@@ -183,7 +190,7 @@ def guardar_fdt(formato: Formato, ruta):
                     "Contenedor autocontenido.\n"
                     "format.json = configuración del formato\n"
                     "template/ = imagen de plantilla\n"
-                    "resources/ = archivos adicionales del formato\n"
+                    "fonts/ = tipografias utilizadas por los campos\n"\n                    "resources/ = archivos adicionales del formato\n"
                 ).encode("utf-8"),
             )
 
