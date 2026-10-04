@@ -4,6 +4,7 @@ import uuid
 
 from kivy.app import App
 from kivy.graphics import Color, Line, Rectangle
+from kivy.graphics.texture import Texture
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -99,14 +100,22 @@ class CanvasEditor(FloatLayout):
         self.start_touch = None
         self.preview_rect = None
 
-    def cargar_plantilla(self, ruta):
+    def cargar_plantilla(self, ruta, textura=None):
         self.clear_widgets()
-        self.template_widget = KivyImage(
-            source=ruta,
-            allow_stretch=True,
-            keep_ratio=True,
-            size_hint=(None, None),
-        )
+        if textura is not None:
+            self.template_widget = KivyImage(
+                texture=textura,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(None, None),
+            )
+        else:
+            self.template_widget = KivyImage(
+                source=ruta,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(None, None),
+            )
         self.template_widget.size = (
             self.app.formato.template.width * self.scale,
             self.app.formato.template.height * self.scale,
@@ -200,6 +209,7 @@ class ConfiguradorApp(App):
         self.seleccionado = None
         self.estado = None
         self._visual_template_path = None
+        self._visual_texture = None
         self._android_callback = None
         if ANDROID_AVAILABLE:
             activity.bind(on_activity_result=self._on_android_activity_result)
@@ -303,6 +313,7 @@ class ConfiguradorApp(App):
         self.formato = None
         self.seleccionado = None
         self._visual_template_path = None
+        self._visual_texture = None
         self.editor.clear_widgets()
         self.estado.text = "Nuevo formato."
 
@@ -508,12 +519,31 @@ class ConfiguradorApp(App):
             raise IOError("No se pudo crear la imagen de vista previa.")
         return visual
 
+    def _crear_textura_visual(self, imagen):
+        """
+        Entrega la imagen decodificada por Pillow directamente a Kivy.
+        Evita depender del cargador de archivos de Kivy para mostrar
+        archivos seleccionados mediante SAF.
+        """
+        textura = Texture.create(
+            size=(imagen.width, imagen.height),
+            colorfmt="rgb",
+        )
+        textura.blit_buffer(
+            imagen.tobytes(),
+            colorfmt="rgb",
+            bufferfmt="ubyte",
+        )
+        textura.flip_vertical()
+        return textura
+
     def _importar_ruta(self, ruta):
         try:
             from PIL import Image
 
             imagen = Image.open(ruta).convert("RGB")
             visual_ruta = self._crear_imagen_visual(ruta, imagen)
+            self._visual_texture = self._crear_textura_visual(imagen)
 
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
@@ -533,7 +563,7 @@ class ConfiguradorApp(App):
             self.scale = max(0.05, self.scale)
             self.editor.scale = self.scale
             self._visual_template_path = visual_ruta
-            self.editor.cargar_plantilla(self._visual_template_path)
+            self.editor.cargar_plantilla(self._visual_template_path, self._visual_texture)
             self.actualizar_zoom()
             self.estado.text = "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
         except Exception as exc:
@@ -552,13 +582,14 @@ class ConfiguradorApp(App):
             from PIL import Image
             imagen = Image.open(self.formato.template.path).convert("RGB")
             self._visual_template_path = self._crear_imagen_visual(self.formato.template.path, imagen)
+            self._visual_texture = self._crear_textura_visual(imagen)
             self.scale = min(1.0, 0.8 * min(
                 (self.width - dp(40)) / self.formato.template.width,
                 (self.height - dp(140)) / self.formato.template.height,
             ))
             self.scale = max(0.05, self.scale)
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
+            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path, self._visual_texture)
             self.actualizar_zoom()
             self.estado.text = "FDT abierto."
         except Exception as exc:
