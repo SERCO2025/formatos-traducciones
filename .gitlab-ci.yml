@@ -1,0 +1,47 @@
+stages:
+  - build
+
+build_android:
+  stage: build
+  image: ubuntu:24.04
+  parallel:
+    matrix:
+      - APP: configurador
+      - APP: capturador
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
+    P4A_RELEASE_BRANCH: "develop"
+    PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+  cache:
+    key: "buildozer-$APP"
+    paths:
+      - android/$APP/.buildozer/
+      - .cache/pip/
+  before_script:
+    - apt-get update
+    - apt-get install -y python3 python3-pip python3-venv git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+    - python3 -m venv .venv
+    - . .venv/bin/activate
+    - python -m pip install --upgrade "pip<25"
+    - python -m pip install "setuptools<81"
+    - python -m pip install "cython==0.29.34"
+    - python -m pip install --upgrade buildozer
+  script:
+    - . .venv/bin/activate
+    - rm -rf "android/$APP/shared"
+    - cp -R shared "android/$APP/shared"
+    - rm -rf "android/$APP/bin"
+    - cd "android/$APP"
+    - python --version
+    - python -m pip --version
+    - buildozer --version
+    - yes | buildozer android debug
+    - test -n "$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+    - ls -lah bin/
+  artifacts:
+    name: "android-$APP"
+    paths:
+      - android/$APP/bin/*.apk
+    expire_in: 7 days
