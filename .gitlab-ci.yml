@@ -30,7 +30,7 @@ build_android:
     - python -m pip install --upgrade buildozer
     - |
       if [ "$APP" = "configurador" ]; then
-        SDKMANAGER="$(find /root/.buildozer/android/platform/android-sdk -type f -name sdkmanager | head -n 1)"
+        SDKMANAGER="$(find "$CI_PROJECT_DIR/android/$APP/.buildozer/android/platform/android-sdk" /root/.buildozer/android/platform/android-sdk -type f -name sdkmanager 2>/dev/null | head -n 1)"
         if [ -z "$SDKMANAGER" ]; then
           echo "ERROR: no se encontro sdkmanager en el SDK de Android."
           exit 1
