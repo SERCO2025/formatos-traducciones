@@ -21,7 +21,7 @@ build_android:
       - .cache/pip/
   before_script:
     - apt-get update
-    - apt-get install -y python3 python3-pip python3-venv git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+    - apt-get install -y python3 python3-pip python3-venv git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
     - python3 -m venv .venv
     - . .venv/bin/activate
     - python -m pip install --upgrade "pip<25"
@@ -46,11 +46,34 @@ build_android:
     - python --version
     - python -m pip --version
     - buildozer --version
-    - yes | buildozer android debug
+    - echo "=== INICIANDO COMPILACION DE $APP ==="
+    - printf 'y\n' | buildozer android debug > "$CI_PROJECT_DIR/build-$APP.log" 2>&1
+    - echo "=== COMPILACION TERMINADA ==="
     - test -n "$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
     - ls -lah bin/
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" != "success" ]; then
+        echo ""
+        echo "=============================================="
+        echo " DIAGNOSTICO DE LA COMPILACION: $APP"
+        echo "=============================================="
+        echo ""
+        echo "--- ERRORES / EXCEPCIONES DETECTADOS ---"
+        grep -Ein "error|failed|exception|traceback|fatal" "$CI_PROJECT_DIR/build-$APP.log" | tail -n 120 || true
+        echo ""
+        echo "--- ULTIMAS 120 LINEAS DEL LOG ---"
+        tail -n 120 "$CI_PROJECT_DIR/build-$APP.log" || true
+        echo ""
+        echo "El log completo queda guardado como artifact."
+      else
+        echo ""
+        echo "=== APK DE $APP GENERADO CORRECTAMENTE ==="
+      fi
   artifacts:
     name: "android-$APP"
+    when: always
     paths:
       - android/$APP/bin/*.apk
+      - build-$APP.log
     expire_in: 7 days
