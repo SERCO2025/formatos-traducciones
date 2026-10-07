@@ -2,6 +2,7 @@
 import copy
 import os
 import uuid
+from math import hypot
 
 from kivy.app import App
 from kivy.graphics import Color, Line, Rectangle
@@ -176,6 +177,38 @@ class CanvasEditor(FloatLayout):
         self.initial_position = None
         self.pan_start = None
         self.pan_template_pos = None
+        self._touches = {}
+        self._pinch_active = False
+        self._pinch_start_distance = 0.0
+        self._pinch_start_scale = 1.0
+        self._pinch_anchor = None
+
+    def _touch_inside_template(self, touch):
+        return self.template_widget is not None and self.template_widget.collide_point(*touch.pos)
+
+    def _start_pinch(self):
+        if len(self._touches) < 2 or not self.template_widget:
+            return False
+        a, b = list(self._touches.values())[:2]
+        self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
+        self._pinch_start_scale = self.app.scale
+        self._pinch_anchor = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+        self._pinch_active = True
+        self.pan_start = None
+        self.pan_template_pos = None
+        self.start_touch = None
+        self.app.clear_drawing_preview()
+        self.app.estado.text = "Zoom táctil"
+        return True
+
+    def _update_pinch(self):
+        if not self._pinch_active or len(self._touches) < 2:
+            return False
+        a, b = list(self._touches.values())[:2]
+        distancia = max(1.0, hypot(b.x - a.x, b.y - a.y))
+        factor = distancia / self._pinch_start_distance
+        self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
+        return True
 
     def cargar_plantilla(self, ruta):
         self.clear_widgets()
@@ -222,17 +255,33 @@ class CanvasEditor(FloatLayout):
         if not self.collide_point(*touch.pos):
             return False
 
+        if self._touch_inside_template(touch):
+            self._touches[touch.uid] = touch
+
+        if len(self._touches) >= 2 and self._touch_inside_template(touch):
+            self._start_pinch()
+            return True
+
         tool = self.app.tool
 
         if tool == "zoom":
+            if touch.button in ("scrollup", "scrollright"):
+                self.app.set_zoom(self.app.scale * 1.2, anchor=touch.pos)
+                return True
+            if touch.button in ("scrolldown", "scrollleft"):
+                self.app.set_zoom(self.app.scale * 0.8, anchor=touch.pos)
+                return True
+            if touch.is_mouse_scrolling:
+                return True
             factor = 0.8 if touch.button == "right" else 1.2
-            self.app.set_zoom(self.app.scale * factor)
+            self.app.set_zoom(self.app.scale * factor, anchor=touch.pos)
             return True
 
         if tool == "hand":
-            self.pan_start = touch.pos
-            self.pan_template_pos = self.template_widget.pos if self.template_widget else None
-            return True
+            if self.template_widget and self._touch_inside_template(touch):
+                self.pan_start = touch.pos
+                self.pan_template_pos = self.template_widget.pos
+                return True
 
         if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC, FIELD_TYPE_IMAGE):
             if self._inside_template(touch):
@@ -241,12 +290,20 @@ class CanvasEditor(FloatLayout):
                 return True
 
         if tool == "select" and self._inside_template(touch):
+            if super().on_touch_down(touch):
+                return True
             self.app.seleccionar(None)
             return True
 
         return super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
+        if touch.uid in self._touches:
+            self._touches[touch.uid] = touch
+
+        if self._pinch_active:
+            return self._update_pinch()
+
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             dx = touch.x - self.pan_start[0]
             dy = touch.y - self.pan_start[1]
@@ -266,6 +323,16 @@ class CanvasEditor(FloatLayout):
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
+        self._touches.pop(touch.uid, None)
+
+        if self._pinch_active:
+            if len(self._touches) < 2:
+                self._pinch_active = False
+                self._pinch_anchor = None
+                self._pinch_start_distance = 0.0
+                self.app.estado.text = "Zoom finalizado."
+            return True
+
         if self.pan_start:
             self.pan_start = None
             self.pan_template_pos = None
@@ -1024,12 +1091,43 @@ class ConfiguradorApp(App):
             self._drawing_widget.parent.remove_widget(self._drawing_widget)
         self._drawing_widget = None
 
-    def set_zoom(self, value):
+    def set_zoom(self, value, anchor=None):
         if not self.formato:
             return
-        self.scale = max(0.05, min(5.0, value))
+
+        nuevo_scale = max(0.05, min(5.0, value))
+        if self.editor is None or self.editor.template_widget is None:
+            self.scale = nuevo_scale
+            if self.editor:
+                self.editor.scale = self.scale
+            self.actualizar_zoom()
+            return
+
+        tw = self.editor.template_widget
+        viejo_scale = self.scale
+
+        if anchor is None:
+            anchor = (
+                self.editor.x + self.editor.width / 2.0,
+                self.editor.y + self.editor.height / 2.0,
+            )
+
+        doc_x = (anchor[0] - tw.x) / viejo_scale
+        doc_y_bottom = (anchor[1] - tw.y) / viejo_scale
+
+        self.scale = nuevo_scale
         self.editor.scale = self.scale
-        self.editor.cargar_plantilla(self._visual_template_path)
+
+        tw.size = (
+            self.formato.template.width * self.scale,
+            self.formato.template.height * self.scale,
+        )
+        tw.pos = (
+            anchor[0] - doc_x * self.scale,
+            anchor[1] - doc_y_bottom * self.scale,
+        )
+
+        self.editor.refresh_fields()
         self.actualizar_zoom()
 
     def actualizar_zoom(self):
