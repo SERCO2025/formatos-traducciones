@@ -555,7 +555,6 @@ class ConfiguradorApp(App):
             from PIL import Image
             imagen = Image.open(self.formato.template.path).convert("RGB")
             self._visual_template_path = self._crear_imagen_visual(self.formato.template.path, imagen)
-            self._visual_texture = self._crear_textura_visual(imagen)
             self.scale = min(1.0, 0.8 * min(
                 (self.width - dp(40)) / self.formato.template.width,
                 (self.height - dp(140)) / self.formato.template.height,
@@ -672,7 +671,7 @@ class ConfiguradorApp(App):
                 if alineacion.text in ("left", "center", "right", "justify"):
                     campo.text_style.alignment = alineacion.text
             self.formato.ordenar_campos()
-            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path, self._visual_texture)
+            self.editor.cargar_plantilla(self._visual_template_path or self.formato.template.path)
             popup.dismiss()
             self.estado.text = "Campo %d configurado." % campo.order
 
