@@ -182,6 +182,8 @@ class CanvasEditor(FloatLayout):
         self._pinch_start_distance = 0.0
         self._pinch_start_scale = 1.0
         self._pinch_anchor = None
+        self._pinch_start_template_pos = None
+        self._pinch_last_midpoint = None
 
     def _touch_inside_template(self, touch):
         return self.template_widget is not None and self.template_widget.collide_point(*touch.pos)
@@ -193,7 +195,19 @@ class CanvasEditor(FloatLayout):
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
         self._pinch_start_scale = self.app.scale
         self._pinch_anchor = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+        self._pinch_start_template_pos = self.template_widget.pos
+        self._pinch_last_midpoint = self._pinch_anchor
         self._pinch_active = True
+
+        # Al entrar en zoom de dos dedos se cancela cualquier interacción
+        # de campo. El gesto nunca modifica X/Y ni ancho/alto de los campos.
+        self.active_field_touch = None
+        self.active_field = None
+        self.active_handle = None
+        self.initial_position = None
+        self._interaction_start_doc = None
+        self.app._interaction_changed = False
+
         self.pan_start = None
         self.pan_template_pos = None
         self.start_touch = None
@@ -207,7 +221,23 @@ class CanvasEditor(FloatLayout):
         a, b = list(self._touches.values())[:2]
         distancia = max(1.0, hypot(b.x - a.x, b.y - a.y))
         factor = distancia / self._pinch_start_distance
+        midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+
+        # Escala alrededor del punto inicial del gesto y, después, mueve
+        # visualmente la plantilla para seguir el desplazamiento del punto
+        # medio. Esto mantiene intactas las coordenadas documentales X/Y.
         self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
+
+        if self.template_widget is not None:
+            dx = midpoint[0] - self._pinch_anchor[0]
+            dy = midpoint[1] - self._pinch_anchor[1]
+            self.template_widget.pos = (
+                self.template_widget.x + dx,
+                self.template_widget.y + dy,
+            )
+            self.refresh_fields()
+
+        self._pinch_last_midpoint = midpoint
         return True
 
     def cargar_plantilla(self, ruta):
@@ -330,6 +360,8 @@ class CanvasEditor(FloatLayout):
                 self._pinch_active = False
                 self._pinch_anchor = None
                 self._pinch_start_distance = 0.0
+                self._pinch_start_template_pos = None
+                self._pinch_last_midpoint = None
                 self.app.estado.text = "Zoom finalizado."
             return True
 
@@ -347,8 +379,7 @@ class CanvasEditor(FloatLayout):
             self.app.clear_drawing_preview()
             return super().on_touch_up(touch)
 
-        x0, y0 = self.start_touch
-        x1, y1 = self._document_point(touch)
+        x0, y0 = self.start_touch        x1, y1 = self._document_point(touch)
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         width = max(2, right - left)
@@ -697,8 +728,7 @@ class ConfiguradorApp(App):
         finally:
             flujo.close()
 
-    def _crear_imagen_visual(self, ruta, imagen):
-        visual = os.path.join(os.path.dirname(ruta), "vista_" + uuid.uuid4().hex + ".png")
+    def _crear_imagen_visual(self, ruta, imagen):        visual = os.path.join(os.path.dirname(ruta), "vista_" + uuid.uuid4().hex + ".png")
         imagen.save(visual, format="PNG")
         if not os.path.isfile(visual) or os.path.getsize(visual) <= 0:
             raise IOError("No se pudo crear la imagen de vista previa.")
@@ -784,7 +814,7 @@ class ConfiguradorApp(App):
                     datos = entrada.read(65536)
                     if not datos:
                         break
-                    salida.write(jarray("b", datos))
+                    salida.write(jarray("b", list(datos)))
                 salida.flush()
             finally:
                 entrada.close()
