@@ -31,11 +31,14 @@ build_android:
     - |
       if [ "$APP" = "configurador" ]; then
         SDKMANAGER="$(find "$CI_PROJECT_DIR/android/$APP/.buildozer/android/platform/android-sdk" /root/.buildozer/android/platform/android-sdk -type f -name sdkmanager 2>/dev/null | head -n 1)"
-        if [ -z "$SDKMANAGER" ]; then
-          echo "ERROR: no se encontro sdkmanager en el SDK de Android."
-          exit 1
+        echo "=== BUSCANDO SDKMANAGER ==="
+        find "$CI_PROJECT_DIR/android/$APP/.buildozer" /root/.buildozer -type f -name sdkmanager -print 2>/dev/null || true
+        if [ -n "$SDKMANAGER" ]; then
+          echo "SDKMANAGER encontrado: $SDKMANAGER"
+          yes | "$SDKMANAGER" "platforms;android-36" || true
+        else
+          echo "AVISO: no se encontro sdkmanager antes de Buildozer; se continuara para que Buildozer inicialice el SDK."
         fi
-        yes | "$SDKMANAGER" "platforms;android-36"
       fi
   script:
     - . .venv/bin/activate
