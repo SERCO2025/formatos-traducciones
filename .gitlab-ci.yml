@@ -28,6 +28,15 @@ build_android:
     - python -m pip install "setuptools<81"
     - python -m pip install "cython==0.29.34"
     - python -m pip install --upgrade buildozer
+    - |
+      if [ "$APP" = "configurador" ]; then
+        SDKMANAGER="$(find /root/.buildozer/android/platform/android-sdk -type f -name sdkmanager | head -n 1)"
+        if [ -z "$SDKMANAGER" ]; then
+          echo "ERROR: no se encontro sdkmanager en el SDK de Android."
+          exit 1
+        fi
+        yes | "$SDKMANAGER" "platforms;android-36"
+      fi
   script:
     - . .venv/bin/activate
     - rm -rf "android/$APP/shared"
