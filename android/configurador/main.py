@@ -43,6 +43,30 @@ from shared.models import (
 )
 
 
+class HamburgerButton(Button):
+    """Botón hamburguesa dibujado con Canvas, sin depender de una fuente Unicode."""
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_x", None)
+        kwargs.setdefault("width", dp(64))
+        kwargs.setdefault("font_size", "1sp")
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw_icon, size=self._redraw_icon)
+        self._redraw_icon()
+
+    def _redraw_icon(self, *args):
+        self.canvas.after.clear()
+        with self.canvas.after:
+            Color(1, 1, 1, 1)
+            margen = dp(16)
+            y = self.height / 2.0
+            separacion = dp(8)
+            ancho = max(dp(24), self.width - margen * 2)
+            for offset in (-separacion, 0, separacion):
+                Line(points=(self.x + margen, self.y + y + offset,
+                             self.x + margen + ancho, self.y + y + offset),
+                     width=dp(3.0))
+
+
 TOOLS = [
     ("↖", "select"),
     ("A", FIELD_TYPE_TEXT),
@@ -521,7 +545,7 @@ class ConfiguradorApp(App):
     def build(self):
         root = BoxLayout(orientation="vertical")
         barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)))
-        barra.add_widget(Button(text="☰", size_hint_x=None, width=dp(58), font_size="28sp", on_release=lambda _: self.abrir_menu()))
+        barra.add_widget(HamburgerButton(on_release=lambda _: self.abrir_menu()))
         titulo = Label(text="Configurador de Formatos", halign="left", valign="middle", font_size="17sp")
         titulo.bind(size=lambda inst, val: setattr(inst, "text_size", val))
         barra.add_widget(titulo)
@@ -548,13 +572,24 @@ class ConfiguradorApp(App):
 
     def abrir_menu(self):
         panel = ModalView(
-            size_hint=(0.86, 1),
+            size_hint=(1, 1),
             pos_hint={"x": 0, "y": 0},
             auto_dismiss=True,
-            background_color=(0.05, 0.05, 0.05, 0.98),
-            background="",
+            background_color=(0, 0, 0, 0),
+            overlay_color=(0, 0, 0, 0.55),
         )
-        contenido = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(10))
+        contenido = BoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            padding=dp(10),
+            size_hint=(0.88, 1),
+            pos_hint={"x": 0, "y": 0},
+        )
+        with contenido.canvas.before:
+            Color(0.05, 0.05, 0.05, 1)
+            menu_background = Rectangle(pos=contenido.pos, size=contenido.size)
+        contenido.bind(pos=lambda inst, value: setattr(menu_background, "pos", value))
+        contenido.bind(size=lambda inst, value: setattr(menu_background, "size", value))
         encabezado = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6))
         encabezado.add_widget(Label(text="MENÚ", font_size="20sp", halign="left", valign="middle"))
         encabezado.add_widget(Button(text="×", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
