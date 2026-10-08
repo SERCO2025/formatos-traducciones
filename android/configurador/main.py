@@ -740,25 +740,34 @@ class ConfiguradorApp(App):
         resolver = PythonActivity.mActivity.getContentResolver()
         flujo = resolver.openInputStream(uri)
         if flujo is None:
-            raise IOError("Android no pudo abrir el archivo seleccionado.")
+            raise IOError("Android no pudo abrir el archivo seleccionado (flujo nulo).")
         try:
             nombre = self._nombre_display_uri(resolver, uri)
             extension = os.path.splitext(nombre)[1].lower()
-            if tipo == "image" and not extension:
-                extension = {
-                    "image/jpeg": ".jpg",
-                    "image/png": ".png",
-                    "image/bmp": ".bmp",
-                    "image/webp": ".webp",
-                    "image/tiff": ".tif",
-                }.get(str(resolver.getType(uri) or "").lower(), ".jpg")
+            
+            # CORRECCIÓN CRÍTICA PARA KIVY
+            # Kivy necesita la extensión correcta para elegir el decodificador de imagen.
+            if tipo == "image":
+                mime_type = str(resolver.getType(uri) or "").lower()
+                if not extension or extension not in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
+                    if "png" in mime_type:
+                        extension = ".png"
+                    elif "webp" in mime_type:
+                        extension = ".webp"
+                    else:
+                        extension = ".jpg"  # Fallback más seguro y compatible
+            
             if tipo == "fdt":
                 extension = ".fdt"
-            extension = extension or ".bin"
+            
+            # Evitar extensiones como .bin que Kivy no reconoce como imagen
+            extension = extension if extension else ".jpg"
+
             ruta = os.path.join(
                 PythonActivity.mActivity.getCacheDir().getAbsolutePath(),
-                "archivo_importado_" + uuid.uuid4().hex + extension,
+                "plantilla_temp_" + uuid.uuid4().hex + extension,
             )
+            
             from jnius import jarray
             buffer = jarray("b", [0] * 65536)
             FileOutputStream = autoclass("java.io.FileOutputStream")
@@ -772,8 +781,9 @@ class ConfiguradorApp(App):
                 salida.flush()
             finally:
                 salida.close()
+                
             if not os.path.isfile(ruta) or os.path.getsize(ruta) <= 0:
-                raise IOError("El archivo seleccionado está vacío.")
+                raise IOError("El archivo copiado a la caché está vacío o no se creó.")
             return ruta
         finally:
             flujo.close()
@@ -784,9 +794,18 @@ class ConfiguradorApp(App):
 
     def _importar_ruta(self, ruta):
         try:
+            print(f"--- DEBUG: Intentando cargar imagen desde: {ruta} ---")
             from PIL import Image
+            
+            # Verificar que el archivo existe y tiene tamaño antes de que PIL intente abrirlo
+            if not os.path.isfile(ruta):
+                raise IOError(f"El archivo no existe en la ruta: {ruta}")
+            if os.path.getsize(ruta) == 0:
+                raise IOError("El archivo en caché tiene 0 bytes. Fallo de copia o permisos.")
+
             imagen = Image.open(ruta).convert("RGB")
             visual = self._crear_imagen_visual(ruta, imagen)
+            
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(path=ruta, width=imagen.width, height=imagen.height, dpi=300, mode="RGB"),
@@ -797,15 +816,22 @@ class ConfiguradorApp(App):
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
+            
             try:
                 self.editor.cargar_plantilla(visual)
             except Exception as exc:
                 self._visual_template_path = None
-                raise IOError("La imagen fue seleccionada, pero Kivy no pudo mostrarla: " + str(exc))
+                raise IOError(f"Kivy no pudo crear la textura de la plantilla. Detalle: {str(exc)}")
+                
             self.actualizar_zoom()
-            self.estado.text = "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
+            self.estado.text = f"Plantilla importada: {imagen.width} × {imagen.height} px"
+            print(f"--- DEBUG: Imagen cargada exitosamente ---")
+            
         except Exception as exc:
-            self.estado.text = "Error al importar: " + str(exc)
+            import traceback
+            error_detalle = traceback.format_exc()
+            print(f"--- ERROR CRÍTICO AL IMPORTAR ---\n{error_detalle}")
+            self.estado.text = f"Error al importar: {str(exc)} (Revise logs)"
 
     def _abrir_ruta(self, ruta):
         try:
