@@ -43,6 +43,7 @@ jobs:
             libncursesw5-dev \
             cmake \
             libffi-dev \
+            libltdl-dev \
             libssl-dev
       - name: Preparar pip y herramientas de compilación
         run: |
