@@ -5,6 +5,7 @@ import uuid
 from math import hypot
 
 from kivy.app import App
+from kivy.core.image import Image as CoreImage
 from kivy.graphics import Color, Line, Rectangle
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -170,6 +171,7 @@ class CanvasEditor(FloatLayout):
         super().__init__(**kwargs)
         self.app = app
         self.template_widget = None
+        self._template_core_image = None
         self.start_touch = None
         self.active_field_touch = None
         self.active_field = None
@@ -242,8 +244,20 @@ class CanvasEditor(FloatLayout):
 
     def cargar_plantilla(self, ruta):
         self.clear_widgets()
+        self.template_widget = None
+        self._template_core_image = None
+
+        if not ruta or not os.path.isfile(ruta):
+            raise IOError("La plantilla no existe o no se puede leer: " + str(ruta))
+
+        # Carga directa y sin caché del archivo validado.
+        # Esto evita depender del cargador asíncrono de Kivy en Android.
+        self._template_core_image = CoreImage(ruta, nocache=True)
+        if self._template_core_image.texture is None:
+            raise IOError("Kivy no pudo crear la textura de la plantilla.")
+
         self.template_widget = KivyImage(
-            source=ruta,
+            texture=self._template_core_image.texture,
             allow_stretch=True,
             keep_ratio=True,
             size_hint=(None, None),
@@ -379,7 +393,8 @@ class CanvasEditor(FloatLayout):
             self.app.clear_drawing_preview()
             return super().on_touch_up(touch)
 
-        x0, y0 = self.start_touch        x1, y1 = self._document_point(touch)
+        x0, y0 = self.start_touch
+        x1, y1 = self._document_point(touch)
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         width = max(2, right - left)
@@ -728,11 +743,9 @@ class ConfiguradorApp(App):
         finally:
             flujo.close()
 
-    def _crear_imagen_visual(self, ruta, imagen):        visual = os.path.join(os.path.dirname(ruta), "vista_" + uuid.uuid4().hex + ".png")
-        imagen.save(visual, format="PNG")
-        if not os.path.isfile(visual) or os.path.getsize(visual) <= 0:
-            raise IOError("No se pudo crear la imagen de vista previa.")
-        return visual
+    def _crear_imagen_visual(self, ruta, imagen):
+        # Compatibilidad con FDT. La plantilla no se transforma ni se redimensiona.
+        return ruta
 
     def _importar_ruta(self, ruta):
         try:
@@ -749,7 +762,11 @@ class ConfiguradorApp(App):
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(visual)
+            try:
+                self.editor.cargar_plantilla(visual)
+            except Exception as exc:
+                self._visual_template_path = None
+                raise IOError("La imagen fue seleccionada, pero Kivy no pudo mostrarla: " + str(exc))
             self.actualizar_zoom()
             self.estado.text = "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
         except Exception as exc:
@@ -769,7 +786,11 @@ class ConfiguradorApp(App):
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
-            self.editor.cargar_plantilla(self._visual_template_path)
+            try:
+                self.editor.cargar_plantilla(self._visual_template_path)
+            except Exception as exc:
+                self._visual_template_path = None
+                raise IOError("La plantilla del FDT no se pudo mostrar: " + str(exc))
             self.actualizar_zoom()
             self.estado.text = "FDT abierto. %d campo(s)." % len(self.formato.fields)
         except Exception as exc:
