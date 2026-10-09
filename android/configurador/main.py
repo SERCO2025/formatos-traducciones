@@ -6,6 +6,7 @@ import traceback
 from math import hypot
 
 from kivy.app import App
+from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.graphics import Color, Line, Rectangle
 from kivy.metrics import dp
@@ -596,7 +597,12 @@ class ConfiguradorApp(App):
         def opcion(texto, accion):
             b = Button(text=texto, size_hint_y=None, height=dp(46), font_size="15sp")
             b.bind(size=lambda inst, val: setattr(inst, "text_size", (val[0] - dp(20), val[1])))
-            b.bind(on_release=lambda _: (panel.dismiss(), accion()))
+            def ejecutar_accion(_):
+                panel.dismiss()
+                # Esperar a que el menú termine de cerrarse antes de abrir
+                # el selector nativo de archivos de Android.
+                Clock.schedule_once(lambda dt: accion(), 0.15)
+            b.bind(on_release=ejecutar_accion)
             contenido.add_widget(b)
 
         seccion("ARCHIVO")
