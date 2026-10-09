@@ -714,9 +714,11 @@ class ConfiguradorApp(App):
                 intent.putExtra(Intent.EXTRA_TITLE, nombre)
             self._android_callback = (tipo, guardar)
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            self.estado.text = "Esperando selección de archivo en Android..."
             PythonActivity.mActivity.startActivityForResult(intent, 4001)
         except Exception as exc:
-            self.estado.text = "Error al abrir selector: " + str(exc)
+            self.estado.text = "Error al abrir selector de Android."
+            self._mostrar_error_tecnico("No se pudo abrir el selector", exc)
 
     def _on_android_activity_result(self, request_code, result_code, intent):
         if request_code != 4001 or not self._android_callback:
@@ -726,17 +728,21 @@ class ConfiguradorApp(App):
         try:
             Activity = autoclass("android.app.Activity")
             if result_code != Activity.RESULT_OK or intent is None:
+                self.estado.text = "Selección cancelada."
                 return
             uri = intent.getData()
             if uri is None:
-                raise IOError("No se recibió ningún archivo.")
+                raise IOError("Android devolvió un resultado sin archivo (URI nula).")
+            self.estado.text = "Archivo seleccionado; leyendo contenido..."
             if guardar:
                 self._guardar_fdt_uri(uri)
             else:
                 ruta = self._copiar_uri_a_cache(uri, tipo)
+                self.estado.text = "Archivo copiado. Abriendo imagen..."
                 self._abrir_ruta(ruta) if tipo == "fdt" else self._importar_ruta(ruta)
         except Exception as exc:
-            self.estado.text = "Error al seleccionar archivo: " + str(exc)
+            self.estado.text = "Error al procesar el archivo seleccionado."
+            self._mostrar_error_tecnico("Error al recibir o copiar el archivo", exc)
 
     def _nombre_display_uri(self, resolver, uri):
         try:
@@ -834,29 +840,8 @@ class ConfiguradorApp(App):
             self.estado.text = f"ÉXITO: Imagen {imagen.width}x{imagen.height}px cargada."
             
         except Exception as exc:
-            error_completo = traceback.format_exc()
             self.estado.text = "FALLO CRÍTICO AL IMPORTAR"
-            
-            contenido = ScrollView(size_hint_y=None, height=dp(400))
-            lbl = Label(
-                text=f"ERROR:\n{str(exc)}\n\nDETALLE TÉCNICO:\n{error_completo}",
-                halign="left",
-                valign="top",
-                font_size="14sp",
-                size_hint_y=None,
-                text_size=(dp(350), None)
-            )
-            lbl.bind(size=lbl.setter('text_size'))
-            lbl.bind(minimum_height=lbl.setter('height'))
-            contenido.add_widget(lbl)
-            
-            popup = Popup(
-                title="FALLO AL ABRIR IMAGEN",
-                content=contenido,
-                size_hint=(0.9, 0.8),
-                auto_dismiss=True
-            )
-            popup.open()
+            self._mostrar_error_tecnico("Fallo al abrir la imagen de plantilla", exc)
 
     def _abrir_ruta(self, ruta):
         try:
@@ -880,7 +865,8 @@ class ConfiguradorApp(App):
             self.actualizar_zoom()
             self.estado.text = "FDT abierto. %d campo(s)." % len(self.formato.fields)
         except Exception as exc:
-            self.estado.text = "Error al abrir: " + str(exc)
+            self.estado.text = "Error al abrir el archivo FDT."
+            self._mostrar_error_tecnico("Fallo al abrir el archivo FDT", exc)
 
     def _calcular_zoom_inicial(self, width, height):
         ancho_disponible = max(dp(100), self.width - dp(40))
@@ -1282,6 +1268,32 @@ class ConfiguradorApp(App):
             self.estado.text = "%d campo(s)." % len(self.formato.fields)
         else:
             self.estado.text = "Listo."
+
+    def _mostrar_error_tecnico(self, titulo, exc):
+        """Muestra el error y el traceback completo, incluso si ocurre antes de cargar la imagen."""
+        detalle = traceback.format_exc()
+        if not detalle or detalle.strip() == "NoneType: None":
+            detalle = str(exc)
+        texto = "ETAPA: " + titulo + "\n\nERROR: " + str(exc) + "\n\nDETALLE TÉCNICO:\n" + detalle
+
+        contenido = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        etiqueta = Label(
+            text=texto,
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            font_size="13sp",
+            text_size=(dp(320), None),
+        )
+        etiqueta.bind(width=lambda inst, value: setattr(inst, "text_size", (max(dp(260), value), None)))
+        etiqueta.bind(texture_size=lambda inst, value: setattr(inst, "height", value[1] + dp(20)))
+        contenido.add_widget(etiqueta)
+        Popup(
+            title="DIAGNÓSTICO DE ERROR",
+            content=contenido,
+            size_hint=(0.96, 0.86),
+            auto_dismiss=True,
+        ).open()
 
     def _aviso(self, mensaje):
         Popup(title="Formatos Traducidos", content=Label(text=mensaje), size_hint=(0.8, 0.3)).open()
