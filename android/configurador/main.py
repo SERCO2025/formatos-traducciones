@@ -1292,12 +1292,16 @@ class ConfiguradorApp(App):
             self.estado.text = "Listo."
 
     def _mostrar_error_tecnico(self, titulo, exc):
-        """Muestra el error y el traceback completo, incluso si ocurre antes de cargar la imagen."""
+        """Programa el diagnóstico en el hilo de Kivy para que Android sí lo dibuje."""
         detalle = traceback.format_exc()
         if not detalle or detalle.strip() == "NoneType: None":
             detalle = str(exc)
         texto = "ETAPA: " + titulo + "\n\nERROR: " + str(exc) + "\n\nDETALLE TÉCNICO:\n" + detalle
+        # El resultado del selector Android puede llegar desde un callback Java.
+        # Los widgets Kivy deben crearse/abrirse en el hilo principal.
+        Clock.schedule_once(lambda _dt: self._abrir_popup_error_tecnico(titulo, texto), 0)
 
+    def _abrir_popup_error_tecnico(self, titulo, texto):
         contenido = ScrollView(do_scroll_x=False, do_scroll_y=True)
         etiqueta = Label(
             text=texto,
