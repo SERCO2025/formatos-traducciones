@@ -591,8 +591,24 @@ class ConfiguradorApp(App):
         encabezado.add_widget(Button(text="X", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
         contenido.add_widget(encabezado)
 
+        # Las opciones van dentro de una lista desplazable; el encabezado
+        # permanece fijo y el menú siempre comienza mostrando ARCHIVO.
+        scroll = ScrollView(
+            do_scroll_x=False,
+            do_scroll_y=True,
+            scroll_y=1,
+        )
+        lista_menu = BoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            size_hint_y=None,
+        )
+        lista_menu.bind(minimum_height=lista_menu.setter("height"))
+        scroll.add_widget(lista_menu)
+        contenido.add_widget(scroll)
+
         def seccion(texto):
-            contenido.add_widget(Label(text=texto, size_hint_y=None, height=dp(28), halign="left", font_size="13sp"))
+            lista_menu.add_widget(Label(text=texto, size_hint_y=None, height=dp(28), halign="left", font_size="13sp"))
 
         def opcion(texto, accion):
             b = Button(text=texto, size_hint_y=None, height=dp(46), font_size="15sp")
@@ -603,7 +619,7 @@ class ConfiguradorApp(App):
                 # el selector nativo de archivos de Android.
                 Clock.schedule_once(lambda dt: accion(), 0.15)
             b.bind(on_release=ejecutar_accion)
-            contenido.add_widget(b)
+            lista_menu.add_widget(b)
 
         seccion("ARCHIVO")
         opcion("Nuevo formato", self.nuevo)
