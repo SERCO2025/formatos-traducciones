@@ -2,6 +2,7 @@
 import copy
 import os
 import uuid
+import traceback
 from math import hypot
 
 from kivy.app import App
@@ -68,12 +69,12 @@ class HamburgerButton(Button):
 
 
 TOOLS = [
-    ("↖", "select"),
+    ("SEL", "select"),
     ("A", FIELD_TYPE_TEXT),
     ("1", FIELD_TYPE_NUMBER),
     ("A1", FIELD_TYPE_ALPHANUMERIC),
     ("IMG", FIELD_TYPE_IMAGE),
-    ("🔍", "zoom"),
+    ("ZOOM", "zoom"),
 ]
 
 
@@ -225,8 +226,6 @@ class CanvasEditor(FloatLayout):
         self._pinch_last_midpoint = self._pinch_anchor
         self._pinch_active = True
 
-        # Al entrar en zoom de dos dedos se cancela cualquier interacción
-        # de campo. El gesto nunca modifica X/Y ni ancho/alto de los campos.
         self.active_field_touch = None
         self.active_field = None
         self.active_handle = None
@@ -249,9 +248,6 @@ class CanvasEditor(FloatLayout):
         factor = distancia / self._pinch_start_distance
         midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
-        # Escala alrededor del punto inicial del gesto y, después, mueve
-        # visualmente la plantilla para seguir el desplazamiento del punto
-        # medio. Esto mantiene intactas las coordenadas documentales X/Y.
         self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
 
         if self.template_widget is not None:
@@ -272,13 +268,11 @@ class CanvasEditor(FloatLayout):
         self._template_core_image = None
 
         if not ruta or not os.path.isfile(ruta):
-            raise IOError("La plantilla no existe o no se puede leer: " + str(ruta))
+            raise IOError(f"La plantilla no existe o no se puede leer: {ruta}")
 
-        # Carga directa y sin caché del archivo validado.
-        # Esto evita depender del cargador asíncrono de Kivy en Android.
         self._template_core_image = CoreImage(ruta, nocache=True)
         if self._template_core_image.texture is None:
-            raise IOError("Kivy no pudo crear la textura de la plantilla.")
+            raise IOError("Kivy NO pudo crear la textura de la imagen. El formato puede no ser soportado o el archivo está corrupto.")
 
         self.template_widget = KivyImage(
             texture=self._template_core_image.texture,
@@ -286,6 +280,7 @@ class CanvasEditor(FloatLayout):
             keep_ratio=True,
             size_hint=(None, None),
         )
+        
         self.template_widget.size = (
             self.app.formato.template.width * self.app.scale,
             self.app.formato.template.height * self.app.scale,
@@ -592,7 +587,7 @@ class ConfiguradorApp(App):
         contenido.bind(size=lambda inst, value: setattr(menu_background, "size", value))
         encabezado = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6))
         encabezado.add_widget(Label(text="MENÚ", font_size="20sp", halign="left", valign="middle"))
-        encabezado.add_widget(Button(text="×", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
+        encabezado.add_widget(Button(text="X", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
         contenido.add_widget(encabezado)
 
         def seccion(texto):
@@ -745,8 +740,6 @@ class ConfiguradorApp(App):
             nombre = self._nombre_display_uri(resolver, uri)
             extension = os.path.splitext(nombre)[1].lower()
             
-            # CORRECCIÓN CRÍTICA PARA KIVY
-            # Kivy necesita la extensión correcta para elegir el decodificador de imagen.
             if tipo == "image":
                 mime_type = str(resolver.getType(uri) or "").lower()
                 if not extension or extension not in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
@@ -755,12 +748,11 @@ class ConfiguradorApp(App):
                     elif "webp" in mime_type:
                         extension = ".webp"
                     else:
-                        extension = ".jpg"  # Fallback más seguro y compatible
+                        extension = ".jpg"
             
             if tipo == "fdt":
                 extension = ".fdt"
             
-            # Evitar extensiones como .bin que Kivy no reconoce como imagen
             extension = extension if extension else ".jpg"
 
             ruta = os.path.join(
@@ -789,49 +781,60 @@ class ConfiguradorApp(App):
             flujo.close()
 
     def _crear_imagen_visual(self, ruta, imagen):
-        # Compatibilidad con FDT. La plantilla no se transforma ni se redimensiona.
         return ruta
 
     def _importar_ruta(self, ruta):
         try:
-            print(f"--- DEBUG: Intentando cargar imagen desde: {ruta} ---")
-            from PIL import Image
-            
-            # Verificar que el archivo existe y tiene tamaño antes de que PIL intente abrirlo
             if not os.path.isfile(ruta):
                 raise IOError(f"El archivo no existe en la ruta: {ruta}")
+            
             if os.path.getsize(ruta) == 0:
-                raise IOError("El archivo en caché tiene 0 bytes. Fallo de copia o permisos.")
+                raise IOError("El archivo copiado tiene 0 bytes. Fallo de permisos o de copia en Android.")
 
+            from PIL import Image
             imagen = Image.open(ruta).convert("RGB")
-            visual = self._crear_imagen_visual(ruta, imagen)
             
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(path=ruta, width=imagen.width, height=imagen.height, dpi=300, mode="RGB"),
             )
+            
             self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
-            self._visual_template_path = visual
+            self._visual_template_path = ruta
             self.seleccionado = None
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
             
-            try:
-                self.editor.cargar_plantilla(visual)
-            except Exception as exc:
-                self._visual_template_path = None
-                raise IOError(f"Kivy no pudo crear la textura de la plantilla. Detalle: {str(exc)}")
-                
+            self.editor.cargar_plantilla(ruta)
             self.actualizar_zoom()
-            self.estado.text = f"Plantilla importada: {imagen.width} × {imagen.height} px"
-            print(f"--- DEBUG: Imagen cargada exitosamente ---")
+            
+            self.estado.text = f"ÉXITO: Imagen {imagen.width}x{imagen.height}px cargada."
             
         except Exception as exc:
-            import traceback
-            error_detalle = traceback.format_exc()
-            print(f"--- ERROR CRÍTICO AL IMPORTAR ---\n{error_detalle}")
-            self.estado.text = f"Error al importar: {str(exc)} (Revise logs)"
+            error_completo = traceback.format_exc()
+            self.estado.text = "FALLO CRÍTICO AL IMPORTAR"
+            
+            contenido = ScrollView(size_hint_y=None, height=dp(400))
+            lbl = Label(
+                text=f"ERROR:\n{str(exc)}\n\nDETALLE TÉCNICO:\n{error_completo}",
+                halign="left",
+                valign="top",
+                font_size="14sp",
+                size_hint_y=None,
+                text_size=(dp(350), None)
+            )
+            lbl.bind(size=lbl.setter('text_size'))
+            lbl.bind(minimum_height=lbl.setter('height'))
+            contenido.add_widget(lbl)
+            
+            popup = Popup(
+                title="FALLO AL ABRIR IMAGEN",
+                content=contenido,
+                size_hint=(0.9, 0.8),
+                auto_dismiss=True
+            )
+            popup.open()
 
     def _abrir_ruta(self, ruta):
         try:
@@ -1022,7 +1025,7 @@ class ConfiguradorApp(App):
         root = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(8))
         encabezado = BoxLayout(size_hint_y=None, height=dp(50))
         encabezado.add_widget(Label(text="LISTA DE CAMPOS", font_size="19sp"))
-        encabezado.add_widget(Button(text="×", size_hint_x=None, width=dp(48), on_release=lambda _: panel.dismiss()))
+        encabezado.add_widget(Button(text="X", size_hint_x=None, width=dp(48), on_release=lambda _: panel.dismiss()))
         root.add_widget(encabezado)
         scroll = ScrollView()
         lista = GridLayout(cols=1, spacing=dp(4), size_hint_y=None)
@@ -1111,9 +1114,15 @@ class ConfiguradorApp(App):
             campo.position.height = min(campo.position.height, self.formato.template.height - campo.position.y)
 
             if campo.field_type == FIELD_TYPE_NUMBER:
+                if not hasattr(campo, 'validation'):
+                    from shared.models import Validation
+                    campo.validation = Validation()
                 campo.validation.numeric_only = True
                 campo.validation.alphanumeric_only = False
             elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
+                if not hasattr(campo, 'validation'):
+                    from shared.models import Validation
+                    campo.validation = Validation()
                 campo.validation.numeric_only = False
                 campo.validation.alphanumeric_only = True
 
