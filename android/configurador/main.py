@@ -810,8 +810,8 @@ class ConfiguradorApp(App):
                 "plantilla_temp_" + uuid.uuid4().hex + extension,
             )
             
-            from jnius import jarray
-            buffer = jarray("b", [0] * 65536)
+            # PyJNIus de esta compilación no exporta jarray; convierte bytearray a Java byte[].
+            buffer = bytearray(65536)
             FileOutputStream = autoclass("java.io.FileOutputStream")
             salida = FileOutputStream(ruta)
             try:
