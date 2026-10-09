@@ -538,6 +538,28 @@ class ConfiguradorApp(App):
         if ANDROID_AVAILABLE:
             activity.bind(on_activity_result=self._on_android_activity_result)
 
+    def on_resume(self):
+        # Si Android devuelve el foco pero no entrega on_activity_result,
+        # mostrar un diagnóstico en vez de dejar la importación aparentemente congelada.
+        if self._android_callback:
+            Clock.schedule_once(self._verificar_resultado_android, 1.5)
+
+    def _verificar_resultado_android(self, _dt):
+        if self._android_callback:
+            tipo, guardar = self._android_callback
+            self._android_callback = None
+            mensaje = (
+                "La aplicación volvió del selector de Android, pero no recibió "
+                "el evento on_activity_result. Operación: %s; guardar=%s. "
+                "Esto apunta al retorno del selector, antes de leer o mostrar la imagen."
+                % (tipo, guardar)
+            )
+            self.estado.text = "Android no devolvió el resultado del selector."
+            self._mostrar_error_tecnico(
+                "Android no entregó el resultado del selector",
+                RuntimeError(mensaje),
+            )
+
     def build(self):
         root = BoxLayout(orientation="vertical")
         barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)))
