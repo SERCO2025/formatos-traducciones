@@ -8,6 +8,7 @@ from math import hypot
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.window import Window
 from kivy.graphics import Color, Line, Rectangle
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -891,8 +892,18 @@ class ConfiguradorApp(App):
             self._mostrar_error_tecnico("Fallo al abrir el archivo FDT", exc)
 
     def _calcular_zoom_inicial(self, width, height):
-        ancho_disponible = max(dp(100), self.width - dp(40))
-        alto_disponible = max(dp(100), self.height - dp(150))
+        # ConfiguradorApp hereda de App, no de Widget: sus dimensiones se
+        # consultan en el editor ya montado o, como respaldo, en la ventana.
+        editor_ancho = self.editor.width if self.editor is not None else 0
+        editor_alto = self.editor.height if self.editor is not None else 0
+        if editor_ancho > dp(100):
+            ancho_disponible = max(dp(100), editor_ancho - dp(20))
+        else:
+            ancho_disponible = max(dp(100), Window.width - dp(40))
+        if editor_alto > dp(100):
+            alto_disponible = max(dp(100), editor_alto - dp(20))
+        else:
+            alto_disponible = max(dp(100), Window.height - dp(150))
         return max(0.05, min(1.0, 0.82 * min(ancho_disponible / float(width), alto_disponible / float(height))))
 
     def guardar(self):
