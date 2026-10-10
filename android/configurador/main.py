@@ -1265,20 +1265,22 @@ class ConfiguradorApp(App):
 
         # Primera línea: número de turno e identificador calculados por el sistema.
         identificacion = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
-        identificacion.add_widget(Label(
+        turno_label = Label(
             text="Turno: %02d" % campo.order,
             size_hint_x=0.42,
             halign="left",
             valign="middle",
-        ))
-        identificacion.children[0].bind(size=lambda inst, val: setattr(inst, "text_size", val))
-        identificacion.add_widget(Label(
+        )
+        turno_label.bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        identificacion.add_widget(turno_label)
+        id_label = Label(
             text="Identificador: %s" % campo.field_id,
             size_hint_x=0.58,
             halign="right",
             valign="middle",
-        ))
-        identificacion.children[0].bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        )
+        id_label.bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        identificacion.add_widget(id_label)
         form.add_widget(identificacion)
 
         form.add_widget(Label(
@@ -1505,9 +1507,14 @@ class ConfiguradorApp(App):
                 ventana_color = ModalView(size_hint=(0.92, 0.78), background_color=(0.08, 0.08, 0.08, 1))
                 raiz_color = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
                 raiz_color.add_widget(Label(text="Selector HSV: elija el tono y después el matiz/brillo", size_hint_y=None, height=dp(38)))
-                selector_hue = Slider(min=0, max=1, value=0, size_hint_y=None, height=dp(35))
+                tono_inicial = rgb_to_hsv(
+                    max(0, min(255, int(color_r.text or "0"))) / 255.0,
+                    max(0, min(255, int(color_g.text or "0"))) / 255.0,
+                    max(0, min(255, int(color_b.text or "0"))) / 255.0,
+                )[0]
+                selector_hue = Slider(min=0, max=1, value=tono_inicial, size_hint_y=None, height=dp(35))
                 # La paleta se dibuja en un lienzo 2D: saturación horizontal y valor vertical.
-                from colorsys import hsv_to_rgb
+                from colorsys import hsv_to_rgb, rgb_to_hsv
                 from io import BytesIO
                 from PIL import Image as PILImage
                 class PaletaSV(Widget):
@@ -1551,7 +1558,7 @@ class ConfiguradorApp(App):
                         val = max(0.0, min(1.0, (touch.y - self.y) / max(1.0, self.height)))
                         rgb = tuple(int(v * 255) for v in hsv_to_rgb(self.hue, sat, val))
                         aplicar_rgb(rgb)
-                paleta = PaletaSV(0.0, lambda rgb: None, size_hint=(1, 1))
+                paleta = PaletaSV(tono_inicial, lambda rgb: None, size_hint=(1, 1))
                 raiz_color.add_widget(paleta)
                 def aplicar_rgb(rgb):
                     color_r.text, color_g.text, color_b.text = (str(v) for v in rgb)
