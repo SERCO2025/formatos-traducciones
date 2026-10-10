@@ -94,9 +94,11 @@ class CampoWidget(FloatLayout):
         self.size = (p.width * self.editor.scale, p.height * self.editor.scale)
         tw = self.editor.template_widget
         if tw is not None:
-            self.pos = (
-                tw.x + p.x * self.editor.scale,
-                tw.y + tw.height - (p.y + p.height) * self.editor.scale,
+            # Las posiciones del documento se convierten a coordenadas de ventana
+            # únicamente al dibujar el campo; el modelo conserva píxeles del documento.
+            self.pos = tw.to_window(
+                p.x * self.editor.scale,
+                tw.height - (p.y + p.height) * self.editor.scale,
             )
 
         self.canvas.before.clear()
@@ -253,14 +255,14 @@ class CanvasEditor(StencilView):
         tw.pos = (x, y)
 
     def _editor_point(self, touch):
-        """El toque y los hijos de StencilView usan coordenadas del padre."""
-        return touch.x, touch.y
+        """Devuelve el toque en coordenadas locales del lienzo."""
+        return self.to_widget(touch.x, touch.y)
 
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
-        x, y = self._editor_point(touch)
-        return self.template_widget.collide_point(x, y)
+        # collide_point recibe coordenadas de ventana en Kivy.
+        return self.template_widget.collide_point(touch.x, touch.y)
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -350,14 +352,14 @@ class CanvasEditor(StencilView):
                 widget.actualizar()
 
     def _document_point(self, touch):
-        if not self.template_widget or not self.app.formato:
+        """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
+        tw = self.template_widget
+        if tw is None or not self.app.formato:
             return 0, 0
-        # Plantilla, campos y MotionEvent comparten coordenadas del padre.
-        touch_x, touch_y = self._editor_point(touch)
-        x = (touch_x - self.template_widget.x) / self.app.scale
-        y_bottom = (touch_y - self.template_widget.y) / self.app.scale
-        # El documento usa origen en la esquina superior izquierda.
-        y = self.app.formato.template.height - y_bottom
+        # Kivy realiza aquí la conversión de ventana al sistema local de la imagen.
+        image_x, image_y = tw.to_widget(touch.x, touch.y)
+        x = image_x / self.app.scale
+        y = self.app.formato.template.height - image_y / self.app.scale
         x = max(0, min(self.app.formato.template.width, x))
         y = max(0, min(self.app.formato.template.height, y))
         return int(round(x)), int(round(y))
@@ -1324,8 +1326,7 @@ class ConfiguradorApp(App):
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         tw = self.editor.template_widget
-        x = tw.x + left * self.scale
-        y = tw.y + tw.height - bottom * self.scale
+        x, y = tw.to_window(left * self.scale, tw.height - bottom * self.scale)
         w = max(1, (right - left) * self.scale)
         h = max(1, (bottom - top) * self.scale)
         widget = FloatLayout(size_hint=(None, None), size=(w, h), pos=(x, y))
