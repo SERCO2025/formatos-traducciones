@@ -907,6 +907,15 @@ class ConfiguradorApp(App):
             
             if tipo == "fdt":
                 extension = ".fdt"
+            elif tipo == "font":
+                if extension not in (".ttf", ".otf", ".ttc"):
+                    mime_type = str(resolver.getType(uri) or "").lower()
+                    if "opentype" in mime_type:
+                        extension = ".otf"
+                    elif "truetype" in mime_type or "font" in mime_type:
+                        extension = ".ttf"
+                    else:
+                        raise IOError("El archivo seleccionado no parece ser una fuente .ttf, .otf o .ttc.")
             
             extension = extension if extension else ".jpg"
 
