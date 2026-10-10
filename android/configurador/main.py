@@ -21,6 +21,7 @@ from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.stencilview import StencilView
 from kivy.uix.textinput import TextInput
 
 try:
@@ -193,7 +194,7 @@ class CampoWidget(FloatLayout):
         return super().on_touch_up(touch)
 
 
-class CanvasEditor(FloatLayout):
+class CanvasEditor(StencilView):
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
         self.app = app
@@ -213,6 +214,28 @@ class CanvasEditor(FloatLayout):
         self._pinch_anchor = None
         self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
+        self.bind(pos=self._viewport_changed, size=self._viewport_changed)
+
+    def _viewport_changed(self, *_args):
+        if self.template_widget is not None:
+            self.constrain_template_position()
+            self.refresh_fields()
+
+    def constrain_template_position(self, pos=None):
+        """Centra plantillas pequeñas y limita el desplazamiento de las grandes."""
+        tw = self.template_widget
+        if tw is None:
+            return
+        x, y = tw.pos if pos is None else pos
+        if tw.width <= self.width:
+            x = self.x + (self.width - tw.width) / 2.0
+        else:
+            x = min(self.x, max(self.right - tw.width, x))
+        if tw.height <= self.height:
+            y = self.y + (self.height - tw.height) / 2.0
+        else:
+            y = min(self.y, max(self.top - tw.height, y))
+        tw.pos = (x, y)
 
     def _touch_inside_template(self, touch):
         return self.template_widget is not None and self.template_widget.collide_point(*touch.pos)
@@ -259,6 +282,7 @@ class CanvasEditor(FloatLayout):
                 self.template_widget.x + dx,
                 self.template_widget.y + dy,
             )
+            self.constrain_template_position()
             self.refresh_fields()
 
         self._pinch_last_midpoint = midpoint
@@ -376,6 +400,7 @@ class CanvasEditor(FloatLayout):
                 self.pan_template_pos[0] + dx,
                 self.pan_template_pos[1] + dy,
             )
+            self.constrain_template_position()
             self.refresh_fields()
             return True
 
@@ -695,8 +720,12 @@ class ConfiguradorApp(App):
             return (dp(20), dp(20))
         ancho = self.formato.template.width * self.scale
         alto = self.formato.template.height * self.scale
-        x = max(dp(10), (self.editor.width - ancho) / 2.0)
-        y = max(dp(10), (self.editor.height - alto) / 2.0)
+        x = self.editor.x + (self.editor.width - ancho) / 2.0
+        y = self.editor.y + (self.editor.height - alto) / 2.0
+        if ancho > self.editor.width:
+            x = self.editor.x
+        if alto > self.editor.height:
+            y = self.editor.y
         return x, y
 
     def nuevo(self):
@@ -1148,53 +1177,70 @@ class ConfiguradorApp(App):
                 return actual
 
         def aceptar(_):
-            nuevo_id = id_input.text.strip() or campo.field_id
-            if any(c is not campo and c.field_id == nuevo_id for c in self.formato.fields):
-                self._aviso("El ID ya existe.")
-                return
-            self.push_undo()
-            campo.field_id = nuevo_id
-            campo.question = pregunta.text.strip()
-            campo.required = requerido.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-            campo.position.x = max(0, entero(x_in, campo.position.x))
-            campo.position.y = max(0, entero(y_in, campo.position.y))
-            campo.position.width = max(2, entero(w_in, campo.position.width))
-            campo.position.height = max(2, entero(h_in, campo.position.height))
-            campo.position.width = min(campo.position.width, self.formato.template.width - campo.position.x)
-            campo.position.height = min(campo.position.height, self.formato.template.height - campo.position.y)
-
-            if campo.field_type == FIELD_TYPE_NUMBER:
-                if not hasattr(campo, 'validation'):
-                    from shared.models import Validation
-                    campo.validation = Validation()
-                campo.validation.numeric_only = True
-                campo.validation.alphanumeric_only = False
-            elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-                if not hasattr(campo, 'validation'):
-                    from shared.models import Validation
-                    campo.validation = Validation()
-                campo.validation.numeric_only = False
-                campo.validation.alphanumeric_only = True
-
-            if campo.field_type != FIELD_TYPE_IMAGE:
-                campo.text_style.font_family = fuente.text.strip()
-                campo.text_style.font_size_px = max(1, entero(tamano, campo.text_style.font_size_px))
-                campo.text_style.color = FieldColor(
-                    max(0, min(255, entero(color_r, campo.text_style.color.r))),
-                    max(0, min(255, entero(color_g, campo.text_style.color.g))),
-                    max(0, min(255, entero(color_b, campo.text_style.color.b))),
+            campo_id_original = campo.field_id
+            formato_anterior = copy.deepcopy(self.formato)
+            longitud_undo = len(self._undo)
+            try:
+                nuevo_id = id_input.text.strip() or campo.field_id
+                if any(c is not campo and c.field_id == nuevo_id for c in self.formato.fields):
+                    self._aviso("El ID ya existe.")
+                    return
+                self.push_undo()
+                campo.field_id = nuevo_id
+                campo.question = pregunta.text.strip()
+                campo.required = requerido.text.strip().lower() in ("si", "sí", "yes", "1", "true")
+                campo.position.x = max(0, entero(x_in, campo.position.x))
+                campo.position.y = max(0, entero(y_in, campo.position.y))
+                campo.position.width = max(2, entero(w_in, campo.position.width))
+                campo.position.height = max(2, entero(h_in, campo.position.height))
+                campo.position.width = min(campo.position.width, self.formato.template.width - campo.position.x)
+                campo.position.height = min(campo.position.height, self.formato.template.height - campo.position.y)
+    
+                if campo.field_type == FIELD_TYPE_NUMBER:
+                    if not hasattr(campo, 'validation'):
+                        from shared.models import Validation
+                        campo.validation = Validation()
+                    campo.validation.numeric_only = True
+                    campo.validation.alphanumeric_only = False
+                elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
+                    if not hasattr(campo, 'validation'):
+                        from shared.models import Validation
+                        campo.validation = Validation()
+                    campo.validation.numeric_only = False
+                    campo.validation.alphanumeric_only = True
+    
+                if campo.field_type != FIELD_TYPE_IMAGE:
+                    campo.text_style.font_family = fuente.text.strip()
+                    campo.text_style.font_size_px = max(1, entero(tamano, campo.text_style.font_size_px))
+                    campo.text_style.color = FieldColor(
+                        max(0, min(255, entero(color_r, campo.text_style.color.r))),
+                        max(0, min(255, entero(color_g, campo.text_style.color.g))),
+                        max(0, min(255, entero(color_b, campo.text_style.color.b))),
+                    )
+                    if alineacion.text.strip() in ("left", "center", "right", "justify"):
+                        campo.text_style.alignment = alineacion.text.strip()
+                    campo.text_style.orientation = orientacion.text.strip() or "horizontal"
+                    campo.text_style.bold = negrita.text.strip().lower() in ("si", "sí", "yes", "1", "true")
+                    campo.text_style.italic = cursiva.text.strip().lower() in ("si", "sí", "yes", "1", "true")
+    
+                self.formato.ordenar_campos()
+                self.seleccionado = campo
+                self.editor.cargar_plantilla(self._visual_template_path)
+                popup.dismiss()
+                self.estado.text = "Campo %d configurado." % campo.order
+    
+            except Exception as exc:
+                self.formato = formato_anterior
+                self.seleccionado = next(
+                    (c for c in self.formato.fields if c.field_id == campo_id_original),
+                    None,
                 )
-                if alineacion.text.strip() in ("left", "center", "right", "justify"):
-                    campo.text_style.alignment = alineacion.text.strip()
-                campo.text_style.orientation = orientacion.text.strip() or "horizontal"
-                campo.text_style.bold = negrita.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-                campo.text_style.italic = cursiva.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-
-            self.formato.ordenar_campos()
-            self.seleccionado = campo
-            self.editor.cargar_plantilla(self._visual_template_path)
-            popup.dismiss()
-            self.estado.text = "Campo %d configurado." % campo.order
+                del self._undo[longitud_undo:]
+                try:
+                    self.editor.cargar_plantilla(self._visual_template_path)
+                except Exception:
+                    pass
+                self._mostrar_error_tecnico("Error al aceptar las propiedades del campo", exc)
 
         botones.add_widget(Button(text="Cancelar", on_release=lambda _: popup.dismiss()))
         botones.add_widget(Button(text="Aceptar", on_release=aceptar))
@@ -1297,6 +1343,7 @@ class ConfiguradorApp(App):
             anchor[0] - doc_x * self.scale,
             anchor[1] - doc_y_bottom * self.scale,
         )
+        self.editor.constrain_template_position()
 
         self.editor.refresh_fields()
         self.actualizar_zoom()
