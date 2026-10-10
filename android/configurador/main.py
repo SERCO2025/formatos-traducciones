@@ -220,12 +220,6 @@ class CanvasEditor(StencilView):
         self._pinch_anchor = None
         self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
-        # RelativeLayout crea el sistema local (0, 0) necesario para que las
-        # posiciones propuestas de plantilla/campos sean realmente locales.
-        self.canvas_layer = RelativeLayout(
-            pos=self.pos, size=self.size, size_hint=(None, None)
-        )
-        self.add_widget(self.canvas_layer)
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
     @property
@@ -239,9 +233,6 @@ class CanvasEditor(StencilView):
         self.app.seleccionado = campo
 
     def _viewport_changed(self, *_args):
-        if hasattr(self, "canvas_layer"):
-            self.canvas_layer.pos = self.pos
-            self.canvas_layer.size = self.size
         if self.template_widget is not None:
             self.constrain_template_position()
             self.refresh_fields()
@@ -266,9 +257,8 @@ class CanvasEditor(StencilView):
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
-        # Convertir el toque de ventana a coordenadas locales de CanvasEditor.
-        local_x = touch.x - self.x
-        local_y = touch.y - self.y
+        # to_local convierte automáticamente las coordenadas de ventana a locales del StencilView
+        local_x, local_y = self.to_local(touch.x, touch.y)
         return self.template_widget.collide_point(local_x, local_y)
 
     def _start_pinch(self):
@@ -320,7 +310,7 @@ class CanvasEditor(StencilView):
         return True
 
     def cargar_plantilla(self, ruta):
-        self.canvas_layer.clear_widgets()
+        self.clear_widgets()
         self.template_widget = None
         self._template_core_image = None
 
@@ -343,10 +333,10 @@ class CanvasEditor(StencilView):
             self.app.formato.template.height * self.app.scale,
         )
         self.template_widget.pos = self.app.template_position()
-        self.canvas_layer.add_widget(self.template_widget)
+        self.add_widget(self.template_widget)
 
         for campo in sorted(self.app.formato.fields, key=lambda c: c.order):
-            self.canvas_layer.add_widget(CampoWidget(campo, self))
+            self.add_widget(CampoWidget(campo, self))
 
         if self.start_touch:
             self.start_touch = None
@@ -354,7 +344,7 @@ class CanvasEditor(StencilView):
     def refresh_fields(self):
         if self.template_widget is None:
             return
-        for widget in self.canvas_layer.children:
+        for widget in self.children:
             if isinstance(widget, CampoWidget):
                 widget.actualizar()
 
@@ -364,9 +354,8 @@ class CanvasEditor(StencilView):
         if tw is None or not self.app.formato:
             return 0, 0
 
-        # Primero, toque de ventana a coordenadas locales de CanvasEditor.
-        local_x = touch.x - self.x
-        local_y = touch.y - self.y
+        # Conversión nativa y segura de Kivy
+        local_x, local_y = self.to_local(touch.x, touch.y)
 
         # Después, coordenadas relativas a la esquina superior izquierda de la plantilla.
         rel_x = local_x - tw.x
@@ -1340,18 +1329,23 @@ class ConfiguradorApp(App):
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         tw = self.editor.template_widget
-        # El rectángulo provisional también es hijo de CanvasEditor; su
-        # posición debe usar el mismo espacio de coordenadas que la plantilla.
+
+        # Coordenadas relativas directas al CanvasEditor (StencilView)
         x = tw.x + left * self.scale
         y = tw.y + tw.height - bottom * self.scale
         w = max(1, (right - left) * self.scale)
         h = max(1, (bottom - top) * self.scale)
-        widget = FloatLayout(size_hint=(None, None), size=(w, h), pos=(x, y))
+
+        # Usamos Widget simple en lugar de FloatLayout para evitar conflictos de layout
+        from kivy.uix.widget import Widget
+        widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
         with widget.canvas:
             Color(0, 0, 0, 1)
             Line(rectangle=(0, 0, w, h), width=3)
+
         self._drawing_widget = widget
-        self.editor.canvas_layer.add_widget(widget)
+        # Se agrega directamente al editor, no a una capa intermedia
+        self.editor.add_widget(widget)
 
     def clear_drawing_preview(self):
         if self._drawing_widget and self._drawing_widget.parent:
