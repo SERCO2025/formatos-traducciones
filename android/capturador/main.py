@@ -206,8 +206,23 @@ class CapturadorApp(App):
                 self._mostrar_campo()
             elif request_code == self.REQUEST_SAVE_JPEG:
                 if self._imagen_final is not None:
-                    self._copiar_archivo_a_uri(self._imagen_final, uri)
-                    self._mensaje("Archivo guardado", "El JPEG se exportó correctamente.")
+                    # Algunos proveedores Android ignoran EXTRA_TITLE. Si el
+                    # nombre creado no coincide, renombramos el documento antes
+                    # de copiar el JPEG para conservar el nombre del cliente.
+                    uri_destino = self._ajustar_nombre_destino(uri, self._nombre_final)
+                    self._copiar_archivo_a_uri(self._imagen_final, uri_destino)
+                    nombre_guardado = self._nombre_documento_uri(uri_destino)
+                    if nombre_guardado and nombre_guardado != self._nombre_final:
+                        self._mensaje(
+                            "Nombre de archivo",
+                            "Android guardó el archivo como:\n%s\n\nNombre solicitado:\n%s"
+                            % (nombre_guardado, self._nombre_final),
+                        )
+                    else:
+                        self._mensaje(
+                            "Archivo guardado",
+                            "Se guardó el JPEG como:\n%s" % self._nombre_final,
+                        )
         except Exception as exc:
             self._mensaje("Error al procesar el archivo", "%s\n\n%s" % (exc, traceback.format_exc()))
 
@@ -267,6 +282,46 @@ class CapturadorApp(App):
                 salida.flush()
         finally:
             salida.close()
+
+    def _nombre_documento_uri(self, uri):
+        """Devuelve el nombre real asignado por el proveedor de documentos."""
+        contexto = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = contexto.getContentResolver()
+        cursor = None
+        try:
+            OpenableColumns = autoclass("android.provider.OpenableColumns")
+            cursor = resolver.query(uri, [OpenableColumns.DISPLAY_NAME], None, None, None)
+            if cursor is not None and cursor.moveToFirst():
+                indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if indice >= 0:
+                    return str(cursor.getString(indice))
+        except Exception:
+            pass
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+        return None
+
+    def _ajustar_nombre_destino(self, uri, nombre_deseado):
+        """Asegura el nombre definido por el FDT, incluso si el selector lo ignora."""
+        actual = self._nombre_documento_uri(uri)
+        if actual == nombre_deseado:
+            return uri
+
+        contexto = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = contexto.getContentResolver()
+        DocumentsContract = autoclass("android.provider.DocumentsContract")
+        renombrado = DocumentsContract.renameDocument(resolver, uri, nombre_deseado)
+        if renombrado is None:
+            raise IOError(
+                "Android no permitió asignar el nombre '%s'. "
+                "Selecciona una carpeta de destino que permita renombrar archivos."
+                % nombre_deseado
+            )
+        return renombrado
 
     def _entrada_cambio(self, *_):
         if self.formato and self.formato.fields and self.formato.fields[self.indice].field_type != FIELD_TYPE_IMAGE:
