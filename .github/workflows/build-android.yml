@@ -67,11 +67,13 @@ jobs:
             find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -name sdkmanager -type f 2>/dev/null || true
             exit 1
           fi
-          mkdir -p "$BUILDOZER_SDK"
+          mkdir -p "$BUILDOZER_SDK/cmdline-tools/latest"
+          # Buildozer también necesita encontrar sdkmanager dentro de su propio SDK.
+          cp -a "$ANDROID_HOME/cmdline-tools/latest/." "$BUILDOZER_SDK/cmdline-tools/latest/"
           set +o pipefail
-          yes | "$SDKMANAGER" --sdk_root="$BUILDOZER_SDK" --licenses >/dev/null
+          yes | "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --licenses >/dev/null
           set -o pipefail
-          "$SDKMANAGER" --sdk_root="$BUILDOZER_SDK" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
           {
             echo "ANDROIDSDK=$BUILDOZER_SDK"
             echo "ANDROIDAPI=34"
