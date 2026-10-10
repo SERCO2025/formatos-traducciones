@@ -300,10 +300,10 @@ def renderizar_imagen(formato, respuestas):
                     hueco = float(ancho_maximo - ancho_palabras) / float(len(palabras) - 1)
                     x_texto = float(posicion.x)
                     for palabra, ancho_palabra in zip(palabras, anchos):
-                        dibujo.text((int(round(x_texto)), y_texto), palabra, fill=color, font=fuente)
+                        dibujo.text((int(round(x_texto)), y_texto), palabra, fill=color, font=fuente, anchor="lt")
                         x_texto += ancho_palabra + hueco
                 else:
-                    dibujo.text((posicion.x, y_texto), linea, fill=color, font=fuente)
+                    dibujo.text((posicion.x, y_texto), linea, fill=color, font=fuente, anchor="lt")
                 y_texto += alto_linea
             continue
 
