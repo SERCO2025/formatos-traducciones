@@ -17,6 +17,15 @@ jobs:
       # Ejecución nueva para validar asignación de runners.
       - name: Descargar proyecto
         uses: actions/checkout@v4
+      - name: Restaurar caché de Buildozer y Android
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/${{ matrix.app }}/.buildozer
+            ~/.cache/pip
+          key: buildozer-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('android/configurador/buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-${{ matrix.app }}-
       - name: Preparar Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -57,10 +66,9 @@ jobs:
         run: |
           rm -rf "android/${{ matrix.app }}/shared"
           cp -R shared "android/${{ matrix.app }}/shared"
-      - name: Limpiar compilaciones anteriores
+      - name: Limpiar APK anterior
         working-directory: android/${{ matrix.app }}
         run: |
-          rm -rf .buildozer
           rm -rf bin
       - name: Configurar entorno para python-for-android
         working-directory: android/${{ matrix.app }}
