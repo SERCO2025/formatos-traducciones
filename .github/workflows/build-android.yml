@@ -64,17 +64,18 @@ jobs:
             find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -name sdkmanager -type f 2>/dev/null || true
             exit 1
           fi
+          # sdkmanager termina la tubería al acabar; no tratar el SIGPIPE de yes como fallo.
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
           "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
           {
             echo "ANDROIDSDK=$ANDROID_HOME"
-            echo "ANDROIDNDK=$ANDROID_HOME/ndk/27.3.13750724"
             echo "ANDROIDAPI=34"
             echo "ANDROIDMINAPI=21"
           } >> "$GITHUB_ENV"
           test -d "$ANDROID_HOME/platforms/android-34"
           test -d "$ANDROID_HOME/build-tools/34.0.0"
-          test -d "$ANDROID_HOME/ndk/27.3.13750724"
       - name: Preparar pip y herramientas de compilación
         run: |
           python -m pip install --upgrade "pip<25"
