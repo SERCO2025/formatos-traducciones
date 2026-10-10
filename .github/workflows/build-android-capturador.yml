@@ -51,7 +51,9 @@ jobs:
             echo "No se encontró sdkmanager dentro de $ANDROID_HOME/cmdline-tools"
             exit 1
           fi
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
           "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
           test -d "$ANDROID_HOME/platforms/android-34"
           test -x "$ANDROID_HOME/build-tools/34.0.0/aapt"
