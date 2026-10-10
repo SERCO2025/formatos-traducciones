@@ -1189,8 +1189,8 @@ class ConfiguradorApp(App):
                 campo.field_id = nuevo_id
                 campo.question = pregunta.text.strip()
                 campo.required = requerido.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-                campo.position.x = max(0, entero(x_in, campo.position.x))
-                campo.position.y = max(0, entero(y_in, campo.position.y))
+                campo.position.x = min(max(0, entero(x_in, campo.position.x)), max(0, self.formato.template.width - 2))
+                campo.position.y = min(max(0, entero(y_in, campo.position.y)), max(0, self.formato.template.height - 2))
                 campo.position.width = max(2, entero(w_in, campo.position.width))
                 campo.position.height = max(2, entero(h_in, campo.position.height))
                 campo.position.width = min(campo.position.width, self.formato.template.width - campo.position.x)
