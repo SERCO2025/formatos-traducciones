@@ -348,14 +348,18 @@ class CanvasEditor(StencilView):
                 widget.actualizar()
 
     def _document_point(self, touch):
-        """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
+        """Convierte un toque de pantalla a píxeles del documento (origen arriba-izquierda)."""
         tw = self.template_widget
         if tw is None or not self.app.formato:
             return 0, 0
-        # Kivy realiza aquí la conversión de ventana al sistema local de la imagen.
-        image_x, image_y = tw.to_widget(touch.x, touch.y)
-        x = image_x / self.app.scale
-        y = self.app.formato.template.height - image_y / self.app.scale
+
+        # En esta jerarquía, el toque y la posición del hijo usan coordenadas del padre.
+        # No usar tw.to_widget() sin relative=True: no resta la posición propia del widget.
+        rel_x = touch.x - tw.x
+        rel_y_from_top = (tw.y + tw.height) - touch.y
+
+        x = rel_x / self.app.scale
+        y = rel_y_from_top / self.app.scale
         x = max(0, min(self.app.formato.template.width, x))
         y = max(0, min(self.app.formato.template.height, y))
         return int(round(x)), int(round(y))
