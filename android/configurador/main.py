@@ -1,127 +1,205 @@
 # -*- coding: utf-8 -*-
-import os
 import copy
+import os
+import uuid
 import traceback
 from math import hypot
 
 from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.popup import Popup
-from kivy.uix.modalview import ModalView
-from kivy.uix.stencilview import StencilView
-from kivy.uix.widget import Widget
-from kivy.core.image import Image as CoreImage
-from kivy.uix.image import Image as KivyImage
 from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
+from kivy.core.window import Window
+from kivy.graphics import Color, Line, Rectangle
 from kivy.metrics import dp
-from kivy.utils import platform
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.filechooser import FileChooserListView
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import Image as KivyImage
+from kivy.uix.label import Label
+from kivy.uix.modalview import ModalView
+from kivy.uix.popup import Popup
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.stencilview import StencilView
+from kivy.uix.textinput import TextInput
 
-# Importaciones del núcleo compartido
 try:
-    from shared.models import (
-        FIELD_TYPE_ALPHANUMERIC,
-        FIELD_TYPE_IMAGE,
-        FIELD_TYPE_NUMBER,
-        FIELD_TYPE_TEXT,
-        Field,
-        Formato,
-        Position,
-        TemplateInfo,
-        TextStyle,
-        OutputNaming,
-        Validation,
-        Color as SharedColor,
-    )
-    from shared.fdt import guardar_fdt, validar_fdt, cargar_fdt
-except ImportError:
-    print("Advertencia: No se encontraron módulos 'shared'. Asegúrate de incluirlos en el buildozer.spec.")
-    class SharedColor:
-        def __init__(self, r, g, b): self.r, self.g, self.b = r, g, b
+    from android import activity
+    from jnius import autoclass
+    ANDROID_AVAILABLE = True
+except Exception:
+    activity = None
+    ANDROID_AVAILABLE = False
+
+from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt
+from shared.models import (
+    FIELD_TYPE_ALPHANUMERIC,
+    FIELD_TYPE_IMAGE,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_TEXT,
+    Color as FieldColor,
+    Field,
+    Formato,
+    Position,
+    TemplateInfo,
+    TextStyle,
+)
+
+
+class HamburgerButton(Button):
+    """Botón hamburguesa dibujado con Canvas, sin depender de una fuente Unicode."""
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_x", None)
+        kwargs.setdefault("width", dp(64))
+        kwargs.setdefault("font_size", "1sp")
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw_icon, size=self._redraw_icon)
+        self._redraw_icon()
+
+    def _redraw_icon(self, *args):
+        self.canvas.after.clear()
+        with self.canvas.after:
+            Color(1, 1, 1, 1)
+            margen = dp(16)
+            y = self.height / 2.0
+            separacion = dp(8)
+            ancho = max(dp(24), self.width - margen * 2)
+            for offset in (-separacion, 0, separacion):
+                Line(points=(self.x + margen, self.y + y + offset,
+                             self.x + margen + ancho, self.y + y + offset),
+                     width=dp(3.0))
+
 
 TOOLS = [
-    ("👆", "select"),
-    ("✋", "hand"),
-    ("🔍", "zoom"),
+    ("SEL", "select"),
     ("A", FIELD_TYPE_TEXT),
     ("1", FIELD_TYPE_NUMBER),
     ("A1", FIELD_TYPE_ALPHANUMERIC),
-    ("🖼️", FIELD_TYPE_IMAGE),
+    ("IMG", FIELD_TYPE_IMAGE),
+    ("ZOOM", "zoom"),
 ]
 
-class CampoWidget(Widget):
-    def __init__(self, campo, canvas_editor, **kwargs):
+
+class CampoWidget(FloatLayout):
+    def __init__(self, campo, editor, **kwargs):
         super().__init__(**kwargs)
         self.campo = campo
-        self.canvas_editor = canvas_editor
+        self.editor = editor
         self.size_hint = (None, None)
-        self.bind(pos=self.actualizar, size=self.actualizar)
         self.actualizar()
 
-    def actualizar(self, *args):
-        tw = self.canvas_editor.template_widget
-        if tw is None or not self.canvas_editor.app.formato:
-            return
-        
+    def actualizar(self):
         p = self.campo.position
-        scale = self.canvas_editor.app.scale
-        
-        self.size = (p.width * scale, p.height * scale)
-        self.pos = (
-            tw.x + p.x * scale,
-            tw.y + tw.height - (p.y + p.height) * scale
-        )
-        
-        self.canvas.clear()
-        with self.canvas:
-            from kivy.graphics import Color, Line, Rectangle
-            is_selected = (self.canvas_editor.seleccionado == self.campo)
-            color = (0, 0.84, 1, 1) if is_selected else (1, 0.8, 0, 1)
-            Color(*color)
-            Line(rectangle=(0, 0, self.width, self.height), width=3 if is_selected else 2)
-            
-            if is_selected:
-                Color(1, 1, 1, 1)
-                size = 12
-                handles = [
-                    (0, 0), (self.width/2, 0), (self.width, 0),
-                    (self.width, self.height/2), (self.width, self.height),
-                    (self.width/2, self.height), (0, self.height), (0, self.height/2)
+        self.size = (p.width * self.editor.scale, p.height * self.editor.scale)
+        tw = self.editor.template_widget
+        if tw is not None:
+            # CampoWidget y plantilla son hermanos dentro de CanvasEditor:
+            # ambos deben posicionarse en las coordenadas de su padre.
+            self.pos = (
+                tw.x + p.x * self.editor.scale,
+                tw.y + tw.height - (p.y + p.height) * self.editor.scale,
+            )
+
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0, 0, 0, 1)
+            Line(rectangle=(0, 0, self.width, self.height), width=2.0)
+            if self.editor.app.seleccionado is self.campo:
+                Color(0.0, 0.75, 1.0, 1)
+                Line(rectangle=(0, 0, self.width, self.height), width=3.0)
+
+        self.canvas.after.clear()
+        if self.editor.app.seleccionado is self.campo:
+            with self.canvas.after:
+                Color(0.0, 0.75, 1.0, 1)
+                s = min(dp(12), max(dp(7), min(self.width, self.height) / 5.0))
+                points = [
+                    (0, 0), (self.width / 2, 0), (self.width, 0),
+                    (0, self.height / 2), (self.width, self.height / 2),
+                    (0, self.height), (self.width / 2, self.height),
+                    (self.width, self.height / 2), (self.width, self.height),
                 ]
-                for hx, hy in handles:
-                    Rectangle(pos=(hx - size/2, hy - size/2), size=(size, size))
+                for x, y in points:
+                    Line(points=(x - s/2, y, x + s/2, y), width=2)
+                    Line(points=(x, y - s/2, x, y + s/2), width=2)
+
+        self.clear_widgets()
+        if self.campo.field_type == FIELD_TYPE_IMAGE:
+            texto = "%d  IMAGEN" % self.campo.order
+        else:
+            texto = self.campo.text or ("%d  %s" % (self.campo.order, self.campo.field_type))
+        etiqueta = Label(
+            text=texto,
+            size_hint=(1, 1),
+            color=(
+                self.campo.text_style.color.r / 255.0,
+                self.campo.text_style.color.g / 255.0,
+                self.campo.text_style.color.b / 255.0,
+                1,
+            ),
+            font_size=max(dp(9), self.campo.text_style.font_size_px * self.editor.scale),
+            halign=self.campo.text_style.alignment if self.campo.text_style.alignment in ("left", "center", "right") else "left",
+            valign="middle",
+        )
+        etiqueta.bind(size=lambda inst, value: setattr(inst, "text_size", value))
+        if self.campo.text_style.font_family and os.path.isfile(self.campo.text_style.font_family):
+            etiqueta.font_name = self.campo.text_style.font_family
+        self.add_widget(etiqueta)
+
+    def _handle_at(self, x, y):
+        if self.editor.app.seleccionado is not self.campo:
+            return None
+        s = min(dp(18), max(dp(10), min(self.width, self.height) / 4.0))
+        left = abs(x) <= s
+        right = abs(x - self.width) <= s
+        bottom = abs(y) <= s
+        top = abs(y - self.height) <= s
+        if left and bottom:
+            return "sw"
+        if right and bottom:
+            return "se"
+        if left and top:
+            return "nw"
+        if right and top:
+            return "ne"
+        if abs(x - self.width / 2) <= s and bottom:
+            return "s"
+        if abs(x - self.width / 2) <= s and top:
+            return "n"
+        if left and abs(y - self.height / 2) <= s:
+            return "w"
+        if right and abs(y - self.height / 2) <= s:
+            return "e"
+        return None
 
     def on_touch_down(self, touch):
-        if not self.collide_point(touch.x - self.x, touch.y - self.y):
-            return False
-        
-        if self.canvas_editor.app.tool == "select":
-            handle = self._hit_handle(touch)
-            self.canvas_editor.begin_field_interaction(self.campo, touch, handle)
+        # El evento llega en coordenadas del padre, igual que self.pos.
+        # CanvasEditor es hijo directo de BoxLayout y no hay RelativeLayout/
+        # ScrollView ancestro que cambie el sistema de coordenadas.
+        local_x, local_y = touch.x - self.x, touch.y - self.y
+        if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
+            return super().on_touch_down(touch)
+        if self.editor.app.tool == "select":
+            handle = self._handle_at(local_x, local_y)
+            self.editor.begin_field_interaction(self.campo, touch, handle)
             return True
         return super().on_touch_down(touch)
 
-    def _hit_handle(self, touch):
-        if self.canvas_editor.seleccionado != self.campo:
-            return None
-        local_x = touch.x - self.x
-        local_y = touch.y - self.y
-        tol = 20
-        w, h = self.width, self.height
-        
-        if abs(local_x) <= tol and abs(local_y) <= tol: return "nw"
-        if abs(local_x - w/2) <= tol and abs(local_y) <= tol: return "n"
-        if abs(local_x - w) <= tol and abs(local_y) <= tol: return "ne"
-        if abs(local_x - w) <= tol and abs(local_y - h/2) <= tol: return "e"
-        if abs(local_x - w) <= tol and abs(local_y - h) <= tol: return "se"
-        if abs(local_x - w/2) <= tol and abs(local_y - h) <= tol: return "s"
-        if abs(local_x) <= tol and abs(local_y - h) <= tol: return "sw"
-        if abs(local_x) <= tol and abs(local_y - h/2) <= tol: return "w"
-        return None
+    def on_touch_move(self, touch):
+        if self.editor.active_field_touch is touch:
+            self.editor.update_field_interaction(touch)
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if self.editor.active_field_touch is touch:
+            self.editor.end_field_interaction(touch)
+            return True
+        return super().on_touch_up(touch)
+
+
 class CanvasEditor(StencilView):
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
@@ -142,11 +220,12 @@ class CanvasEditor(StencilView):
         self._pinch_anchor = None
         self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
-        self._drawing_widget = None
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
     @property
     def seleccionado(self):
+        # La selección es propiedad del ConfiguradorApp; los widgets del
+        # lienzo consultan esta propiedad para mantener una única fuente de verdad.
         return getattr(self.app, "seleccionado", None)
 
     @seleccionado.setter
@@ -159,9 +238,11 @@ class CanvasEditor(StencilView):
             self.refresh_fields()
 
     def constrain_template_position(self, pos=None):
+        """Centra plantillas pequeñas y limita el desplazamiento en coordenadas locales."""
         tw = self.template_widget
         if tw is None:
             return
+        # La posición de los hijos de CanvasEditor se expresa desde su origen (0, 0).
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
             x = (self.width - tw.width) / 2.0
@@ -176,8 +257,9 @@ class CanvasEditor(StencilView):
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
-        lx, ly = self.to_local(touch.x, touch.y)
-        return self.template_widget.collide_point(lx, ly)
+        # to_local convierte automáticamente las coordenadas de ventana a locales del StencilView
+        local_x, local_y = self.to_local(touch.x, touch.y)
+        return self.template_widget.collide_point(local_x, local_y)
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -194,6 +276,7 @@ class CanvasEditor(StencilView):
         self.active_field = None
         self.active_handle = None
         self.initial_position = None
+        self._interaction_start_doc = None
         self.app._interaction_changed = False
 
         self.pan_start = None
@@ -234,12 +317,9 @@ class CanvasEditor(StencilView):
         if not ruta or not os.path.isfile(ruta):
             raise IOError(f"La plantilla no existe o no se puede leer: {ruta}")
 
-        try:
-            self._template_core_image = CoreImage(ruta, nocache=True)
-            if self._template_core_image.texture is None:
-                raise IOError("Kivy NO pudo crear la textura de la imagen.")
-        except Exception as e:
-            raise IOError(f"Error cargando imagen: {e}")
+        self._template_core_image = CoreImage(ruta, nocache=True)
+        if self._template_core_image.texture is None:
+            raise IOError("Kivy NO pudo crear la textura de la imagen. El formato puede no ser soportado o el archivo está corrupto.")
 
         self.template_widget = KivyImage(
             texture=self._template_core_image.texture,
@@ -269,37 +349,34 @@ class CanvasEditor(StencilView):
                 widget.actualizar()
 
     def _document_point(self, touch):
-        """CORRECCIÓN DEFINITIVA: Convierte un toque de ventana a píxeles del documento."""
+        """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
         tw = self.template_widget
         if tw is None or not self.app.formato:
             return 0, 0
 
-        # 1. Convertir coordenadas de ventana (touch.x,y) a coordenadas locales del CanvasEditor
-        # to_local maneja automáticamente la posición del widget en la jerarquía y barras de sistema
-        local_x, local_y = self.to_local(touch.x, touch.y)
+        # Obtener la posición del CanvasEditor en coordenadas de ventana
+        # para convertir correctamente el toque absoluto a coordenadas locales.
+        wx, wy = self.to_window(0, 0)
+        local_x = touch.x - wx
+        local_y = touch.y - wy
 
-        # 2. Calcular posición relativa a la esquina SUPERIOR IZQUIERDA de la plantilla
+        # Coordenadas relativas a la esquina superior izquierda de la plantilla.
         rel_x = local_x - tw.x
         rel_y_from_top = (tw.y + tw.height) - local_y
 
-        # 3. Escalar de vuelta a píxeles reales del documento original
         doc_x = rel_x / self.app.scale
         doc_y = rel_y_from_top / self.app.scale
-
-        # 4. Clampear límites
         doc_x = max(0, min(self.app.formato.template.width, doc_x))
         doc_y = max(0, min(self.app.formato.template.height, doc_y))
-
         return int(round(doc_x)), int(round(doc_y))
-def _inside_template(self, touch):
+
+    def _inside_template(self, touch):
         return self._touch_inside_template(touch)
 
     def on_touch_down(self, touch):
-        # Verificación básica de área visible
-        wx, wy = self.to_window(0, 0)
-        lx = touch.x - wx
-        ly = touch.y - wy
-        if not (0 <= lx <= self.width and 0 <= ly <= self.height):
+        # En esta jerarquía (BoxLayout -> StencilView), el toque llega en
+        # coordenadas del padre, igual que collide_point y las posiciones.
+        if not self.collide_point(touch.x, touch.y):
             return False
 
         if self._touch_inside_template(touch):
@@ -337,10 +414,8 @@ def _inside_template(self, touch):
                 return True
 
         if tool == "select" and self._inside_template(touch):
-            # Dejar que los hijos (CampoWidget) procesen primero si hacen clic en ellos
             if super().on_touch_down(touch):
                 return True
-            # Si nadie lo tomó, deseleccionar
             self.app.seleccionar(None)
             return True
 
@@ -354,6 +429,8 @@ def _inside_template(self, touch):
             return self._update_pinch()
 
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
+            # Arrastre incremental en el mismo sistema local del lienzo.
+            # Cada desplazamiento del dedo mueve la plantilla 1:1.
             point = touch.pos
             dx = point[0] - self.pan_start[0]
             dy = point[1] - self.pan_start[1]
@@ -371,11 +448,6 @@ def _inside_template(self, touch):
         ):
             self.app.redraw_drawing_preview(self.start_touch, self._document_point(touch))
             return True
-            
-        # Manejo de movimiento de campos seleccionados
-        if self.active_field and self.active_field_touch:
-             self.update_field_interaction(touch)
-             return True
 
         return super().on_touch_move(touch)
 
@@ -395,11 +467,6 @@ def _inside_template(self, touch):
         if self.pan_start:
             self.pan_start = None
             self.pan_template_pos = None
-            return True
-
-        # Finalizar interacción de campo (movimiento/redimensión)
-        if self.active_field and self.active_field_touch:
-            self.end_field_interaction(touch)
             return True
 
         if not self.start_touch:
@@ -433,7 +500,7 @@ def _inside_template(self, touch):
             text_style=TextStyle(
                 font_family="",
                 font_size_px=24,
-                color=SharedColor(0, 0, 0),
+                color=FieldColor(0, 0, 0),
                 alignment="left",
             ),
         )
@@ -507,66 +574,171 @@ def _inside_template(self, touch):
         self.initial_position = None
         self._interaction_start_doc = None
         self.app.estado.text = "Campo actualizado."
-class HamburgerButton(Button):
-    def __init__(self, **kwargs):
-        super().__init__(text="☰", size_hint_x=None, width=dp(50), font_size='20sp', **kwargs)
+
+    def redraw_preview(self):
+        self.app.clear_drawing_preview()
+        if self.start_touch:
+            pass
 
 
 class ConfiguradorApp(App):
     title = "Configurador de Formatos Traducidos"
 
-    def build(self):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.formato = None
-        self.seleccionado = None
         self.tool = "select"
         self.scale = 1.0
+        self.editor = None
+        self.seleccionado = None
+        self.estado = None
+        self.estado_menu = None
+        self.zoom_label = None
         self._visual_template_path = None
-        self._current_fdt_path = None
-        self.unsaved_changes = False
+        self._android_callback = None
         self._undo = []
         self._redo = []
         self._interaction_changed = False
         self._drawing_widget = None
+        if ANDROID_AVAILABLE:
+            activity.bind(on_activity_result=self._on_android_activity_result)
 
+    def on_resume(self):
+        # Si Android devuelve el foco pero no entrega on_activity_result,
+        # mostrar un diagnóstico en vez de dejar la importación aparentemente congelada.
+        if self._android_callback:
+            Clock.schedule_once(self._verificar_resultado_android, 1.5)
+
+    def _verificar_resultado_android(self, _dt):
+        if self._android_callback:
+            tipo, guardar = self._android_callback
+            self._android_callback = None
+            mensaje = (
+                "La aplicación volvió del selector de Android, pero no recibió "
+                "el evento on_activity_result. Operación: %s; guardar=%s. "
+                "Esto apunta al retorno del selector, antes de leer o mostrar la imagen."
+                % (tipo, guardar)
+            )
+            self.estado.text = "Android no devolvió el resultado del selector."
+            self._mostrar_error_tecnico(
+                "Android no entregó el resultado del selector",
+                RuntimeError(mensaje),
+            )
+
+    def build(self):
         root = BoxLayout(orientation="vertical")
-        
-        # Barra Superior
-        barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)), background_color=(0.1, 0.1, 0.1, 1))
+        barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)))
         barra.add_widget(HamburgerButton(on_release=lambda _: self.abrir_menu()))
-        titulo = Label(text="Configurador", halign="left", valign="middle", font_size="17sp", color=(1,1,1,1))
+        titulo = Label(text="Configurador de Formatos", halign="left", valign="middle", font_size="17sp")
         titulo.bind(size=lambda inst, val: setattr(inst, "text_size", val))
         barra.add_widget(titulo)
-        
-        self.indicador_guardado = Label(text="", size_hint_x=None, width=dp(20), font_size="16sp", color=(1,0,0,1))
-        barra.add_widget(self.indicador_guardado)
-
-        self.estado_menu = Label(text="Listo", size_hint_x=None, width=dp(100), font_size="12sp", halign="right", valign="middle", color=(0.8,0.8,0.8,1))
+        self.estado_menu = Label(text="Listo", size_hint_x=None, width=dp(82), font_size="12sp", halign="right", valign="middle")
         self.estado_menu.bind(size=lambda inst, val: setattr(inst, "text_size", val))
         barra.add_widget(self.estado_menu)
         root.add_widget(barra)
 
-        # Herramientas
-        tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3), background_color=(0.15, 0.15, 0.15, 1))
+        tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3))
         for simbolo, tool in TOOLS:
-            btn = Button(text=simbolo, on_release=lambda _, t=tool: self.set_tool(t), background_color=(0.2,0.2,0.2,1), color=(1,1,1,1))
-            tools.add_widget(btn)
-        tools.add_widget(Button(text="−", on_release=lambda _: self.set_zoom(self.scale * 0.8), background_color=(0.2,0.2,0.2,1)))
-        self.zoom_label = Label(text="100 %", size_hint_x=None, width=dp(70), color=(1,1,1,1))
+            tools.add_widget(Button(text=simbolo, on_release=lambda _, t=tool: self.set_tool(t)))
+        tools.add_widget(Button(text="−", on_release=lambda _: self.set_zoom(self.scale * 0.8)))
+        self.zoom_label = Label(text="100 %", size_hint_x=None, width=dp(70))
         tools.add_widget(self.zoom_label)
-        tools.add_widget(Button(text="+", on_release=lambda _: self.set_zoom(self.scale * 1.25), background_color=(0.2,0.2,0.2,1)))
+        tools.add_widget(Button(text="+", on_release=lambda _: self.set_zoom(self.scale * 1.25)))
         root.add_widget(tools)
 
         self.editor = CanvasEditor(self)
         root.add_widget(self.editor)
 
-        self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left", color=(0.8,0.8,0.8,1), background_color=(0.1,0.1,0.1,1))
+        self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left")
         root.add_widget(self.estado)
         return root
 
-    def template_position(self):
-        if not self.formato:
-            return (0, 0)
-        return (0, 0)
+    def abrir_menu(self):
+        panel = ModalView(
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            auto_dismiss=True,
+            background_color=(0, 0, 0, 0),
+            overlay_color=(0, 0, 0, 0.55),
+        )
+        contenido = BoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            padding=dp(10),
+            size_hint=(0.88, 1),
+            pos_hint={"x": 0, "y": 0},
+        )
+        with contenido.canvas.before:
+            Color(0.05, 0.05, 0.05, 1)
+            menu_background = Rectangle(pos=contenido.pos, size=contenido.size)
+        contenido.bind(pos=lambda inst, value: setattr(menu_background, "pos", value))
+        contenido.bind(size=lambda inst, value: setattr(menu_background, "size", value))
+        encabezado = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6))
+        encabezado.add_widget(Label(text="MENÚ", font_size="20sp", halign="left", valign="middle"))
+        encabezado.add_widget(Button(text="X", size_hint_x=None, width=dp(48), font_size="24sp", on_release=lambda _: panel.dismiss()))
+        contenido.add_widget(encabezado)
+
+        # Las opciones van dentro de una lista desplazable; el encabezado
+        # permanece fijo y el menú siempre comienza mostrando ARCHIVO.
+        scroll = ScrollView(
+            do_scroll_x=False,
+            do_scroll_y=True,
+            scroll_y=1,
+        )
+        lista_menu = BoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            size_hint_y=None,
+        )
+        lista_menu.bind(minimum_height=lista_menu.setter("height"))
+        scroll.add_widget(lista_menu)
+        contenido.add_widget(scroll)
+
+        def seccion(texto):
+            lista_menu.add_widget(Label(text=texto, size_hint_y=None, height=dp(28), halign="left", font_size="13sp"))
+
+        def opcion(texto, accion):
+            b = Button(text=texto, size_hint_y=None, height=dp(46), font_size="15sp")
+            b.bind(size=lambda inst, val: setattr(inst, "text_size", (val[0] - dp(20), val[1])))
+            def ejecutar_accion(_):
+                panel.dismiss()
+                # Esperar a que el menú termine de cerrarse antes de abrir
+                # el selector nativo de archivos de Android.
+                Clock.schedule_once(lambda dt: accion(), 0.15)
+            b.bind(on_release=ejecutar_accion)
+            lista_menu.add_widget(b)
+
+        seccion("ARCHIVO")
+        opcion("Nuevo formato", self.nuevo)
+        opcion("Abrir formato FDT", self.abrir)
+        opcion("Importar plantilla", self.importar)
+        opcion("Guardar", self.guardar)
+        opcion("Guardar como FDT", self.guardar_como_fdt)
+
+        seccion("EDITAR")
+        opcion("Deshacer", self.deshacer)
+        opcion("Rehacer", self.rehacer)
+        opcion("Eliminar campo", self.eliminar_campo)
+        opcion("Propiedades del campo", lambda: self.mostrar_propiedades(self.seleccionado) if self.seleccionado else self._aviso("Seleccione un campo."))
+
+        seccion("HERRAMIENTAS")
+        opcion("Seleccionar / mover", lambda: self.set_tool("select"))
+        opcion("Desplazar", lambda: self.set_tool("hand"))
+        opcion("Texto", lambda: self.set_tool(FIELD_TYPE_TEXT))
+        opcion("Número", lambda: self.set_tool(FIELD_TYPE_NUMBER))
+        opcion("Alfanumérico", lambda: self.set_tool(FIELD_TYPE_ALPHANUMERIC))
+        opcion("Imagen", lambda: self.set_tool(FIELD_TYPE_IMAGE))
+        opcion("Lupa", lambda: self.set_tool("zoom"))
+        opcion("Lista de campos", self.mostrar_lista_campos)
+        opcion("Archivo terminado", self.editar_salida)
+
+        seccion("VISTA")
+        opcion("Alejar", lambda: self.set_zoom(self.scale * 0.8))
+        opcion("Acercar", lambda: self.set_zoom(self.scale * 1.25))
+        opcion("Restablecer zoom", lambda: self.set_zoom(1.0))
+        contenido.add_widget(Label(text="Formatos Traducidos", size_hint_y=None, height=dp(38), font_size="11sp"))
+        panel.add_widget(contenido)
+        panel.open()
 
     def set_tool(self, tool):
         self.tool = tool
@@ -582,9 +754,318 @@ class ConfiguradorApp(App):
         self.estado.text = "Herramienta: " + nombres.get(tool, str(tool))
         self.estado_menu.text = nombres.get(tool, str(tool))
 
-    def nuevo_id(self):
+    def template_position(self):
+        # Las coordenadas son relativas al CanvasEditor (StencilView).
         if not self.formato:
-            return "campo1"
+            return (dp(20), dp(20))
+        ancho = self.formato.template.width * self.scale
+        alto = self.formato.template.height * self.scale
+        x = (self.editor.width - ancho) / 2.0
+        y = (self.editor.height - alto) / 2.0
+        if ancho > self.editor.width:
+            x = 0
+        if alto > self.editor.height:
+            y = 0
+        return x, y
+
+    def nuevo(self):
+        self.push_undo() if self.formato else None
+        self.formato = None
+        self.seleccionado = None
+        self._visual_template_path = None
+        self._undo = []
+        self._redo = []
+        self.editor.clear_widgets()
+        self.estado.text = "Nuevo formato."
+        self.estado_menu.text = "Nuevo"
+
+    def importar(self):
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("image", guardar=False)
+        else:
+            self._file_popup("Importar plantilla", self._importar_ruta, imagenes=True)
+
+    def abrir(self):
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("fdt", guardar=False)
+        else:
+            self._file_popup("Abrir FDT", self._abrir_ruta)
+
+    def _abrir_selector_android(self, tipo, guardar=False):
+        try:
+            Intent = autoclass("android.content.Intent")
+            accion = Intent.ACTION_CREATE_DOCUMENT if guardar else Intent.ACTION_OPEN_DOCUMENT
+            intent = Intent(accion)
+            intent.setType("image/*" if tipo == "image" else "*/*")
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if not guardar:
+                intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            else:
+                nombre = (self.formato.name.strip() if self.formato and self.formato.name.strip() else "formato") + ".fdt"
+                intent.putExtra(Intent.EXTRA_TITLE, nombre)
+            self._android_callback = (tipo, guardar)
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            self.estado.text = "Esperando selección de archivo en Android..."
+            PythonActivity.mActivity.startActivityForResult(intent, 4001)
+        except Exception as exc:
+            self.estado.text = "Error al abrir selector de Android."
+            self._mostrar_error_tecnico("No se pudo abrir el selector", exc)
+
+    def _on_android_activity_result(self, request_code, result_code, intent):
+        # El callback de Android puede ejecutarse fuera del hilo gráfico de Kivy.
+        # Toda operación que actualice widgets o cree instrucciones gráficas debe
+        # ejecutarse en el hilo principal.
+        Clock.schedule_once(
+            lambda _dt: self._procesar_resultado_android(request_code, result_code, intent),
+            0,
+        )
+
+    def _procesar_resultado_android(self, request_code, result_code, intent):
+        if request_code != 4001 or not self._android_callback:
+            return
+        tipo, guardar = self._android_callback
+        self._android_callback = None
+        try:
+            Activity = autoclass("android.app.Activity")
+            if result_code != Activity.RESULT_OK or intent is None:
+                self.estado.text = "Selección cancelada."
+                return
+            uri = intent.getData()
+            if uri is None:
+                raise IOError("Android devolvió un resultado sin archivo (URI nula).")
+            self.estado.text = "Archivo seleccionado; leyendo contenido..."
+            if guardar:
+                self._guardar_fdt_uri(uri)
+            else:
+                ruta = self._copiar_uri_a_cache(uri, tipo)
+                self.estado.text = "Archivo copiado. Abriendo imagen..."
+                self._abrir_ruta(ruta) if tipo == "fdt" else self._importar_ruta(ruta)
+        except Exception as exc:
+            self.estado.text = "Error al procesar el archivo seleccionado."
+            self._mostrar_error_tecnico("Error al recibir o copiar el archivo", exc)
+
+    def _nombre_display_uri(self, resolver, uri):
+        try:
+            OpenableColumns = autoclass("android.provider.OpenableColumns")
+            cursor = resolver.query(uri, None, None, None, None)
+            if cursor is None:
+                return ""
+            try:
+                indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                return str(cursor.getString(indice)) if indice >= 0 and cursor.moveToFirst() else ""
+            finally:
+                cursor.close()
+        except Exception:
+            return ""
+
+    def _copiar_uri_a_cache(self, uri, tipo):
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        resolver = PythonActivity.mActivity.getContentResolver()
+        flujo = resolver.openInputStream(uri)
+        if flujo is None:
+            raise IOError("Android no pudo abrir el archivo seleccionado (flujo nulo).")
+        try:
+            nombre = self._nombre_display_uri(resolver, uri)
+            extension = os.path.splitext(nombre)[1].lower()
+            
+            if tipo == "image":
+                mime_type = str(resolver.getType(uri) or "").lower()
+                if not extension or extension not in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
+                    if "png" in mime_type:
+                        extension = ".png"
+                    elif "webp" in mime_type:
+                        extension = ".webp"
+                    else:
+                        extension = ".jpg"
+            
+            if tipo == "fdt":
+                extension = ".fdt"
+            
+            extension = extension if extension else ".jpg"
+
+            ruta = os.path.join(
+                PythonActivity.mActivity.getCacheDir().getAbsolutePath(),
+                "plantilla_temp_" + uuid.uuid4().hex + extension,
+            )
+            
+            # PyJNIus de esta compilación no exporta jarray; convierte bytearray a Java byte[].
+            buffer = bytearray(65536)
+            FileOutputStream = autoclass("java.io.FileOutputStream")
+            salida = FileOutputStream(ruta)
+            try:
+                while True:
+                    cantidad = flujo.read(buffer)
+                    if cantidad <= 0:
+                        break
+                    salida.write(buffer, 0, cantidad)
+                salida.flush()
+            finally:
+                salida.close()
+                
+            if not os.path.isfile(ruta) or os.path.getsize(ruta) <= 0:
+                raise IOError("El archivo copiado a la caché está vacío o no se creó.")
+            return ruta
+        finally:
+            flujo.close()
+
+    def _crear_imagen_visual(self, ruta, imagen):
+        return ruta
+
+    def _importar_ruta(self, ruta):
+        try:
+            if not os.path.isfile(ruta):
+                raise IOError(f"El archivo no existe en la ruta: {ruta}")
+            
+            if os.path.getsize(ruta) == 0:
+                raise IOError("El archivo copiado tiene 0 bytes. Fallo de permisos o de copia en Android.")
+
+            from PIL import Image
+            imagen = Image.open(ruta).convert("RGB")
+            
+            self.formato = Formato(
+                name=os.path.splitext(os.path.basename(ruta))[0],
+                template=TemplateInfo(path=ruta, width=imagen.width, height=imagen.height, dpi=300, mode="RGB"),
+            )
+            
+            self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
+            self._visual_template_path = ruta
+            self.seleccionado = None
+            self._undo = []
+            self._redo = []
+            self.editor.scale = self.scale
+            
+            self.editor.cargar_plantilla(ruta)
+            self.actualizar_zoom()
+            
+            self.estado.text = f"ÉXITO: Imagen {imagen.width}x{imagen.height}px cargada."
+            
+        except Exception as exc:
+            self.estado.text = "FALLO CRÍTICO AL IMPORTAR"
+            self._mostrar_error_tecnico("Fallo al abrir la imagen de plantilla", exc)
+
+    def _abrir_ruta(self, ruta):
+        try:
+            formato = cargar_fdt(ruta)
+            from PIL import Image
+            imagen = Image.open(formato.template.path).convert("RGB")
+            if imagen.width != formato.template.width or imagen.height != formato.template.height:
+                raise ValueError("Las dimensiones reales de la plantilla no coinciden con el FDT.")
+            self.formato = formato
+            self._visual_template_path = self._crear_imagen_visual(formato.template.path, imagen)
+            self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
+            self.seleccionado = None
+            self._undo = []
+            self._redo = []
+            self.editor.scale = self.scale
+            try:
+                self.editor.cargar_plantilla(self._visual_template_path)
+            except Exception as exc:
+                self._visual_template_path = None
+                raise IOError("La plantilla del FDT no se pudo mostrar: " + str(exc))
+            self.actualizar_zoom()
+            self.estado.text = "FDT abierto. %d campo(s)." % len(self.formato.fields)
+        except Exception as exc:
+            self.estado.text = "Error al abrir el archivo FDT."
+            self._mostrar_error_tecnico("Fallo al abrir el archivo FDT", exc)
+
+    def _calcular_zoom_inicial(self, width, height):
+        # ConfiguradorApp hereda de App, no de Widget: sus dimensiones se
+        # consultan en el editor ya montado o, como respaldo, en la ventana.
+        editor_ancho = self.editor.width if self.editor is not None else 0
+        editor_alto = self.editor.height if self.editor is not None else 0
+        if editor_ancho > dp(100):
+            ancho_disponible = max(dp(100), editor_ancho - dp(20))
+        else:
+            ancho_disponible = max(dp(100), Window.width - dp(40))
+        if editor_alto > dp(100):
+            alto_disponible = max(dp(100), editor_alto - dp(20))
+        else:
+            alto_disponible = max(dp(100), Window.height - dp(150))
+        return max(0.05, min(1.0, 0.82 * min(ancho_disponible / float(width), alto_disponible / float(height))))
+
+    def guardar(self):
+        self.guardar_como_fdt()
+
+    def guardar_como_fdt(self):
+        if not self.formato:
+            self._aviso("Primero importe una plantilla.")
+            return
+        if ANDROID_AVAILABLE:
+            self._abrir_selector_android("fdt", guardar=True)
+        else:
+            self._file_popup("Guardar FDT", self._guardar_ruta, guardar=True)
+
+    def _guardar_fdt_uri(self, uri):
+        if not self.formato:
+            self._aviso("Primero importe una plantilla.")
+            return
+        temporal = None
+        try:
+            validar_fdt(self.formato)
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            actividad = PythonActivity.mActivity
+            resolver = actividad.getContentResolver()
+            temporal = os.path.join(actividad.getCacheDir().getAbsolutePath(), "fdt_" + uuid.uuid4().hex + ".fdt")
+            guardar_fdt(self.formato, temporal)
+            entrada = open(temporal, "rb")
+            salida = resolver.openOutputStream(uri)
+            if salida is None:
+                raise IOError("Android no pudo abrir el destino.")
+            try:
+                from jnius import jarray
+                while True:
+                    datos = entrada.read(65536)
+                    if not datos:
+                        break
+                    salida.write(jarray("b", list(datos)))
+                salida.flush()
+            finally:
+                entrada.close()
+                salida.close()
+            self.estado.text = "FDT guardado correctamente."
+        finally:
+            if temporal and os.path.exists(temporal):
+                try:
+                    os.remove(temporal)
+                except OSError:
+                    pass
+
+    def _guardar_ruta(self, ruta):
+        try:
+            validar_fdt(self.formato)
+            guardar_fdt(self.formato, ruta)
+            self.estado.text = "FDT guardado."
+        except Exception as exc:
+            self.estado.text = "Error al guardar: " + str(exc)
+
+    def _file_popup(self, titulo, callback, imagenes=False, guardar=False):
+        layout = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(6))
+        chooser = FileChooserListView(path="/storage/emulated/0", dirselect=False)
+        if not guardar:
+            chooser.filters = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"] if imagenes else ["*.fdt"]
+            layout.add_widget(chooser)
+            def confirmar(_):
+                if chooser.selection:
+                    popup.dismiss()
+                    callback(chooser.selection[0])
+            layout.add_widget(Button(text="Abrir", size_hint_y=None, height=dp(45), on_release=confirmar))
+        else:
+            layout.add_widget(chooser)
+            nombre = TextInput(text="formato.fdt", size_hint_y=None, height=dp(42))
+            layout.add_widget(nombre)
+            def confirmar(_):
+                ruta = os.path.join(chooser.path, nombre.text.strip() or "formato.fdt")
+                if not ruta.lower().endswith(".fdt"):
+                    ruta += ".fdt"
+                popup.dismiss()
+                callback(ruta)
+            layout.add_widget(Button(text="Guardar", size_hint_y=None, height=dp(45), on_release=confirmar))
+        layout.add_widget(Button(text="Cancelar", size_hint_y=None, height=dp(45), on_release=lambda _: popup.dismiss()))
+        popup = Popup(title=titulo, content=layout, size_hint=(0.95, 0.9))
+        popup.open()
+
+    def nuevo_id(self):
         usados = {c.field_id for c in self.formato.fields}
         n = 1
         while "campo%d" % n in usados:
@@ -605,15 +1086,6 @@ class ConfiguradorApp(App):
         if len(self._undo) > 30:
             self._undo.pop(0)
         self._redo = []
-        self.mark_unsaved()
-
-    def mark_unsaved(self):
-        self.unsaved_changes = True
-        self.indicador_guardado.text = "*"
-
-    def mark_saved(self):
-        self.unsaved_changes = False
-        self.indicador_guardado.text = ""
 
     def push_undo_from_initial(self, campo, initial_position):
         if not self.formato or not self._interaction_changed:
@@ -627,7 +1099,6 @@ class ConfiguradorApp(App):
         if len(self._undo) > 30:
             self._undo.pop(0)
         self._redo = []
-        self.mark_unsaved()
 
     def _restore(self, formato):
         self.formato = copy.deepcopy(formato)
@@ -636,7 +1107,6 @@ class ConfiguradorApp(App):
         if self._visual_template_path and self.formato:
             self.editor.cargar_plantilla(self._visual_template_path)
         self.actualizar_lista_estado()
-        self.mark_unsaved()
 
     def deshacer(self):
         if not self.formato or not self._undo:
@@ -665,7 +1135,8 @@ class ConfiguradorApp(App):
         self.seleccionado = None
         self.editor.cargar_plantilla(self._visual_template_path)
         self.estado.text = "Campo eliminado."
-def mostrar_lista_campos(self):
+
+    def mostrar_lista_campos(self):
         if not self.formato:
             self._aviso("Primero importe una plantilla.")
             return
@@ -732,8 +1203,8 @@ def mostrar_lista_campos(self):
             color_b = campo_texto("Color B", campo.text_style.color.b)
             alineacion = campo_texto("Alineación", campo.text_style.alignment)
             orientacion = campo_texto("Orientación", campo.text_style.orientation)
-            negrita = campo_texto("Negrita (si/no)", "si" if getattr(campo.text_style, 'bold', False) else "no")
-            cursiva = campo_texto("Cursiva (si/no)", "si" if getattr(campo.text_style, 'italic', False) else "no")
+            negrita = campo_texto("Negrita (si/no)", "si" if campo.text_style.bold else "no")
+            cursiva = campo_texto("Cursiva (si/no)", "si" if campo.text_style.italic else "no")
 
         scroll.add_widget(form)
         contenido.add_widget(scroll)
@@ -758,27 +1229,22 @@ def mostrar_lista_campos(self):
                 campo.field_id = nuevo_id
                 campo.question = pregunta.text.strip()
                 campo.required = requerido.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-                
-                max_w = self.formato.template.width
-                max_h = self.formato.template.height
-                
-                campo.position.x = min(max(0, entero(x_in, campo.position.x)), max(0, max_w - 2))
-                campo.position.y = min(max(0, entero(y_in, campo.position.y)), max(0, max_h - 2))
+                campo.position.x = min(max(0, entero(x_in, campo.position.x)), max(0, self.formato.template.width - 2))
+                campo.position.y = min(max(0, entero(y_in, campo.position.y)), max(0, self.formato.template.height - 2))
                 campo.position.width = max(2, entero(w_in, campo.position.width))
                 campo.position.height = max(2, entero(h_in, campo.position.height))
-                
-                if campo.position.x + campo.position.width > max_w:
-                    campo.position.width = max_w - campo.position.x
-                if campo.position.y + campo.position.height > max_h:
-                    campo.position.height = max_h - campo.position.y
+                campo.position.width = min(campo.position.width, self.formato.template.width - campo.position.x)
+                campo.position.height = min(campo.position.height, self.formato.template.height - campo.position.y)
     
                 if campo.field_type == FIELD_TYPE_NUMBER:
                     if not hasattr(campo, 'validation'):
+                        from shared.models import Validation
                         campo.validation = Validation()
                     campo.validation.numeric_only = True
                     campo.validation.alphanumeric_only = False
                 elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
                     if not hasattr(campo, 'validation'):
+                        from shared.models import Validation
                         campo.validation = Validation()
                     campo.validation.numeric_only = False
                     campo.validation.alphanumeric_only = True
@@ -786,7 +1252,7 @@ def mostrar_lista_campos(self):
                 if campo.field_type != FIELD_TYPE_IMAGE:
                     campo.text_style.font_family = fuente.text.strip()
                     campo.text_style.font_size_px = max(1, entero(tamano, campo.text_style.font_size_px))
-                    campo.text_style.color = SharedColor(
+                    campo.text_style.color = FieldColor(
                         max(0, min(255, entero(color_r, campo.text_style.color.r))),
                         max(0, min(255, entero(color_g, campo.text_style.color.g))),
                         max(0, min(255, entero(color_b, campo.text_style.color.b))),
@@ -831,18 +1297,23 @@ def mostrar_lista_campos(self):
         nombre = TextInput(text=actual.name_text, hint_text="Texto fijo para el nombre", multiline=False, size_hint_y=None, height=dp(42))
         layout.add_widget(Label(text="Texto fijo del nombre"))
         layout.add_widget(nombre)
-        selectors = []
         for i in range(4):
             campo_actual = actual.field_ids[i] if i < len(actual.field_ids) else ""
             selector = TextInput(text=campo_actual, hint_text="ID de campo (opcional)", multiline=False, size_hint_y=None, height=dp(42))
             layout.add_widget(Label(text="Campo %d del nombre" % (i + 1)))
             layout.add_widget(selector)
-            selectors.append(selector)
-            
+            if i == 0:
+                s1 = selector
+            elif i == 1:
+                s2 = selector
+            elif i == 2:
+                s3 = selector
+            else:
+                s4 = selector
         def aceptar(_):
             self.push_undo()
             actual.name_text = nombre.text.strip()
-            actual.field_ids = [s.text.strip() for s in selectors if s.text.strip()]
+            actual.field_ids = [s.text.strip() for s in (s1, s2, s3, s4) if s.text.strip()]
             popup.dismiss()
             self.estado.text = "Reglas de nombre actualizadas."
         botones = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(6))
@@ -862,18 +1333,21 @@ def mostrar_lista_campos(self):
         top, bottom = sorted((y0, y1))
         tw = self.editor.template_widget
 
+        # Coordenadas relativas directas al CanvasEditor (StencilView)
         x = tw.x + left * self.scale
         y = tw.y + tw.height - bottom * self.scale
         w = max(1, (right - left) * self.scale)
         h = max(1, (bottom - top) * self.scale)
 
+        # Usamos Widget simple en lugar de FloatLayout para evitar conflictos de layout
+        from kivy.uix.widget import Widget
         widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
         with widget.canvas:
-            from kivy.graphics import Color, Line
             Color(0, 0, 0, 1)
             Line(rectangle=(0, 0, w, h), width=3)
 
         self._drawing_widget = widget
+        # Se agrega directamente al editor, no a una capa intermedia
         self.editor.add_widget(widget)
 
     def clear_drawing_preview(self):
@@ -897,10 +1371,13 @@ def mostrar_lista_campos(self):
         viejo_scale = self.scale
 
         if anchor is None:
+            # El centro se calcula en coordenadas locales del editor.
             anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
         else:
-            # CORRECCIÓN CRÍTICA PARA ANDROID
-            anchor_local = self.editor.to_local(*anchor)
+            # 'anchor' viene en coordenadas de ventana (touch.pos).
+            # Convertirlo a coordenadas locales del editor correctamente.
+            wx, wy = self.editor.to_window(0, 0)
+            anchor_local = (anchor[0] - wx, anchor[1] - wy)
 
         doc_x = (anchor_local[0] - tw.x) / viejo_scale
         doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
@@ -908,16 +1385,16 @@ def mostrar_lista_campos(self):
         self.scale = nuevo_scale
         self.editor.scale = self.scale
 
-        new_w = self.formato.template.width * self.scale
-        new_h = self.formato.template.height * self.scale
-        tw.size = (new_w, new_h)
-
+        tw.size = (
+            self.formato.template.width * self.scale,
+            self.formato.template.height * self.scale,
+        )
         tw.pos = (
             anchor_local[0] - doc_x * self.scale,
             anchor_local[1] - doc_y_bottom * self.scale,
         )
-        
         self.editor.constrain_template_position()
+
         self.editor.refresh_fields()
         self.actualizar_zoom()
 
@@ -932,10 +1409,13 @@ def mostrar_lista_campos(self):
             self.estado.text = "Listo."
 
     def _mostrar_error_tecnico(self, titulo, exc):
+        """Programa el diagnóstico en el hilo de Kivy para que Android sí lo dibuje."""
         detalle = traceback.format_exc()
         if not detalle or detalle.strip() == "NoneType: None":
             detalle = str(exc)
         texto = "ETAPA: " + titulo + "\n\nERROR: " + str(exc) + "\n\nDETALLE TÉCNICO:\n" + detalle
+        # El resultado del selector Android puede llegar desde un callback Java.
+        # Los widgets Kivy deben crearse/abrirse en el hilo principal.
         Clock.schedule_once(lambda _dt: self._abrir_popup_error_tecnico(titulo, texto), 0)
 
     def _abrir_popup_error_tecnico(self, titulo, texto):
@@ -960,197 +1440,7 @@ def mostrar_lista_campos(self):
 
     def _aviso(self, mensaje):
         Popup(title="Formatos Traducidos", content=Label(text=mensaje), size_hint=(0.8, 0.3)).open()
-# --- LÓGICA DEL MENÚ HAMBURGUESA COMPLETO ---
-    def abrir_menu(self):
-        items = [
-            ("Nuevo Formato", self.nuevo_formato),
-            ("Importar Plantilla...", self.importar_plantilla_dialog),
-            ("Abrir FDT...", self.abrir_fdt_dialog),
-            ("Guardar FDT", self.guardar_fdt_action),
-            ("Guardar Como...", self.guardar_como_fdt_dialog),
-            ("---", None),
-            ("Lista de Campos", self.mostrar_lista_campos),
-            ("Archivo Terminado (Nombre)", self.editar_salida),
-            ("Eliminar Campo Seleccionado", self.eliminar_campo),
-            ("---", None),
-            ("Deshacer", self.deshacer),
-            ("Rehacer", self.rehacer),
-        ]
 
-        panel = ModalView(size_hint=(0.8, 0.8), background_color=(0.05, 0.05, 0.05, 0.98), background="")
-        root = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(8))
-        encabezado = BoxLayout(size_hint_y=None, height=dp(50))
-        encabezado.add_widget(Label(text="MENÚ PRINCIPAL", font_size="19sp"))
-        encabezado.add_widget(Button(text="X", size_hint_x=None, width=dp(48), on_release=lambda _: panel.dismiss()))
-        root.add_widget(encabezado)
-        
-        scroll = ScrollView()
-        lista = GridLayout(cols=1, spacing=dp(4), size_hint_y=None)
-        lista.bind(minimum_height=lista.setter("height"))
-        
-        for texto, funcion in items:
-            if texto == "---":
-                sep = Label(text="", size_hint_y=None, height=dp(2), background_color=(0.3,0.3,0.3,1))
-                lista.add_widget(sep)
-            else:
-                b = Button(text=texto, size_hint_y=None, height=dp(50), halign="left")
-                b.bind(size=lambda inst, val: setattr(inst, "text_size", (val[0] - dp(15), val[1])))
-                b.bind(on_release=lambda _, f=funcion: (panel.dismiss(), f()))
-                lista.add_widget(b)
-                
-        scroll.add_widget(lista)
-        root.add_widget(scroll)
-        panel.add_widget(root)
-        panel.open()
-
-    def nuevo_formato(self):
-        if self.unsaved_changes:
-            resp = self.confirmar_descartar()
-            if not resp: return
-        self.formato = None
-        self.seleccionado = None
-        self._visual_template_path = None
-        self._current_fdt_path = None
-        self.editor.clear_widgets()
-        self.editor.template_widget = None
-        self.mark_saved()
-        self.estado.text = "Nuevo formato listo. Importe una plantilla."
-
-    def confirmar_descartar(self):
-        self._aviso("Hay cambios sin guardar. Use 'Guardar' antes de continuar.")
-        return False
-
-    def importar_plantilla_dialog(self):
-        from kivy.uix.filechooser import FileChooserListView
-        panel = ModalView(size_hint=(0.9, 0.9), background_color=(0.1, 0.1, 0.1, 0.98))
-        root = BoxLayout(orientation="vertical")
-        fc = FileChooserListView(path=os.path.expanduser("~/"))
-        
-        def accion(_, selection):
-            if not selection: return
-            ruta = selection[0]
-            if not os.path.isfile(ruta): return
-            try:
-                img = CoreImage(ruta)
-                if img.texture is None: raise Exception("Textura inválida")
-                
-                self.formato = Formato(
-                    name=os.path.splitext(os.path.basename(ruta))[0],
-                    template=TemplateInfo(
-                        path=ruta,
-                        width=img.width,
-                        height=img.height,
-                        dpi=300,
-                        mode="RGB",
-                    ),
-                )
-                self._visual_template_path = ruta
-                self._current_fdt_path = None 
-                self.seleccionado = None
-                self.editor.cargar_plantilla(ruta)
-                self.mark_unsaved()
-                self.estado.text = "Plantilla importada: %dx%d" % (img.width, img.height)
-                panel.dismiss()
-            except Exception as e:
-                self._aviso("Error al importar: %s" % str(e))
-
-        fc.bind(on_submit=accion)
-        root.add_widget(fc)
-        root.add_widget(Button(text="Cancelar", size_hint_y=None, height=dp(50), on_release=lambda _: panel.dismiss()))
-        panel.add_widget(root)
-        panel.open()
-
-    def abrir_fdt_dialog(self):
-        from kivy.uix.filechooser import FileChooserListView
-        panel = ModalView(size_hint=(0.9, 0.9), background_color=(0.1, 0.1, 0.1, 0.98))
-        root = BoxLayout(orientation="vertical")
-        fc = FileChooserListView(path=os.path.expanduser("~/"))
-        
-        def accion(_, selection):
-            if not selection: return
-            ruta = selection[0]
-            if not os.path.isfile(ruta): return
-            if not ruta.lower().endswith('.fdt'):
-                self._aviso("Por favor seleccione un archivo .fdt")
-                return
-            try:
-                formato = cargar_fdt(ruta)
-                if not os.path.exists(formato.template.path):
-                     self._aviso("La plantilla asociada no fue encontrada:\n%s" % formato.template.path)
-                     return
-                
-                img = CoreImage(formato.template.path)
-                if img.width != formato.template.width or img.height != formato.template.height:
-                     self._aviso("Dimensiones de plantilla cambiaron. Reimporte la plantilla.")
-                     return
-
-                self.formato = formato
-                self._visual_template_path = formato.template.path
-                self._current_fdt_path = ruta
-                self.seleccionado = None
-                self.editor.cargar_plantilla(formato.template.path)
-                self.mark_saved()
-                self.estado.text = "FDT Abierto: %s" % os.path.basename(ruta)
-                panel.dismiss()
-            except Exception as e:
-                self._aviso("Error al abrir FDT: %s" % str(e))
-
-        fc.bind(on_submit=accion)
-        root.add_widget(fc)
-        root.add_widget(Button(text="Cancelar", size_hint_y=None, height=dp(50), on_release=lambda _: panel.dismiss()))
-        panel.add_widget(root)
-        panel.open()
-
-    def guardar_fdt_action(self):
-        if not self.formato:
-            self._aviso("No hay formato activo.")
-            return
-        if not self._current_fdt_path:
-            self.guardar_como_fdt_dialog()
-            return
-        try:
-            validar_fdt(self.formato)
-            guardar_fdt(self.formato, self._current_fdt_path)
-            self.mark_saved()
-            self.estado.text = "Guardado: %s" % os.path.basename(self._current_fdt_path)
-        except Exception as e:
-            self._aviso("Error al guardar: %s" % str(e))
-
-    def guardar_como_fdt_dialog(self):
-        if not self.formato:
-            self._aviso("Primero importe una plantilla.")
-            return
-        
-        dialog = Popup(title="Guardar Como", size_hint=(0.8, 0.4))
-        layout = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(10))
-        input_nombre = TextInput(text=os.path.splitext(os.path.basename(self.formato.name))[0] if self.formato.name else "mi_formato", 
-                                 hint_text="Nombre del archivo (.fdt)", multiline=False, size_hint_y=None, height=dp(50))
-        layout.add_widget(input_nombre)
-        botones = BoxLayout(spacing=dp(10))
-        botones.add_widget(Button(text="Cancelar", on_release=lambda _: dialog.dismiss()))
-        
-        def guardar():
-            nombre = input_nombre.text.strip()
-            if not nombre: return
-            if not nombre.endswith(".fdt"): nombre += ".fdt"
-            import pathlib
-            home = pathlib.Path.home()
-            ruta_destino = home / nombre
-            
-            try:
-                validar_fdt(self.formato)
-                guardar_fdt(self.formato, str(ruta_destino))
-                self._current_fdt_path = str(ruta_destino)
-                self.mark_saved()
-                self.estado.text = "Guardado como: %s" % nombre
-                dialog.dismiss()
-            except Exception as e:
-                self._aviso("Error: %s" % str(e))
-
-        botones.add_widget(Button(text="Guardar", on_release=lambda _: guardar()))
-        layout.add_widget(botones)
-        dialog.content = layout
-        dialog.open()
 
 if __name__ == "__main__":
     ConfiguradorApp().run()
