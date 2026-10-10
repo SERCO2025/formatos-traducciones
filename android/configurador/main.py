@@ -105,10 +105,10 @@ class CampoWidget(FloatLayout):
         self.canvas.before.clear()
         with self.canvas.before:
             Color(0, 0, 0, 1)
-            Line(rectangle=(0, 0, self.width, self.height), width=2.0)
+            Line(rectangle=(self.x, self.y, self.width, self.height), width=2.0)
             if self.editor.app.seleccionado is self.campo:
                 Color(0.0, 0.75, 1.0, 1)
-                Line(rectangle=(0, 0, self.width, self.height), width=3.0)
+                Line(rectangle=(self.x, self.y, self.width, self.height), width=3.0)
 
         self.canvas.after.clear()
         if self.editor.app.seleccionado is self.campo:
@@ -116,10 +116,10 @@ class CampoWidget(FloatLayout):
                 Color(0.0, 0.75, 1.0, 1)
                 s = min(dp(12), max(dp(7), min(self.width, self.height) / 5.0))
                 points = [
-                    (0, 0), (self.width / 2, 0), (self.width, 0),
-                    (0, self.height / 2), (self.width, self.height / 2),
-                    (0, self.height), (self.width / 2, self.height),
-                    (self.width, self.height / 2), (self.width, self.height),
+                    (self.x, self.y), (self.x + self.width / 2, self.y), (self.x + self.width, self.y),
+                    (self.x, self.y + self.height / 2), (self.x + self.width, self.y + self.height / 2),
+                    (self.x, self.y + self.height), (self.x + self.width / 2, self.y + self.height),
+                    (self.x + self.width, self.y + self.height / 2), (self.x + self.width, self.y + self.height),
                 ]
                 for x, y in points:
                     Line(points=(x - s/2, y, x + s/2, y), width=2)
@@ -242,24 +242,23 @@ class CanvasEditor(StencilView):
         tw = self.template_widget
         if tw is None:
             return
-        # La posición de los hijos de CanvasEditor se expresa desde su origen (0, 0).
+        # Kivy mantiene las posiciones de los widgets en coordenadas de ventana.
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
-            x = (self.width - tw.width) / 2.0
+            x = self.x + (self.width - tw.width) / 2.0
         else:
-            x = min(0, max(self.width - tw.width, x))
+            x = min(self.x, max(self.right - tw.width, x))
         if tw.height <= self.height:
-            y = (self.height - tw.height) / 2.0
+            y = self.y + (self.height - tw.height) / 2.0
         else:
-            y = min(0, max(self.height - tw.height, y))
+            y = min(self.y, max(self.top - tw.height, y))
         tw.pos = (x, y)
 
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
-        # to_local convierte automáticamente las coordenadas de ventana a locales del StencilView
-        local_x, local_y = self.to_local(touch.x, touch.y)
-        return self.template_widget.collide_point(local_x, local_y)
+        # El toque y la plantilla usan el mismo sistema de coordenadas de ventana.
+        return self.template_widget.collide_point(touch.x, touch.y)
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -354,15 +353,9 @@ class CanvasEditor(StencilView):
         if tw is None or not self.app.formato:
             return 0, 0
 
-        # Obtener la posición del CanvasEditor en coordenadas de ventana
-        # para convertir correctamente el toque absoluto a coordenadas locales.
-        wx, wy = self.to_window(0, 0)
-        local_x = touch.x - wx
-        local_y = touch.y - wy
-
-        # Coordenadas relativas a la esquina superior izquierda de la plantilla.
-        rel_x = local_x - tw.x
-        rel_y_from_top = (tw.y + tw.height) - local_y
+        # touch.x/y y tw.x/y ya están en coordenadas de ventana.
+        rel_x = touch.x - tw.x
+        rel_y_from_top = (tw.y + tw.height) - touch.y
 
         doc_x = rel_x / self.app.scale
         doc_y = rel_y_from_top / self.app.scale
@@ -469,7 +462,7 @@ class CanvasEditor(StencilView):
             self.pan_template_pos = None
             return True
 
-        if not self.start_touch:
+        if self.start_touch is None:
             return super().on_touch_up(touch)
 
         tool = self.app.tool
@@ -1344,7 +1337,7 @@ class ConfiguradorApp(App):
         widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
         with widget.canvas:
             Color(0, 0, 0, 1)
-            Line(rectangle=(0, 0, w, h), width=3)
+            Line(rectangle=(x, y, w, h), width=3)
 
         self._drawing_widget = widget
         # Se agrega directamente al editor, no a una capa intermedia
@@ -1371,13 +1364,11 @@ class ConfiguradorApp(App):
         viejo_scale = self.scale
 
         if anchor is None:
-            # El centro se calcula en coordenadas locales del editor.
-            anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
+            # El centro y el ancla están en coordenadas de ventana,
+            # igual que la posición de la plantilla.
+            anchor_local = self.editor.center
         else:
-            # 'anchor' viene en coordenadas de ventana (touch.pos).
-            # Convertirlo a coordenadas locales del editor correctamente.
-            wx, wy = self.editor.to_window(0, 0)
-            anchor_local = (anchor[0] - wx, anchor[1] - wy)
+            anchor_local = anchor
 
         doc_x = (anchor_local[0] - tw.x) / viejo_scale
         doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
