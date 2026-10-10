@@ -237,28 +237,29 @@ class CanvasEditor(StencilView):
             self.refresh_fields()
 
     def constrain_template_position(self, pos=None):
-        """Centra plantillas pequeñas y limita el desplazamiento de las grandes."""
+        """Centra plantillas pequeñas y limita el desplazamiento en coordenadas locales."""
         tw = self.template_widget
         if tw is None:
             return
-        # StencilView no transforma las coordenadas de sus hijos a un origen
-        # local: plantilla y toque deben permanecer en coordenadas del padre.
+        # La posición de los hijos de CanvasEditor se expresa desde su origen (0, 0).
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
-            x = self.x + (self.width - tw.width) / 2.0
+            x = (self.width - tw.width) / 2.0
         else:
-            x = min(self.x, max(self.right - tw.width, x))
+            x = min(0, max(self.width - tw.width, x))
         if tw.height <= self.height:
-            y = self.y + (self.height - tw.height) / 2.0
+            y = (self.height - tw.height) / 2.0
         else:
-            y = min(self.y, max(self.top - tw.height, y))
+            y = min(0, max(self.height - tw.height, y))
         tw.pos = (x, y)
 
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
-        # collide_point recibe coordenadas de ventana en Kivy.
-        return self.template_widget.collide_point(touch.x, touch.y)
+        # Convertir el toque de ventana a coordenadas locales de CanvasEditor.
+        local_x = touch.x - self.x
+        local_y = touch.y - self.y
+        return self.template_widget.collide_point(local_x, local_y)
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -348,21 +349,24 @@ class CanvasEditor(StencilView):
                 widget.actualizar()
 
     def _document_point(self, touch):
-        """Convierte un toque de pantalla a píxeles del documento (origen arriba-izquierda)."""
+        """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
         tw = self.template_widget
         if tw is None or not self.app.formato:
             return 0, 0
 
-        # En esta jerarquía, el toque y la posición del hijo usan coordenadas del padre.
-        # No usar tw.to_widget() sin relative=True: no resta la posición propia del widget.
-        rel_x = touch.x - tw.x
-        rel_y_from_top = (tw.y + tw.height) - touch.y
+        # Primero, toque de ventana a coordenadas locales de CanvasEditor.
+        local_x = touch.x - self.x
+        local_y = touch.y - self.y
 
-        x = rel_x / self.app.scale
-        y = rel_y_from_top / self.app.scale
-        x = max(0, min(self.app.formato.template.width, x))
-        y = max(0, min(self.app.formato.template.height, y))
-        return int(round(x)), int(round(y))
+        # Después, coordenadas relativas a la esquina superior izquierda de la plantilla.
+        rel_x = local_x - tw.x
+        rel_y_from_top = (tw.y + tw.height) - local_y
+
+        doc_x = rel_x / self.app.scale
+        doc_y = rel_y_from_top / self.app.scale
+        doc_x = max(0, min(self.app.formato.template.width, doc_x))
+        doc_y = max(0, min(self.app.formato.template.height, doc_y))
+        return int(round(doc_x)), int(round(doc_y))
 
     def _inside_template(self, touch):
         return self._touch_inside_template(touch)
@@ -749,17 +753,17 @@ class ConfiguradorApp(App):
         self.estado_menu.text = nombres.get(tool, str(tool))
 
     def template_position(self):
-        # StencilView coloca a sus hijos en coordenadas del padre.
+        # Las coordenadas son relativas al CanvasEditor (StencilView).
         if not self.formato:
-            return (self.editor.x + dp(20), self.editor.y + dp(20))
+            return (dp(20), dp(20))
         ancho = self.formato.template.width * self.scale
         alto = self.formato.template.height * self.scale
-        x = self.editor.x + (self.editor.width - ancho) / 2.0
-        y = self.editor.y + (self.editor.height - alto) / 2.0
+        x = (self.editor.width - ancho) / 2.0
+        y = (self.editor.height - alto) / 2.0
         if ancho > self.editor.width:
-            x = self.editor.x
+            x = 0
         if alto > self.editor.height:
-            y = self.editor.y
+            y = 0
         return x, y
 
     def nuevo(self):
@@ -1360,13 +1364,11 @@ class ConfiguradorApp(App):
         viejo_scale = self.scale
 
         if anchor is None:
-            anchor_local = (
-                self.editor.x + self.editor.width / 2.0,
-                self.editor.y + self.editor.height / 2.0,
-            )
+            # El centro se calcula en coordenadas locales del editor.
+            anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
         else:
-            # El ancla y la plantilla usan el mismo sistema de coordenadas.
-            anchor_local = anchor
+            # Los eventos táctiles entregan coordenadas de ventana.
+            anchor_local = (anchor[0] - self.editor.x, anchor[1] - self.editor.y)
 
         doc_x = (anchor_local[0] - tw.x) / viejo_scale
         doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
