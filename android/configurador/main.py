@@ -744,6 +744,15 @@ class ConfiguradorApp(App):
             self._mostrar_error_tecnico("No se pudo abrir el selector", exc)
 
     def _on_android_activity_result(self, request_code, result_code, intent):
+        # El callback de Android puede ejecutarse fuera del hilo gráfico de Kivy.
+        # Toda operación que actualice widgets o cree instrucciones gráficas debe
+        # ejecutarse en el hilo principal.
+        Clock.schedule_once(
+            lambda _dt: self._procesar_resultado_android(request_code, result_code, intent),
+            0,
+        )
+
+    def _procesar_resultado_android(self, request_code, result_code, intent):
         if request_code != 4001 or not self._android_callback:
             return
         tipo, guardar = self._android_callback
