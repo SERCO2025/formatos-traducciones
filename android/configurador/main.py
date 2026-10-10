@@ -1006,12 +1006,14 @@ class ConfiguradorApp(App):
             if salida is None:
                 raise IOError("Android no pudo abrir el destino.")
             try:
-                from jnius import jarray
+                # Esta compilación de PyJNIus no incluye jarray.
+                # Pasar bytearray al método Java, igual que en la copia desde URI.
                 while True:
                     datos = entrada.read(65536)
                     if not datos:
                         break
-                    salida.write(jarray("b", list(datos)))
+                    buffer = bytearray(datos)
+                    salida.write(buffer, 0, len(buffer))
                 salida.flush()
             finally:
                 entrada.close()
