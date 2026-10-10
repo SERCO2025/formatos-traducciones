@@ -172,11 +172,13 @@ class CampoWidget(FloatLayout):
         return None
 
     def on_touch_down(self, touch):
-        if not self.collide_point(*touch.pos):
+        # Los eventos táctiles llegan en coordenadas de ventana; convertirlos
+        # antes de compararlos con la posición local de este widget.
+        local_x, local_y = self.to_widget(touch.x, touch.y)
+        if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
         if self.editor.app.tool == "select":
-            local = self.to_widget(*touch.pos)
-            handle = self._handle_at(*local)
+            handle = self._handle_at(local_x, local_y)
             self.editor.begin_field_interaction(self.campo, touch, handle)
             return True
         return super().on_touch_down(touch)
@@ -236,19 +238,28 @@ class CanvasEditor(StencilView):
         tw = self.template_widget
         if tw is None:
             return
+        # Los hijos de CanvasEditor usan coordenadas locales: el origen es
+        # (0, 0), no la posición del editor dentro de la ventana.
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
-            x = self.x + (self.width - tw.width) / 2.0
+            x = (self.width - tw.width) / 2.0
         else:
-            x = min(self.x, max(self.right - tw.width, x))
+            x = min(0.0, max(self.width - tw.width, x))
         if tw.height <= self.height:
-            y = self.y + (self.height - tw.height) / 2.0
+            y = (self.height - tw.height) / 2.0
         else:
-            y = min(self.y, max(self.top - tw.height, y))
+            y = min(0.0, max(self.height - tw.height, y))
         tw.pos = (x, y)
 
+    def _editor_point(self, touch):
+        """Convierte una posición táctil de ventana a coordenadas locales del lienzo."""
+        return self.to_widget(touch.x, touch.y)
+
     def _touch_inside_template(self, touch):
-        return self.template_widget is not None and self.template_widget.collide_point(*touch.pos)
+        if self.template_widget is None:
+            return False
+        x, y = self._editor_point(touch)
+        return self.template_widget.collide_point(x, y)
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -340,12 +351,10 @@ class CanvasEditor(StencilView):
     def _document_point(self, touch):
         if not self.template_widget or not self.app.formato:
             return 0, 0
-        # La posición de la plantilla se calcula con editor.x/editor.y y se
-        # compara con touch.x/touch.y, ambos en coordenadas de ventana.
-        # No convertir el toque a coordenadas locales: eso mezcla sistemas y
-        # desplaza todos los campos por la misma cantidad.
-        x = (touch.x - self.template_widget.x) / self.app.scale
-        y_bottom = (touch.y - self.template_widget.y) / self.app.scale
+        # La plantilla y sus campos están en coordenadas locales del lienzo.
+        touch_x, touch_y = self._editor_point(touch)
+        x = (touch_x - self.template_widget.x) / self.app.scale
+        y_bottom = (touch_y - self.template_widget.y) / self.app.scale
         # El documento usa origen en la esquina superior izquierda.
         y = self.app.formato.template.height - y_bottom
         x = max(0, min(self.app.formato.template.width, x))
@@ -353,10 +362,15 @@ class CanvasEditor(StencilView):
         return int(round(x)), int(round(y))
 
     def _inside_template(self, touch):
-        return self.template_widget is not None and self.template_widget.collide_point(*touch.pos)
+        return self._touch_inside_template(touch)
 
     def on_touch_down(self, touch):
-        if not self.collide_point(*touch.pos):
+        # collide_point espera coordenadas del padre; el toque está en ventana.
+        if self.parent is not None:
+            parent_x, parent_y = self.parent.to_widget(touch.x, touch.y)
+        else:
+            parent_x, parent_y = touch.x, touch.y
+        if not self.collide_point(parent_x, parent_y):
             return False
 
         if self._touch_inside_template(touch):
@@ -731,16 +745,17 @@ class ConfiguradorApp(App):
         self.estado_menu.text = nombres.get(tool, str(tool))
 
     def template_position(self):
+        # La plantilla es hija de CanvasEditor: su posición debe ser local.
         if not self.formato:
             return (dp(20), dp(20))
         ancho = self.formato.template.width * self.scale
         alto = self.formato.template.height * self.scale
-        x = self.editor.x + (self.editor.width - ancho) / 2.0
-        y = self.editor.y + (self.editor.height - alto) / 2.0
+        x = (self.editor.width - ancho) / 2.0
+        y = (self.editor.height - alto) / 2.0
         if ancho > self.editor.width:
-            x = self.editor.x
+            x = 0.0
         if alto > self.editor.height:
-            y = self.editor.y
+            y = 0.0
         return x, y
 
     def nuevo(self):
@@ -1339,13 +1354,14 @@ class ConfiguradorApp(App):
         viejo_scale = self.scale
 
         if anchor is None:
-            anchor = (
-                self.editor.x + self.editor.width / 2.0,
-                self.editor.y + self.editor.height / 2.0,
-            )
+            anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
+        else:
+            # Los puntos de zoom (toque o centro del gesto de pellizco) llegan
+            # en coordenadas de ventana; la plantilla usa coordenadas locales.
+            anchor_local = self.editor.to_widget(anchor[0], anchor[1])
 
-        doc_x = (anchor[0] - tw.x) / viejo_scale
-        doc_y_bottom = (anchor[1] - tw.y) / viejo_scale
+        doc_x = (anchor_local[0] - tw.x) / viejo_scale
+        doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
 
         self.scale = nuevo_scale
         self.editor.scale = self.scale
@@ -1355,8 +1371,8 @@ class ConfiguradorApp(App):
             self.formato.template.height * self.scale,
         )
         tw.pos = (
-            anchor[0] - doc_x * self.scale,
-            anchor[1] - doc_y_bottom * self.scale,
+            anchor_local[0] - doc_x * self.scale,
+            anchor_local[1] - doc_y_bottom * self.scale,
         )
         self.editor.constrain_template_position()
 
