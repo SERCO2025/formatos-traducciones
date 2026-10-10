@@ -126,13 +126,28 @@ class CapturadorApp(App):
         return root
 
     def _mensaje(self, titulo, mensaje):
-        contenido = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
-        texto = Label(text=str(mensaje), halign="left", valign="middle")
-        texto.bind(size=lambda obj, size: setattr(obj, "text_size", size))
-        contenido.add_widget(texto)
+        # Los tracebacks largos deben poder desplazarse; el Label anterior
+        # quedaba recortado y ocultaba precisamente la excepción final.
+        contenido = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(8))
+        texto = Label(
+            text=str(mensaje),
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            font_size="12sp",
+            text_size=(dp(320), None),
+        )
+        def ajustar_ancho(obj, ancho):
+            obj.text_size = (max(dp(220), ancho - dp(8)), None)
+        def ajustar_alto(obj, textura):
+            obj.height = textura[1] + dp(16)
+        texto.bind(width=ajustar_ancho, texture_size=ajustar_alto)
+        scroll.add_widget(texto)
+        contenido.add_widget(scroll)
         boton = Button(text="Aceptar", size_hint_y=None, height=dp(46))
         contenido.add_widget(boton)
-        popup = Popup(title=titulo, content=contenido, size_hint=(0.9, 0.55), auto_dismiss=False)
+        popup = Popup(title=titulo, content=contenido, size_hint=(0.96, 0.82), auto_dismiss=False)
         boton.bind(on_release=popup.dismiss)
         popup.open()
 
