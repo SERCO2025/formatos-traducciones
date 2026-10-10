@@ -340,11 +340,12 @@ class CanvasEditor(StencilView):
     def _document_point(self, touch):
         if not self.template_widget or not self.app.formato:
             return 0, 0
-        # El toque llega en coordenadas de ventana; el lienzo y la plantilla
-        # usan coordenadas locales del CanvasEditor.
-        local_x, local_y = self.to_widget(touch.x, touch.y)
-        x = (local_x - self.template_widget.x) / self.app.scale
-        y_bottom = (local_y - self.template_widget.y) / self.app.scale
+        # La posición de la plantilla se calcula con editor.x/editor.y y se
+        # compara con touch.x/touch.y, ambos en coordenadas de ventana.
+        # No convertir el toque a coordenadas locales: eso mezcla sistemas y
+        # desplaza todos los campos por la misma cantidad.
+        x = (touch.x - self.template_widget.x) / self.app.scale
+        y_bottom = (touch.y - self.template_widget.y) / self.app.scale
         # El documento usa origen en la esquina superior izquierda.
         y = self.app.formato.template.height - y_bottom
         x = max(0, min(self.app.formato.template.width, x))
