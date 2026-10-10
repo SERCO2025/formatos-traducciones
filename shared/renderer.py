@@ -241,6 +241,8 @@ def renderizar_imagen(formato, respuestas):
         )
         color = (estilo.color.r, estilo.color.g, estilo.color.b)
 
+        y_texto = posicion.y + 10
+
         if estilo.orientation == "vertical":
             caja = Image.new(
                 "RGBA",
@@ -256,7 +258,7 @@ def renderizar_imagen(formato, respuestas):
                 anchor="la",
             )
             caja = caja.rotate(90, expand=True)
-            imagen.paste(caja, (posicion.x, posicion.y), caja)
+            imagen.paste(caja, (posicion.x, y_texto), caja)
             continue
 
         if estilo.alignment == "justify":
@@ -308,13 +310,13 @@ def renderizar_imagen(formato, respuestas):
             continue
 
         if estilo.alignment == "center":
-            xy = (posicion.x + posicion.width // 2, posicion.y)
+            xy = (posicion.x + posicion.width // 2, y_texto)
             anchor = "mt"
         elif estilo.alignment == "right":
-            xy = (posicion.x + posicion.width, posicion.y)
+            xy = (posicion.x + posicion.width, y_texto)
             anchor = "rt"
         else:
-            xy = (posicion.x, posicion.y)
+            xy = (posicion.x, y_texto)
             anchor = "lt"
 
         if "\n" in texto:
@@ -335,7 +337,7 @@ def renderizar_imagen(formato, respuestas):
                 x_texto = posicion.x - caja_texto[0]
 
             dibujo.multiline_text(
-                (x_texto, posicion.y),
+                (x_texto, y_texto),
                 texto,
                 fill=color,
                 font=fuente,
