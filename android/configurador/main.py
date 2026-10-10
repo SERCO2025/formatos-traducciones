@@ -216,6 +216,16 @@ class CanvasEditor(StencilView):
         self._pinch_last_midpoint = None
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
+    @property
+    def seleccionado(self):
+        # La selección es propiedad del ConfiguradorApp; los widgets del
+        # lienzo consultan esta propiedad para mantener una única fuente de verdad.
+        return getattr(self.app, "seleccionado", None)
+
+    @seleccionado.setter
+    def seleccionado(self, campo):
+        self.app.seleccionado = campo
+
     def _viewport_changed(self, *_args):
         if self.template_widget is not None:
             self.constrain_template_position()
