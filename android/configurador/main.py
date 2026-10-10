@@ -1428,7 +1428,7 @@ class ConfiguradorApp(App):
             )
             fila_estilo.add_widget(boton_negrita)
             fila_estilo.add_widget(boton_cursiva)
-            fila_estilo.add_widget(Label(text="Alineación del párrafo", halign="left"))
+            fila_estilo.add_widget(Label(text="Alineación", halign="left"))
             alineaciones = {
                 "Izquierda": "left",
                 "Centro": "center",
@@ -1471,9 +1471,10 @@ class ConfiguradorApp(App):
             ))
             fila_color = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
             color_boton = Button(
-                text="  Seleccionar color",
-                size_hint_x=None,
-                width=dp(185),
+                text="",
+                size_hint=(None, None),
+                width=dp(42),
+                height=dp(42),
                 background_normal="",
                 background_color=(
                     estilo.color.r / 255.0,
@@ -1504,6 +1505,10 @@ class ConfiguradorApp(App):
                 entrada.bind(text=actualizar_muestra_color)
 
             def abrir_selector_color(_boton):
+                # Selector inspirado en el panel SERCO: muestra de color y paleta HSV.
+                # La importación debe ocurrir antes de convertir el RGB actual;
+                # de otro modo NameError cerraba la aplicación al tocar la muestra.
+                from colorsys import hsv_to_rgb, rgb_to_hsv
                 ventana_color = ModalView(size_hint=(0.92, 0.78), background_color=(0.08, 0.08, 0.08, 1))
                 raiz_color = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
                 raiz_color.add_widget(Label(text="Selector HSV: elija el tono y después el matiz/brillo", size_hint_y=None, height=dp(38)))
@@ -1514,7 +1519,6 @@ class ConfiguradorApp(App):
                 )[0]
                 selector_hue = Slider(min=0, max=1, value=tono_inicial, size_hint_y=None, height=dp(35))
                 # La paleta se dibuja en un lienzo 2D: saturación horizontal y valor vertical.
-                from colorsys import hsv_to_rgb, rgb_to_hsv
                 from io import BytesIO
                 from PIL import Image as PILImage
                 class PaletaSV(Widget):
