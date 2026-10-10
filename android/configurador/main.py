@@ -146,6 +146,10 @@ class CampoWidget(FloatLayout):
             text=texto,
             markup=True,
             size_hint=(1, 1),
+            # FloatLayout no coloca automáticamente en el origen del padre
+            # a un hijo con size_hint si no tiene pos_hint. Sin esto, el texto
+            # podía quedarse en la esquina inferior izquierda de la pantalla.
+            pos_hint={"x": 0, "y": 0},
             color=(
                 estilo.color.r / 255.0,
                 estilo.color.g / 255.0,
