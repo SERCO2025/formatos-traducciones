@@ -22,8 +22,11 @@ from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.slider import Slider
+from kivy.uix.spinner import Spinner
 from kivy.uix.stencilview import StencilView
 from kivy.uix.textinput import TextInput
+from kivy.uix.widget import Widget
 
 try:
     from android import activity
@@ -127,25 +130,35 @@ class CampoWidget(FloatLayout):
 
         self.clear_widgets()
         if self.campo.field_type == FIELD_TYPE_IMAGE:
-            texto = "%d  IMAGEN" % self.campo.order
+            texto = "IMAGEN"
+        elif self.campo.field_type == FIELD_TYPE_NUMBER:
+            texto = "12345"
+        elif self.campo.field_type == FIELD_TYPE_ALPHANUMERIC:
+            texto = "ABC123"
         else:
-            texto = self.campo.text or ("%d  %s" % (self.campo.order, self.campo.field_type))
+            texto = "ABCDE"
+        estilo = self.campo.text_style
+        if estilo.bold:
+            texto = "[b]" + texto + "[/b]"
+        if estilo.italic:
+            texto = "[i]" + texto + "[/i]"
         etiqueta = Label(
             text=texto,
+            markup=True,
             size_hint=(1, 1),
             color=(
-                self.campo.text_style.color.r / 255.0,
-                self.campo.text_style.color.g / 255.0,
-                self.campo.text_style.color.b / 255.0,
+                estilo.color.r / 255.0,
+                estilo.color.g / 255.0,
+                estilo.color.b / 255.0,
                 1,
             ),
-            font_size=max(dp(9), self.campo.text_style.font_size_px * self.editor.scale),
-            halign=self.campo.text_style.alignment if self.campo.text_style.alignment in ("left", "center", "right") else "left",
+            font_size=max(dp(7), estilo.font_size_px * self.editor.scale),
+            halign=estilo.alignment if estilo.alignment in ("left", "center", "right") else "left",
             valign="middle",
         )
         etiqueta.bind(size=lambda inst, value: setattr(inst, "text_size", value))
-        if self.campo.text_style.font_family and os.path.isfile(self.campo.text_style.font_family):
-            etiqueta.font_name = self.campo.text_style.font_family
+        if estilo.font_family and os.path.isfile(estilo.font_family):
+            etiqueta.font_name = estilo.font_family
         self.add_widget(etiqueta)
 
     def _handle_at(self, x, y):
@@ -485,17 +498,27 @@ class CanvasEditor(StencilView):
             return True
 
         self.app.push_undo()
-        campo = Field(
-            field_id=self.app.nuevo_id(),
-            question="",
-            field_type=tool,
-            position=Position(left, top, width, height),
-            text_style=TextStyle(
+        # Los campos de texto, número y alfanumérico comparten los últimos
+        # atributos tipográficos usados; el tipo solo cambia el ejemplo y la validación.
+        estilo_anterior = next(
+            (
+                copy.deepcopy(c.text_style)
+                for c in sorted(self.app.formato.fields, key=lambda item: item.order, reverse=True)
+                if c.field_type != FIELD_TYPE_IMAGE
+            ),
+            TextStyle(
                 font_family="",
                 font_size_px=24,
                 color=FieldColor(0, 0, 0),
                 alignment="left",
             ),
+        )
+        campo = Field(
+            field_id=self.app.nuevo_id(),
+            question="",
+            field_type=tool,
+            position=Position(left, top, width, height),
+            text_style=estilo_anterior,
         )
         self.app.formato.agregar_campo(campo)
         self.app.seleccionar(campo)
@@ -589,6 +612,7 @@ class ConfiguradorApp(App):
         self.zoom_label = None
         self._visual_template_path = None
         self._android_callback = None
+        self._font_import_target = None
         self._undo = []
         self._redo = []
         self._interaction_changed = False
@@ -789,7 +813,7 @@ class ConfiguradorApp(App):
             Intent = autoclass("android.content.Intent")
             accion = Intent.ACTION_CREATE_DOCUMENT if guardar else Intent.ACTION_OPEN_DOCUMENT
             intent = Intent(accion)
-            intent.setType("image/*" if tipo == "image" else "*/*")
+            intent.setType("image/*" if tipo == "image" else ("font/*" if tipo == "font" else "*/*"))
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             if not guardar:
@@ -832,8 +856,17 @@ class ConfiguradorApp(App):
                 self._guardar_fdt_uri(uri)
             else:
                 ruta = self._copiar_uri_a_cache(uri, tipo)
-                self.estado.text = "Archivo copiado. Abriendo imagen..."
-                self._abrir_ruta(ruta) if tipo == "fdt" else self._importar_ruta(ruta)
+                if tipo == "fdt":
+                    self._abrir_ruta(ruta)
+                elif tipo == "font":
+                    if self._font_import_target:
+                        destino_fuente = self._font_import_target
+                        self._font_import_target = None
+                        destino_fuente(ruta)
+                    else:
+                        raise RuntimeError("No hay un campo esperando la tipografía importada.")
+                else:
+                    self._importar_ruta(ruta)
         except Exception as exc:
             self.estado.text = "Error al procesar el archivo seleccionado."
             self._mostrar_error_tecnico("Error al recibir o copiar el archivo", exc)
@@ -1161,49 +1194,420 @@ class ConfiguradorApp(App):
         panel.open()
         self.estado.text = "%d campo(s)." % len(self.formato.fields)
 
+    def _fuentes_disponibles(self, fuente_actual=""):
+        """Devuelve rutas reales de fuentes utilizables y mantiene la fuente actual."""
+        fuentes = []
+        actual = str(fuente_actual or "").strip()
+        if actual and os.path.isfile(actual):
+            fuentes.append(actual)
+
+        raices = [
+            os.path.join(os.path.dirname(__file__), "fonts"),
+            os.path.join(os.path.dirname(__file__), "data", "fonts"),
+            "/system/fonts",
+            "/usr/share/fonts",
+            os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
+        ]
+        try:
+            from kivy.resources import resource_find
+            kivy_fuente = resource_find("data/fonts/Roboto-Regular.ttf")
+            if kivy_fuente and os.path.isfile(kivy_fuente):
+                fuentes.append(kivy_fuente)
+        except Exception:
+            pass
+
+        extensiones = (".ttf", ".otf", ".ttc")
+        for raiz in raices:
+            if not raiz or not os.path.isdir(raiz):
+                continue
+            try:
+                for carpeta, _subcarpetas, archivos in os.walk(raiz):
+                    for archivo in archivos:
+                        if archivo.lower().endswith(extensiones):
+                            ruta = os.path.join(carpeta, archivo)
+                            if ruta not in fuentes:
+                                fuentes.append(ruta)
+                            if len(fuentes) >= 250:
+                                break
+                    if len(fuentes) >= 250:
+                        break
+            except OSError:
+                continue
+            if len(fuentes) >= 250:
+                break
+
+        # Si el FDT guarda una referencia legible por nombre y no por ruta, conservarla.
+        if actual and actual not in fuentes and not os.path.isfile(actual):
+            fuentes.insert(0, actual)
+        return fuentes
+
     def mostrar_propiedades(self, campo):
         if not campo:
             self._aviso("Seleccione un campo.")
             return
 
-        contenido = BoxLayout(orientation="vertical", spacing=dp(5), padding=dp(8))
-        scroll = ScrollView()
-        form = GridLayout(cols=1, spacing=dp(5), size_hint_y=None)
+        es_imagen = campo.field_type == FIELD_TYPE_IMAGE
+        estilo = campo.text_style
+        contenido = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(10))
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        form = GridLayout(cols=1, spacing=dp(7), size_hint_y=None)
         form.bind(minimum_height=form.setter("height"))
 
-        def campo_texto(titulo, valor, multiline=False):
-            form.add_widget(Label(text=titulo, size_hint_y=None, height=dp(25), halign="left"))
-            entrada = TextInput(text=str(valor), multiline=multiline, size_hint_y=None, height=dp(42 if not multiline else 70))
-            form.add_widget(entrada)
-            return entrada
+        # Primera línea: número de turno e identificador calculados por el sistema.
+        identificacion = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+        identificacion.add_widget(Label(
+            text="Turno: %02d" % campo.order,
+            size_hint_x=0.42,
+            halign="left",
+            valign="middle",
+        ))
+        identificacion.children[0].bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        identificacion.add_widget(Label(
+            text="Identificador: %s" % campo.field_id,
+            size_hint_x=0.58,
+            halign="right",
+            valign="middle",
+        ))
+        identificacion.children[0].bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        form.add_widget(identificacion)
 
-        id_input = campo_texto("ID", campo.field_id)
-        pregunta = campo_texto("Pregunta para el capturador", campo.question, True)
-        requerido = campo_texto("Obligatorio (si/no)", "si" if campo.required else "no")
-        x_in = campo_texto("X", campo.position.x)
-        y_in = campo_texto("Y", campo.position.y)
-        w_in = campo_texto("Ancho", campo.position.width)
-        h_in = campo_texto("Alto", campo.position.height)
+        form.add_widget(Label(
+            text="Pregunta que verá el capturador",
+            size_hint_y=None,
+            height=dp(24),
+            halign="left",
+            valign="middle",
+        ))
+        pregunta = TextInput(
+            text=campo.question or "",
+            hint_text="Escriba aquí la pregunta para solicitar el dato",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(76),
+            padding=(dp(8), dp(8)),
+        )
+        form.add_widget(pregunta)
 
-        fuente = None
+        fuente_spinner = None
         tamano = None
+        boton_negrita = None
+        boton_cursiva = None
+        alineacion = None
+        color_boton = None
         color_r = color_g = color_b = None
-        alineacion = orientacion = None
-        negrita = cursiva = None
-        if campo.field_type != FIELD_TYPE_IMAGE:
-            fuente = campo_texto("Tipografía (nombre o ruta .ttf/.otf)", campo.text_style.font_family)
-            tamano = campo_texto("Tamaño en px", campo.text_style.font_size_px)
-            color_r = campo_texto("Color R", campo.text_style.color.r)
-            color_g = campo_texto("Color G", campo.text_style.color.g)
-            color_b = campo_texto("Color B", campo.text_style.color.b)
-            alineacion = campo_texto("Alineación", campo.text_style.alignment)
-            orientacion = campo_texto("Orientación", campo.text_style.orientation)
-            negrita = campo_texto("Negrita (si/no)", "si" if campo.text_style.bold else "no")
-            cursiva = campo_texto("Cursiva (si/no)", "si" if campo.text_style.italic else "no")
+        orientacion = None
+
+        if not es_imagen:
+            form.add_widget(Label(
+                text="Tipografía y tamaño",
+                size_hint_y=None,
+                height=dp(23),
+                halign="left",
+            ))
+            fuentes = self._fuentes_disponibles(estilo.font_family)
+            fuente_por_nombre = {}
+            for ruta in fuentes:
+                nombre = os.path.basename(ruta) if os.path.isfile(ruta) else ruta
+                # Si hay nombres repetidos, el más reciente queda como opción visible.
+                fuente_por_nombre[nombre] = ruta
+            nombres = sorted(fuente_por_nombre.keys(), key=lambda item: item.lower())
+            actual_nombre = (
+                os.path.basename(estilo.font_family)
+                if estilo.font_family and os.path.isfile(estilo.font_family)
+                else estilo.font_family
+            )
+            if actual_nombre and actual_nombre not in nombres:
+                nombres.insert(0, actual_nombre)
+                fuente_por_nombre[actual_nombre] = estilo.font_family
+            if not nombres:
+                nombres = ["Predeterminada"]
+                fuente_por_nombre["Predeterminada"] = ""
+
+            fila_fuente = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+            fuente_spinner = Spinner(
+                text=actual_nombre if actual_nombre in nombres else nombres[0],
+                values=nombres,
+                size_hint_x=1,
+                sync_height=True,
+            )
+            fila_fuente.add_widget(fuente_spinner)
+            importar_fuente = Button(
+                text="＋ Fuente",
+                size_hint_x=None,
+                width=dp(104),
+            )
+            fila_fuente.add_widget(importar_fuente)
+            form.add_widget(fila_fuente)
+
+            fila_tamano = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+            fila_tamano.add_widget(Label(text="Tamaño (px)", size_hint_x=None, width=dp(105)))
+            tamano = TextInput(
+                text=str(estilo.font_size_px),
+                multiline=False,
+                input_filter="int",
+                size_hint_x=None,
+                width=dp(92),
+            )
+            fila_tamano.add_widget(tamano)
+            fila_tamano.add_widget(Label(text="Tamaño en píxeles del documento", halign="left"))
+            form.add_widget(fila_tamano)
+
+            def abrir_fuente(_boton):
+                if ANDROID_AVAILABLE:
+                    self._font_import_target = lambda ruta: agregar_fuente_importada(ruta)
+                    self._abrir_selector_android("font", guardar=False)
+                    return
+                layout_fuente = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(6))
+                selector = FileChooserListView(path=os.path.expanduser("~"), dirselect=False)
+                selector.filters = ["*.ttf", "*.otf", "*.ttc"]
+                layout_fuente.add_widget(selector)
+                ventana_fuente = Popup(
+                    title="Importar tipografía",
+                    content=layout_fuente,
+                    size_hint=(0.94, 0.9),
+                )
+                botones_fuente = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+                botones_fuente.add_widget(Button(
+                    text="Cancelar",
+                    on_release=lambda _b: ventana_fuente.dismiss(),
+                ))
+                def seleccionar_fuente(_b):
+                    if selector.selection:
+                        ruta = selector.selection[0]
+                        ventana_fuente.dismiss()
+                        agregar_fuente_importada(ruta)
+                botones_fuente.add_widget(Button(text="Importar", on_release=seleccionar_fuente))
+                layout_fuente.add_widget(botones_fuente)
+                ventana_fuente.open()
+
+            def agregar_fuente_importada(ruta):
+                if not ruta or not os.path.isfile(ruta):
+                    self._aviso("No se pudo leer el archivo de tipografía seleccionado.")
+                    return
+                extension = os.path.splitext(ruta)[1].lower()
+                if extension not in (".ttf", ".otf", ".ttc"):
+                    self._aviso("Seleccione un archivo de fuente .ttf, .otf o .ttc.")
+                    return
+                nombre = os.path.basename(ruta)
+                fuente_por_nombre[nombre] = ruta
+                if nombre not in fuente_spinner.values:
+                    fuente_spinner.values = tuple(list(fuente_spinner.values) + [nombre])
+                fuente_spinner.text = nombre
+                self.estado.text = "Tipografía seleccionada; se integrará al guardar el FDT."
+
+            importar_fuente.bind(on_release=abrir_fuente)
+
+            fila_estilo = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+            boton_negrita = Button(
+                text="N",
+                size_hint_x=None,
+                width=dp(42),
+                bold=True,
+                background_normal="",
+                background_color=(0.12, 0.48, 0.78, 1) if estilo.bold else (0.22, 0.22, 0.22, 1),
+            )
+            boton_cursiva = Button(
+                text="I",
+                size_hint_x=None,
+                width=dp(42),
+                italic=True,
+                background_normal="",
+                background_color=(0.12, 0.48, 0.78, 1) if estilo.italic else (0.22, 0.22, 0.22, 1),
+            )
+            fila_estilo.add_widget(boton_negrita)
+            fila_estilo.add_widget(boton_cursiva)
+            fila_estilo.add_widget(Label(text="Alineación del párrafo", halign="left"))
+            alineaciones = {
+                "Izquierda": "left",
+                "Centro": "center",
+                "Derecha": "right",
+                "Justificar": "justify",
+            }
+            etiqueta_alineacion = next(
+                (nombre for nombre, valor in alineaciones.items() if valor == estilo.alignment),
+                "Izquierda",
+            )
+            alineacion = Spinner(
+                text=etiqueta_alineacion,
+                values=tuple(alineaciones.keys()),
+                size_hint_x=None,
+                width=dp(132),
+            )
+            fila_estilo.add_widget(alineacion)
+            form.add_widget(fila_estilo)
+
+            estado_negrita = {"valor": bool(estilo.bold)}
+            estado_cursiva = {"valor": bool(estilo.italic)}
+            def alternar_negrita(_b):
+                estado_negrita["valor"] = not estado_negrita["valor"]
+                boton_negrita.background_color = (
+                    (0.12, 0.48, 0.78, 1) if estado_negrita["valor"] else (0.22, 0.22, 0.22, 1)
+                )
+            def alternar_cursiva(_b):
+                estado_cursiva["valor"] = not estado_cursiva["valor"]
+                boton_cursiva.background_color = (
+                    (0.12, 0.48, 0.78, 1) if estado_cursiva["valor"] else (0.22, 0.22, 0.22, 1)
+                )
+            boton_negrita.bind(on_release=alternar_negrita)
+            boton_cursiva.bind(on_release=alternar_cursiva)
+
+            form.add_widget(Label(
+                text="Color de tipografía (RGB)",
+                size_hint_y=None,
+                height=dp(24),
+                halign="left",
+            ))
+            fila_color = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+            color_boton = Button(
+                text="  Seleccionar color",
+                size_hint_x=None,
+                width=dp(185),
+                background_normal="",
+                background_color=(
+                    estilo.color.r / 255.0,
+                    estilo.color.g / 255.0,
+                    estilo.color.b / 255.0,
+                    1,
+                ),
+            )
+            fila_color.add_widget(color_boton)
+            fila_color.add_widget(Label(text="R", size_hint_x=None, width=dp(18)))
+            color_r = TextInput(text=str(estilo.color.r), multiline=False, input_filter="int", size_hint_x=None, width=dp(55))
+            fila_color.add_widget(color_r)
+            fila_color.add_widget(Label(text="G", size_hint_x=None, width=dp(18)))
+            color_g = TextInput(text=str(estilo.color.g), multiline=False, input_filter="int", size_hint_x=None, width=dp(55))
+            fila_color.add_widget(color_g)
+            fila_color.add_widget(Label(text="B", size_hint_x=None, width=dp(18)))
+            color_b = TextInput(text=str(estilo.color.b), multiline=False, input_filter="int", size_hint_x=None, width=dp(55))
+            fila_color.add_widget(color_b)
+            form.add_widget(fila_color)
+
+            def actualizar_muestra_color(*_args):
+                try:
+                    rgb = tuple(max(0, min(255, int(entrada.text or "0"))) / 255.0 for entrada in (color_r, color_g, color_b))
+                    color_boton.background_color = (rgb[0], rgb[1], rgb[2], 1)
+                except Exception:
+                    pass
+            for entrada in (color_r, color_g, color_b):
+                entrada.bind(text=actualizar_muestra_color)
+
+            def abrir_selector_color(_boton):
+                ventana_color = ModalView(size_hint=(0.92, 0.78), background_color=(0.08, 0.08, 0.08, 1))
+                raiz_color = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+                raiz_color.add_widget(Label(text="Selector HSV: elija el tono y después el matiz/brillo", size_hint_y=None, height=dp(38)))
+                selector_hue = Slider(min=0, max=1, value=0, size_hint_y=None, height=dp(35))
+                # La paleta se dibuja en un lienzo 2D: saturación horizontal y valor vertical.
+                from colorsys import hsv_to_rgb
+                from io import BytesIO
+                from PIL import Image as PILImage
+                class PaletaSV(Widget):
+                    def __init__(self, hue, on_pick, **kwargs):
+                        super().__init__(**kwargs)
+                        self.hue = hue
+                        self.on_pick = on_pick
+                        self._texture = None
+                        self.bind(pos=self.redibujar, size=self.redibujar)
+                        self.redibujar()
+                    def redibujar(self, *_args):
+                        ancho, alto = 160, 160
+                        imagen_paleta = PILImage.new("RGB", (ancho, alto))
+                        pixeles = imagen_paleta.load()
+                        for py in range(alto):
+                            valor = 1.0 - py / float(alto - 1)
+                            for px in range(ancho):
+                                saturacion = px / float(ancho - 1)
+                                rr, gg, bb = hsv_to_rgb(self.hue, saturacion, valor)
+                                pixeles[px, py] = (int(rr * 255), int(gg * 255), int(bb * 255))
+                        memoria = BytesIO()
+                        imagen_paleta.save(memoria, format="PNG")
+                        memoria.seek(0)
+                        self._texture = CoreImage(memoria, ext="png").texture
+                        self.canvas.clear()
+                        with self.canvas:
+                            Color(1, 1, 1, 1)
+                            Rectangle(texture=self._texture, pos=self.pos, size=self.size)
+                    def on_touch_down(self, touch):
+                        if self.collide_point(*touch.pos):
+                            self._pick(touch)
+                            return True
+                        return super().on_touch_down(touch)
+                    def on_touch_move(self, touch):
+                        if touch.grab_current is self or self.collide_point(*touch.pos):
+                            self._pick(touch)
+                            return True
+                        return super().on_touch_move(touch)
+                    def _pick(self, touch):
+                        sat = max(0.0, min(1.0, (touch.x - self.x) / max(1.0, self.width)))
+                        val = max(0.0, min(1.0, (touch.y - self.y) / max(1.0, self.height)))
+                        rgb = tuple(int(v * 255) for v in hsv_to_rgb(self.hue, sat, val))
+                        aplicar_rgb(rgb)
+                paleta = PaletaSV(0.0, lambda rgb: None, size_hint=(1, 1))
+                raiz_color.add_widget(paleta)
+                def aplicar_rgb(rgb):
+                    color_r.text, color_g.text, color_b.text = (str(v) for v in rgb)
+                    actualizar_muestra_color()
+                def actualizar_paleta(*_args):
+                    paleta.hue = selector_hue.value
+                    paleta.redibujar()
+                selector_hue.bind(value=actualizar_paleta)
+                raiz_color.add_widget(selector_hue)
+                botones_color = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+                botones_color.add_widget(Button(text="Cancelar", on_release=lambda _b: ventana_color.dismiss()))
+                botones_color.add_widget(Button(text="Usar color", on_release=lambda _b: ventana_color.dismiss()))
+                raiz_color.add_widget(botones_color)
+                ventana_color.add_widget(raiz_color)
+                ventana_color.open()
+            color_boton.bind(on_release=abrir_selector_color)
+
+            form.add_widget(Label(
+                text="Orientación del texto",
+                size_hint_y=None,
+                height=dp(24),
+                halign="left",
+            ))
+            orientacion = Spinner(
+                text="Vertical" if estilo.orientation == "vertical" else "Horizontal",
+                values=("Horizontal", "Vertical"),
+                size_hint_y=None,
+                height=dp(42),
+            )
+            form.add_widget(orientacion)
+
+        # Se conservan los controles de posición y obligatoriedad existentes.
+        form.add_widget(Label(
+            text="Ubicación y validación",
+            size_hint_y=None,
+            height=dp(28),
+            halign="left",
+        ))
+        avanzado = GridLayout(cols=2, spacing=dp(5), size_hint_y=None, height=dp(132))
+        entradas_posicion = {}
+        for clave, titulo, valor in (
+            ("x", "X", campo.position.x),
+            ("y", "Y", campo.position.y),
+            ("width", "Ancho", campo.position.width),
+            ("height", "Alto", campo.position.height),
+        ):
+            avanzado.add_widget(Label(text=titulo, halign="left"))
+            entrada = TextInput(text=str(valor), multiline=False, input_filter="int")
+            avanzado.add_widget(entrada)
+            entradas_posicion[clave] = entrada
+        form.add_widget(avanzado)
+        fila_requerido = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+        fila_requerido.add_widget(Label(text="Dato obligatorio"))
+        requerido = Spinner(
+            text="Sí" if campo.required else "No",
+            values=("Sí", "No"),
+            size_hint_x=None,
+            width=dp(100),
+        )
+        fila_requerido.add_widget(requerido)
+        form.add_widget(fila_requerido)
 
         scroll.add_widget(form)
         contenido.add_widget(scroll)
-        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(5))
+        botones = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
 
         def entero(entrada, actual):
             try:
@@ -1216,54 +1620,53 @@ class ConfiguradorApp(App):
             formato_anterior = copy.deepcopy(self.formato)
             longitud_undo = len(self._undo)
             try:
-                nuevo_id = id_input.text.strip() or campo.field_id
+                nuevo_id = campo.field_id
                 if any(c is not campo and c.field_id == nuevo_id for c in self.formato.fields):
-                    self._aviso("El ID ya existe.")
+                    self._aviso("El identificador del campo ya existe.")
                     return
                 self.push_undo()
-                campo.field_id = nuevo_id
                 campo.question = pregunta.text.strip()
-                campo.required = requerido.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-                campo.position.x = min(max(0, entero(x_in, campo.position.x)), max(0, self.formato.template.width - 2))
-                campo.position.y = min(max(0, entero(y_in, campo.position.y)), max(0, self.formato.template.height - 2))
-                campo.position.width = max(2, entero(w_in, campo.position.width))
-                campo.position.height = max(2, entero(h_in, campo.position.height))
+                campo.required = requerido.text.strip().lower() in ("sí", "si", "yes", "1", "true")
+                campo.position.x = min(max(0, entero(entradas_posicion["x"], campo.position.x)), max(0, self.formato.template.width - 2))
+                campo.position.y = min(max(0, entero(entradas_posicion["y"], campo.position.y)), max(0, self.formato.template.height - 2))
+                campo.position.width = max(2, entero(entradas_posicion["width"], campo.position.width))
+                campo.position.height = max(2, entero(entradas_posicion["height"], campo.position.height))
                 campo.position.width = min(campo.position.width, self.formato.template.width - campo.position.x)
                 campo.position.height = min(campo.position.height, self.formato.template.height - campo.position.y)
-    
+
                 if campo.field_type == FIELD_TYPE_NUMBER:
-                    if not hasattr(campo, 'validation'):
-                        from shared.models import Validation
-                        campo.validation = Validation()
-                    campo.validation.numeric_only = True
-                    campo.validation.alphanumeric_only = False
+                    from shared.models import Validation
+                    campo.validation = Validation(numeric_only=True, alphanumeric_only=False)
                 elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-                    if not hasattr(campo, 'validation'):
-                        from shared.models import Validation
-                        campo.validation = Validation()
-                    campo.validation.numeric_only = False
-                    campo.validation.alphanumeric_only = True
-    
-                if campo.field_type != FIELD_TYPE_IMAGE:
-                    campo.text_style.font_family = fuente.text.strip()
+                    from shared.models import Validation
+                    campo.validation = Validation(numeric_only=False, alphanumeric_only=True)
+
+                if not es_imagen:
+                    seleccion_fuente = fuente_spinner.text
+                    campo.text_style.font_family = fuente_por_nombre.get(seleccion_fuente, seleccion_fuente)
                     campo.text_style.font_size_px = max(1, entero(tamano, campo.text_style.font_size_px))
                     campo.text_style.color = FieldColor(
                         max(0, min(255, entero(color_r, campo.text_style.color.r))),
                         max(0, min(255, entero(color_g, campo.text_style.color.g))),
                         max(0, min(255, entero(color_b, campo.text_style.color.b))),
                     )
-                    if alineacion.text.strip() in ("left", "center", "right", "justify"):
-                        campo.text_style.alignment = alineacion.text.strip()
-                    campo.text_style.orientation = orientacion.text.strip() or "horizontal"
-                    campo.text_style.bold = negrita.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-                    campo.text_style.italic = cursiva.text.strip().lower() in ("si", "sí", "yes", "1", "true")
-    
+                    mapa_alineacion = {
+                        "Izquierda": "left",
+                        "Centro": "center",
+                        "Derecha": "right",
+                        "Justificar": "justify",
+                    }
+                    campo.text_style.alignment = mapa_alineacion.get(alineacion.text, "left")
+                    campo.text_style.orientation = "vertical" if orientacion.text == "Vertical" else "horizontal"
+                    campo.text_style.bold = estado_negrita["valor"]
+                    campo.text_style.italic = estado_cursiva["valor"]
+
                 self.formato.ordenar_campos()
                 self.seleccionado = campo
                 self.editor.cargar_plantilla(self._visual_template_path)
                 popup.dismiss()
                 self.estado.text = "Campo %d configurado." % campo.order
-    
+
             except Exception as exc:
                 self.formato = formato_anterior
                 self.seleccionado = next(
@@ -1280,7 +1683,11 @@ class ConfiguradorApp(App):
         botones.add_widget(Button(text="Cancelar", on_release=lambda _: popup.dismiss()))
         botones.add_widget(Button(text="Aceptar", on_release=aceptar))
         contenido.add_widget(botones)
-        popup = Popup(title="Propiedades del campo", content=contenido, size_hint=(0.94, 0.94))
+        popup = Popup(
+            title="Propiedades del campo",
+            content=contenido,
+            size_hint=(0.97, 0.96),
+        )
         popup.open()
 
     def editar_salida(self):
