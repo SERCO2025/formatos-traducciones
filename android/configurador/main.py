@@ -20,6 +20,7 @@ from kivy.uix.image import Image as KivyImage
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.stencilview import StencilView
 from kivy.uix.textinput import TextInput
@@ -219,6 +220,12 @@ class CanvasEditor(StencilView):
         self._pinch_anchor = None
         self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
+        # RelativeLayout crea el sistema local (0, 0) necesario para que las
+        # posiciones propuestas de plantilla/campos sean realmente locales.
+        self.canvas_layer = RelativeLayout(
+            pos=self.pos, size=self.size, size_hint=(None, None)
+        )
+        self.add_widget(self.canvas_layer)
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
     @property
@@ -232,6 +239,9 @@ class CanvasEditor(StencilView):
         self.app.seleccionado = campo
 
     def _viewport_changed(self, *_args):
+        if hasattr(self, "canvas_layer"):
+            self.canvas_layer.pos = self.pos
+            self.canvas_layer.size = self.size
         if self.template_widget is not None:
             self.constrain_template_position()
             self.refresh_fields()
@@ -310,7 +320,7 @@ class CanvasEditor(StencilView):
         return True
 
     def cargar_plantilla(self, ruta):
-        self.clear_widgets()
+        self.canvas_layer.clear_widgets()
         self.template_widget = None
         self._template_core_image = None
 
@@ -333,10 +343,10 @@ class CanvasEditor(StencilView):
             self.app.formato.template.height * self.app.scale,
         )
         self.template_widget.pos = self.app.template_position()
-        self.add_widget(self.template_widget)
+        self.canvas_layer.add_widget(self.template_widget)
 
         for campo in sorted(self.app.formato.fields, key=lambda c: c.order):
-            self.add_widget(CampoWidget(campo, self))
+            self.canvas_layer.add_widget(CampoWidget(campo, self))
 
         if self.start_touch:
             self.start_touch = None
@@ -344,7 +354,7 @@ class CanvasEditor(StencilView):
     def refresh_fields(self):
         if self.template_widget is None:
             return
-        for widget in self.children:
+        for widget in self.canvas_layer.children:
             if isinstance(widget, CampoWidget):
                 widget.actualizar()
 
@@ -1341,7 +1351,7 @@ class ConfiguradorApp(App):
             Color(0, 0, 0, 1)
             Line(rectangle=(0, 0, w, h), width=3)
         self._drawing_widget = widget
-        self.editor.add_widget(widget)
+        self.editor.canvas_layer.add_widget(widget)
 
     def clear_drawing_preview(self):
         if self._drawing_widget and self._drawing_widget.parent:
