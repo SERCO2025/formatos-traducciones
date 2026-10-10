@@ -94,11 +94,11 @@ class CampoWidget(FloatLayout):
         self.size = (p.width * self.editor.scale, p.height * self.editor.scale)
         tw = self.editor.template_widget
         if tw is not None:
-            # Las posiciones del documento se convierten a coordenadas de ventana
-            # únicamente al dibujar el campo; el modelo conserva píxeles del documento.
-            self.pos = tw.to_window(
-                p.x * self.editor.scale,
-                tw.height - (p.y + p.height) * self.editor.scale,
+            # CampoWidget y plantilla son hermanos dentro de CanvasEditor:
+            # ambos deben posicionarse en las coordenadas de su padre.
+            self.pos = (
+                tw.x + p.x * self.editor.scale,
+                tw.y + tw.height - (p.y + p.height) * self.editor.scale,
             )
 
         self.canvas.before.clear()
@@ -1322,7 +1322,10 @@ class ConfiguradorApp(App):
         left, right = sorted((x0, x1))
         top, bottom = sorted((y0, y1))
         tw = self.editor.template_widget
-        x, y = tw.to_window(left * self.scale, tw.height - bottom * self.scale)
+        # El rectángulo provisional también es hijo de CanvasEditor; su
+        # posición debe usar el mismo espacio de coordenadas que la plantilla.
+        x = tw.x + left * self.scale
+        y = tw.y + tw.height - bottom * self.scale
         w = max(1, (right - left) * self.scale)
         h = max(1, (bottom - top) * self.scale)
         widget = FloatLayout(size_hint=(None, None), size=(w, h), pos=(x, y))
