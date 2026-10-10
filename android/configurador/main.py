@@ -254,10 +254,6 @@ class CanvasEditor(StencilView):
             y = min(self.y, max(self.top - tw.height, y))
         tw.pos = (x, y)
 
-    def _editor_point(self, touch):
-        """Devuelve el toque en coordenadas locales del lienzo."""
-        return self.to_widget(touch.x, touch.y)
-
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
             return False
