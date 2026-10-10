@@ -172,9 +172,10 @@ class CampoWidget(FloatLayout):
         return None
 
     def on_touch_down(self, touch):
-        # Los eventos táctiles llegan en coordenadas de ventana; convertirlos
-        # antes de compararlos con la posición local de este widget.
-        local_x, local_y = self.to_widget(touch.x, touch.y)
+        # En este lienzo Kivy distribuye los toques y coloca los hijos en
+        # coordenadas del padre (coinciden con ventana en esta jerarquía).
+        # Comparar en ese mismo sistema evita que el punto inicial se desplace.
+        local_x, local_y = touch.x - self.x, touch.y - self.y
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
         if self.editor.app.tool == "select":
@@ -238,22 +239,22 @@ class CanvasEditor(StencilView):
         tw = self.template_widget
         if tw is None:
             return
-        # Los hijos de CanvasEditor usan coordenadas locales: el origen es
-        # (0, 0), no la posición del editor dentro de la ventana.
+        # StencilView no convierte automáticamente la posición de sus hijos
+        # a un origen local. Mantener plantilla/campos en coordenadas del padre.
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
-            x = (self.width - tw.width) / 2.0
+            x = self.x + (self.width - tw.width) / 2.0
         else:
-            x = min(0.0, max(self.width - tw.width, x))
+            x = min(self.x, max(self.right - tw.width, x))
         if tw.height <= self.height:
-            y = (self.height - tw.height) / 2.0
+            y = self.y + (self.height - tw.height) / 2.0
         else:
-            y = min(0.0, max(self.height - tw.height, y))
+            y = min(self.y, max(self.top - tw.height, y))
         tw.pos = (x, y)
 
     def _editor_point(self, touch):
-        """Convierte una posición táctil de ventana a coordenadas locales del lienzo."""
-        return self.to_widget(touch.x, touch.y)
+        """Devuelve el toque en el mismo sistema que las posiciones de los hijos."""
+        return touch.x, touch.y
 
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
@@ -351,7 +352,7 @@ class CanvasEditor(StencilView):
     def _document_point(self, touch):
         if not self.template_widget or not self.app.formato:
             return 0, 0
-        # La plantilla y sus campos están en coordenadas locales del lienzo.
+        # Plantilla, campos y MotionEvent comparten coordenadas del padre.
         touch_x, touch_y = self._editor_point(touch)
         x = (touch_x - self.template_widget.x) / self.app.scale
         y_bottom = (touch_y - self.template_widget.y) / self.app.scale
@@ -365,12 +366,9 @@ class CanvasEditor(StencilView):
         return self._touch_inside_template(touch)
 
     def on_touch_down(self, touch):
-        # collide_point espera coordenadas del padre; el toque está en ventana.
-        if self.parent is not None:
-            parent_x, parent_y = self.parent.to_widget(touch.x, touch.y)
-        else:
-            parent_x, parent_y = touch.x, touch.y
-        if not self.collide_point(parent_x, parent_y):
+        # En esta jerarquía (BoxLayout -> StencilView), el toque llega en
+        # coordenadas del padre, igual que collide_point y las posiciones.
+        if not self.collide_point(touch.x, touch.y):
             return False
 
         if self._touch_inside_template(touch):
@@ -745,17 +743,18 @@ class ConfiguradorApp(App):
         self.estado_menu.text = nombres.get(tool, str(tool))
 
     def template_position(self):
-        # La plantilla es hija de CanvasEditor: su posición debe ser local.
+        # StencilView mantiene las posiciones de sus hijos en coordenadas
+        # del padre; incluir el origen del editor evita el desplazamiento fijo.
         if not self.formato:
-            return (dp(20), dp(20))
+            return (self.editor.x + dp(20), self.editor.y + dp(20))
         ancho = self.formato.template.width * self.scale
         alto = self.formato.template.height * self.scale
-        x = (self.editor.width - ancho) / 2.0
-        y = (self.editor.height - alto) / 2.0
+        x = self.editor.x + (self.editor.width - ancho) / 2.0
+        y = self.editor.y + (self.editor.height - alto) / 2.0
         if ancho > self.editor.width:
-            x = 0.0
+            x = self.editor.x
         if alto > self.editor.height:
-            y = 0.0
+            y = self.editor.y
         return x, y
 
     def nuevo(self):
@@ -1354,11 +1353,13 @@ class ConfiguradorApp(App):
         viejo_scale = self.scale
 
         if anchor is None:
-            anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
+            anchor_local = (
+                self.editor.x + self.editor.width / 2.0,
+                self.editor.y + self.editor.height / 2.0,
+            )
         else:
-            # Los puntos de zoom (toque o centro del gesto de pellizco) llegan
-            # en coordenadas de ventana; la plantilla usa coordenadas locales.
-            anchor_local = self.editor.to_widget(anchor[0], anchor[1])
+            # El ancla y la plantilla usan el mismo sistema de coordenadas.
+            anchor_local = anchor
 
         doc_x = (anchor_local[0] - tw.x) / viejo_scale
         doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
