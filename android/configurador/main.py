@@ -103,12 +103,12 @@ class CampoWidget(FloatLayout):
         with self.canvas.before:
             Color(0, 0, 0, 1)
             Line(rectangle=(0, 0, self.width, self.height), width=2.0)
-            if self.editor.seleccionado is self.campo:
+            if self.editor.app.seleccionado is self.campo:
                 Color(0.0, 0.75, 1.0, 1)
                 Line(rectangle=(0, 0, self.width, self.height), width=3.0)
 
         self.canvas.after.clear()
-        if self.editor.seleccionado is self.campo:
+        if self.editor.app.seleccionado is self.campo:
             with self.canvas.after:
                 Color(0.0, 0.75, 1.0, 1)
                 s = min(dp(12), max(dp(7), min(self.width, self.height) / 5.0))
@@ -146,7 +146,7 @@ class CampoWidget(FloatLayout):
         self.add_widget(etiqueta)
 
     def _handle_at(self, x, y):
-        if self.editor.seleccionado is not self.campo:
+        if self.editor.app.seleccionado is not self.campo:
             return None
         s = min(dp(18), max(dp(10), min(self.width, self.height) / 4.0))
         left = abs(x) <= s
@@ -340,8 +340,12 @@ class CanvasEditor(StencilView):
     def _document_point(self, touch):
         if not self.template_widget or not self.app.formato:
             return 0, 0
-        x = (touch.x - self.template_widget.x) / self.app.scale
-        y_bottom = (touch.y - self.template_widget.y) / self.app.scale
+        # El toque llega en coordenadas de ventana; el lienzo y la plantilla
+        # usan coordenadas locales del CanvasEditor.
+        local_x, local_y = self.to_widget(touch.x, touch.y)
+        x = (local_x - self.template_widget.x) / self.app.scale
+        y_bottom = (local_y - self.template_widget.y) / self.app.scale
+        # El documento usa origen en la esquina superior izquierda.
         y = self.app.formato.template.height - y_bottom
         x = max(0, min(self.app.formato.template.width, x))
         y = max(0, min(self.app.formato.template.height, y))
