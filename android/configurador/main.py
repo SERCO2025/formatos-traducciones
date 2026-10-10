@@ -172,11 +172,10 @@ class CampoWidget(FloatLayout):
         return None
 
     def on_touch_down(self, touch):
-        # En este lienzo Kivy distribuye los toques y coloca los hijos en
-        # coordenadas del padre (coinciden con ventana en esta jerarquía).
-        # Comparar en ese mismo sistema evita que el punto inicial se desplace.
-        # Convertir desde coordenadas de ventana a coordenadas locales del campo.
-        local_x, local_y = self.to_widget(touch.x, touch.y)
+        # El evento llega en coordenadas del padre, igual que self.pos.
+        # CanvasEditor es hijo directo de BoxLayout y no hay RelativeLayout/
+        # ScrollView ancestro que cambie el sistema de coordenadas.
+        local_x, local_y = touch.x - self.x, touch.y - self.y
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
         if self.editor.app.tool == "select":
@@ -240,22 +239,22 @@ class CanvasEditor(StencilView):
         tw = self.template_widget
         if tw is None:
             return
-        # Todas las posiciones internas del lienzo se mantienen en coordenadas
-        # LOCALES del editor: el origen del documento visual es (0, 0).
+        # StencilView no transforma las coordenadas de sus hijos a un origen
+        # local: plantilla y toque deben permanecer en coordenadas del padre.
         x, y = tw.pos if pos is None else pos
         if tw.width <= self.width:
-            x = (self.width - tw.width) / 2.0
+            x = self.x + (self.width - tw.width) / 2.0
         else:
-            x = min(0.0, max(self.width - tw.width, x))
+            x = min(self.x, max(self.right - tw.width, x))
         if tw.height <= self.height:
-            y = (self.height - tw.height) / 2.0
+            y = self.y + (self.height - tw.height) / 2.0
         else:
-            y = min(0.0, max(self.height - tw.height, y))
+            y = min(self.y, max(self.top - tw.height, y))
         tw.pos = (x, y)
 
     def _editor_point(self, touch):
-        """Convierte el toque de ventana a coordenadas locales del lienzo."""
-        return self.to_widget(touch.x, touch.y)
+        """El toque y los hijos de StencilView usan coordenadas del padre."""
+        return touch.x, touch.y
 
     def _touch_inside_template(self, touch):
         if self.template_widget is None:
@@ -269,9 +268,7 @@ class CanvasEditor(StencilView):
         a, b = list(self._touches.values())[:2]
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
         self._pinch_start_scale = self.app.scale
-        ax, ay = self._editor_point(a)
-        bx, by = self._editor_point(b)
-        self._pinch_anchor = ((ax + bx) / 2.0, (ay + by) / 2.0)
+        self._pinch_anchor = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
         self._pinch_start_template_pos = self.template_widget.pos
         self._pinch_last_midpoint = self._pinch_anchor
         self._pinch_active = True
@@ -296,9 +293,7 @@ class CanvasEditor(StencilView):
         a, b = list(self._touches.values())[:2]
         distancia = max(1.0, hypot(b.x - a.x, b.y - a.y))
         factor = distancia / self._pinch_start_distance
-        ax, ay = self._editor_point(a)
-        bx, by = self._editor_point(b)
-        midpoint = ((ax + bx) / 2.0, (ay + by) / 2.0)
+        midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
         self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
 
@@ -387,20 +382,20 @@ class CanvasEditor(StencilView):
 
         if tool == "zoom":
             if touch.button in ("scrollup", "scrollright"):
-                self.app.set_zoom(self.app.scale * 1.2, anchor=self._editor_point(touch))
+                self.app.set_zoom(self.app.scale * 1.2, anchor=touch.pos)
                 return True
             if touch.button in ("scrolldown", "scrollleft"):
-                self.app.set_zoom(self.app.scale * 0.8, anchor=self._editor_point(touch))
+                self.app.set_zoom(self.app.scale * 0.8, anchor=touch.pos)
                 return True
             if touch.is_mouse_scrolling:
                 return True
             factor = 0.8 if touch.button == "right" else 1.2
-            self.app.set_zoom(self.app.scale * factor, anchor=self._editor_point(touch))
+            self.app.set_zoom(self.app.scale * factor, anchor=touch.pos)
             return True
 
         if tool == "hand":
             if self.template_widget and self._touch_inside_template(touch):
-                self.pan_start = self._editor_point(touch)
+                self.pan_start = touch.pos
                 self.pan_template_pos = self.template_widget.pos
                 return True
 
@@ -428,7 +423,7 @@ class CanvasEditor(StencilView):
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             # Arrastre incremental en el mismo sistema local del lienzo.
             # Cada desplazamiento del dedo mueve la plantilla 1:1.
-            point = self._editor_point(touch)
+            point = touch.pos
             dx = point[0] - self.pan_start[0]
             dy = point[1] - self.pan_start[1]
             self.template_widget.pos = (
@@ -752,17 +747,17 @@ class ConfiguradorApp(App):
         self.estado_menu.text = nombres.get(tool, str(tool))
 
     def template_position(self):
-        # Posición de plantilla en coordenadas LOCALES del CanvasEditor.
+        # StencilView coloca a sus hijos en coordenadas del padre.
         if not self.formato:
-            return (dp(20), dp(20))
+            return (self.editor.x + dp(20), self.editor.y + dp(20))
         ancho = self.formato.template.width * self.scale
         alto = self.formato.template.height * self.scale
-        x = (self.editor.width - ancho) / 2.0
-        y = (self.editor.height - alto) / 2.0
+        x = self.editor.x + (self.editor.width - ancho) / 2.0
+        y = self.editor.y + (self.editor.height - alto) / 2.0
         if ancho > self.editor.width:
-            x = 0.0
+            x = self.editor.x
         if alto > self.editor.height:
-            y = 0.0
+            y = self.editor.y
         return x, y
 
     def nuevo(self):
@@ -1362,8 +1357,8 @@ class ConfiguradorApp(App):
 
         if anchor is None:
             anchor_local = (
-                self.editor.width / 2.0,
-                self.editor.height / 2.0,
+                self.editor.x + self.editor.width / 2.0,
+                self.editor.y + self.editor.height / 2.0,
             )
         else:
             # El ancla y la plantilla usan el mismo sistema de coordenadas.
