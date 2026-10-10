@@ -354,10 +354,13 @@ class CanvasEditor(StencilView):
         if tw is None or not self.app.formato:
             return 0, 0
 
-        # Conversión nativa y segura de Kivy
-        local_x, local_y = self.to_local(touch.x, touch.y)
+        # Obtener la posición del CanvasEditor en coordenadas de ventana
+        # para convertir correctamente el toque absoluto a coordenadas locales.
+        wx, wy = self.to_window(0, 0)
+        local_x = touch.x - wx
+        local_y = touch.y - wy
 
-        # Después, coordenadas relativas a la esquina superior izquierda de la plantilla.
+        # Coordenadas relativas a la esquina superior izquierda de la plantilla.
         rel_x = local_x - tw.x
         rel_y_from_top = (tw.y + tw.height) - local_y
 
@@ -1371,8 +1374,10 @@ class ConfiguradorApp(App):
             # El centro se calcula en coordenadas locales del editor.
             anchor_local = (self.editor.width / 2.0, self.editor.height / 2.0)
         else:
-            # Los eventos táctiles entregan coordenadas de ventana.
-            anchor_local = (anchor[0] - self.editor.x, anchor[1] - self.editor.y)
+            # 'anchor' viene en coordenadas de ventana (touch.pos).
+            # Convertirlo a coordenadas locales del editor correctamente.
+            wx, wy = self.editor.to_window(0, 0)
+            anchor_local = (anchor[0] - wx, anchor[1] - wy)
 
         doc_x = (anchor_local[0] - tw.x) / viejo_scale
         doc_y_bottom = (anchor_local[1] - tw.y) / viejo_scale
