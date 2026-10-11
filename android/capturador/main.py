@@ -230,7 +230,9 @@ class CapturadorApp(App):
                         self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
                 else:
                     ruta_avance = self._crear_archivo_avance_temporal()
-                    nombre_avance = self._nombre_base_avance() + ".ftc"
+                    nombre_avance = os.path.splitext(
+                        construir_nombre_archivo(self.formato, self.respuestas)
+                    )[0] + ".ftc"
                     destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
                     self._copiar_archivo_a_uri(ruta_avance, destino)
                     self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
