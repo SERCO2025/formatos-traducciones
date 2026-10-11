@@ -46,21 +46,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
-          if [ -z "$SDKMANAGER" ]; then
+          GLOBAL_SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          if [ -z "$GLOBAL_SDKMANAGER" ]; then
             echo "No se encontró sdkmanager dentro de $ANDROID_HOME/cmdline-tools"
             exit 1
           fi
-          # Buildozer/python-for-android consulta su propio SDK, no el SDK global del runner.
+
+          # Buildozer busca sdkmanager dentro de su propio SDK; instalar solo las plataformas no basta.
           SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDK_ROOT"
+          GLOBAL_CMDLINE_TOOLS="$(dirname "$(dirname "$GLOBAL_SDKMANAGER")")"
+          mkdir -p "$SDK_ROOT/cmdline-tools"
+          rm -rf "$SDK_ROOT/cmdline-tools/latest"
+          cp -R "$GLOBAL_CMDLINE_TOOLS" "$SDK_ROOT/cmdline-tools/latest"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+
           set +o pipefail
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
           set -o pipefail
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          test -x "$SDKMANAGER"
           test -d "$SDK_ROOT/platforms/android-34"
           test -x "$SDK_ROOT/build-tools/34.0.0/aapt"
-          echo "Android SDK API 34 y Build Tools 34.0.0 instalados en el SDK que utiliza Buildozer."
+          echo "SDK Manager, Android API 34 y Build Tools 34.0.0 instalados en el SDK que utiliza Buildozer."
       - name: Integrar módulos compartidos del rellenador
         run: |
           rm -rf android/capturador/shared
