@@ -5,9 +5,12 @@ Porta el flujo funcional del capturador de PC y reutiliza el motor compartido:
 FDT, modelos, validaciones y renderizado. Los archivos se seleccionan/exportan
 mediante el selector de documentos de Android (Storage Access Framework).
 """
+import json
 import os
+import re
 import tempfile
 import traceback
+import zipfile
 from pathlib import Path
 
 from kivy.app import App
@@ -43,6 +46,9 @@ class CapturadorApp(App):
     REQUEST_OPEN_FDT = 731
     REQUEST_OPEN_IMAGE = 732
     REQUEST_SAVE_JPEG = 733
+    REQUEST_OPEN_DRAFT = 734
+    REQUEST_SAVE_JPEG_FOLDER = 735
+    REQUEST_SAVE_DRAFT_FOLDER = 736
 
     def build(self):
         self.formato = None
@@ -53,6 +59,8 @@ class CapturadorApp(App):
         self._nombre_final = "resultado.jpg"
         self._preview_file = None
         self._temp_files = []
+        self._fdt_path = None
+        self._draft_dirs = []
 
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         root.add_widget(Label(
@@ -106,6 +114,15 @@ class CapturadorApp(App):
         self.btn_imagen.bind(on_release=lambda *_: self.seleccionar_imagen())
         controls_open.add_widget(self.btn_imagen)
         root.add_widget(controls_open)
+
+        controls_draft = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        self.btn_abrir_avance = Button(text="Abrir avance", font_size="14sp")
+        self.btn_abrir_avance.bind(on_release=lambda *_: self.abrir_avance())
+        controls_draft.add_widget(self.btn_abrir_avance)
+        self.btn_guardar_avance = Button(text="Guardar avance", font_size="14sp", disabled=True)
+        self.btn_guardar_avance.bind(on_release=lambda *_: self.guardar_avance())
+        controls_draft.add_widget(self.btn_guardar_avance)
+        root.add_widget(controls_draft)
 
         controls_nav = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.btn_atras = Button(text="Volver", font_size="17sp", disabled=True)
@@ -170,6 +187,9 @@ class CapturadorApp(App):
     def abrir_formato(self):
         self._intent(self.REQUEST_OPEN_FDT, "android.intent.action.OPEN_DOCUMENT", "*/*")
 
+    def abrir_avance(self):
+        self._intent(self.REQUEST_OPEN_DRAFT, "android.intent.action.OPEN_DOCUMENT", "*/*")
+
     def seleccionar_imagen(self):
         self._intent(self.REQUEST_OPEN_IMAGE, "android.intent.action.OPEN_DOCUMENT", "image/*")
 
@@ -191,9 +211,29 @@ class CapturadorApp(App):
                     self._mensaje("No se pudo abrir el formato", "%s\n\n%s" % (exc, traceback.format_exc()))
                     return
                 self.formato = formato
+                self._fdt_path = ruta
                 self.respuestas = {campo.field_id: "" for campo in formato.fields}
                 self.indice = 0
+                self.btn_guardar_avance.disabled = False
                 self._mostrar_campo()
+            elif request_code == self.REQUEST_OPEN_DRAFT:
+                ruta = self._copiar_uri_a_cache(uri, ".ftc")
+                self._abrir_archivo_avance(ruta)
+            elif request_code in (self.REQUEST_SAVE_JPEG_FOLDER, self.REQUEST_SAVE_DRAFT_FOLDER):
+                if request_code == self.REQUEST_SAVE_JPEG_FOLDER:
+                    destino = self._crear_documento_en_carpeta(uri, "image/jpeg", self._nombre_final)
+                    self._copiar_archivo_a_uri(self._imagen_final, destino)
+                    nombre_guardado = self._nombre_documento_uri(destino) or self._nombre_final
+                    if nombre_guardado == self._nombre_final:
+                        self._mensaje("Archivo guardado", "JPEG guardado con el nombre definido por el configurador:\n%s" % nombre_guardado)
+                    else:
+                        self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
+                else:
+                    ruta_avance = self._crear_archivo_avance_temporal()
+                    nombre_avance = self._nombre_base_avance() + ".ftc"
+                    destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
+                    self._copiar_archivo_a_uri(ruta_avance, destino)
+                    self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
             elif request_code == self.REQUEST_OPEN_IMAGE:
                 ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri_text, ".jpg"))
                 if not self.formato or not self.formato.fields:
@@ -464,8 +504,114 @@ class CapturadorApp(App):
         guardar.bind(on_release=lambda *_: (popup.dismiss(), self._guardar_resultado()))
         popup.open()
 
+    def _seleccionar_carpeta(self, request_code):
+        if not ANDROID_NATIVE:
+            self._mensaje("No disponible", "Esta operación requiere Android.")
+            return
+        try:
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            PythonActivity.mActivity.startActivityForResult(intent, request_code)
+        except Exception as exc:
+            self._mensaje("No se pudo abrir el selector de carpetas", str(exc))
+
+    def _crear_documento_en_carpeta(self, tree_uri, mime, nombre):
+        """Crea directamente el archivo con el nombre calculado, sin pedirlo en un campo vacío."""
+        contexto = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = contexto.getContentResolver()
+        DocumentsContract = autoclass("android.provider.DocumentsContract")
+        document_id = DocumentsContract.getTreeDocumentId(tree_uri)
+        carpeta = DocumentsContract.buildDocumentUriUsingTree(tree_uri, document_id)
+        creado = DocumentsContract.createDocument(resolver, carpeta, mime, nombre)
+        if creado is None:
+            raise IOError("Android no pudo crear '%s' en la carpeta seleccionada." % nombre)
+        nombre_real = self._nombre_documento_uri(creado)
+        if nombre_real and nombre_real != nombre:
+            renombrado = DocumentsContract.renameDocument(resolver, creado, nombre)
+            if renombrado is not None:
+                creado = renombrado
+        return creado
+
+    def _nombre_base_avance(self):
+        base = os.path.splitext(self._nombre_final or "captura")[0]
+        base = re.sub(r'[\\/:*?"<>|]+', "_", base).strip(" ._")
+        return base or "captura_pendiente"
+
+    def _crear_archivo_avance_temporal(self):
+        if not self.formato or not self._fdt_path or not os.path.isfile(self._fdt_path):
+            raise IOError("No se encontró el formato original para incluirlo en el archivo de avance.")
+        if self.formato.fields:
+            campo = self.formato.fields[self.indice]
+            if campo.field_type != FIELD_TYPE_IMAGE:
+                self.respuestas[campo.field_id] = self.entrada.text
+
+        ruta = os.path.join(tempfile.gettempdir(), "captura_pendiente_%d.ftc" % len(self._temp_files))
+        datos = {"version": 1, "indice": self.indice, "respuestas": {}, "imagenes": {}}
+        for campo in self.formato.fields:
+            valor = self.respuestas.get(campo.field_id, "")
+            if campo.field_type == FIELD_TYPE_IMAGE and valor:
+                imagen_path = str(valor)
+                if os.path.isfile(imagen_path):
+                    extension = os.path.splitext(imagen_path)[1].lower()
+                    if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+                        extension = ".jpg"
+                    seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
+                    interno = "imagenes/%s%s" % (seguro, extension)
+                    datos["imagenes"][campo.field_id] = interno
+                    datos["respuestas"][campo.field_id] = ""
+                else:
+                    datos["respuestas"][campo.field_id] = ""
+            else:
+                datos["respuestas"][campo.field_id] = "" if valor is None else str(valor)
+
+        with zipfile.ZipFile(ruta, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+            paquete.write(self._fdt_path, "formato.fdt")
+            paquete.writestr("captura.json", json.dumps(datos, ensure_ascii=False, indent=2).encode("utf-8"))
+            for campo_id, interno in datos["imagenes"].items():
+                imagen_path = self.respuestas.get(campo_id, "")
+                if imagen_path and os.path.isfile(str(imagen_path)):
+                    paquete.write(str(imagen_path), interno)
+        self._temp_files.append(ruta)
+        return ruta
+
+    def guardar_avance(self):
+        if not self.formato:
+            self._mensaje("Sin captura", "Primero abre un formato .fdt o un archivo de avance.")
+            return
+        self._seleccionar_carpeta(self.REQUEST_SAVE_DRAFT_FOLDER)
+
+    def _abrir_archivo_avance(self, ruta):
+        directorio = tempfile.mkdtemp(prefix="formatos_traducidos_avance_")
+        self._draft_dirs.append(directorio)
+        with zipfile.ZipFile(ruta, "r") as paquete:
+            nombres = paquete.namelist()
+            if "formato.fdt" not in nombres or "captura.json" not in nombres:
+                raise ValueError("El archivo no es un avance válido de Formatos Traducidos.")
+            paquete.extractall(directorio)
+        ruta_fdt = os.path.join(directorio, "formato.fdt")
+        with open(os.path.join(directorio, "captura.json"), "r", encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+        formato = cargar_fdt(ruta_fdt)
+        respuestas = {campo.field_id: "" for campo in formato.fields}
+        respuestas.update(datos.get("respuestas", {}))
+        for campo_id, interno in (datos.get("imagenes", {}) or {}).items():
+            ruta_imagen = os.path.join(directorio, *str(interno).split("/"))
+            if os.path.isfile(ruta_imagen):
+                respuestas[campo_id] = ruta_imagen
+        self.formato = formato
+        self._fdt_path = ruta_fdt
+        self.respuestas = respuestas
+        try:
+            self.indice = max(0, min(int(datos.get("indice", 0)), len(formato.fields) - 1))
+        except (TypeError, ValueError):
+            self.indice = 0
+        self.btn_guardar_avance.disabled = False
+        self._mostrar_campo()
+        self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
+
     def _guardar_resultado(self):
-        self._intent(self.REQUEST_SAVE_JPEG, "android.intent.action.CREATE_DOCUMENT", "image/jpeg", self._nombre_final)
+        self._seleccionar_carpeta(self.REQUEST_SAVE_JPEG_FOLDER)
 
 
 if __name__ == "__main__":
