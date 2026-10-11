@@ -51,13 +51,16 @@ jobs:
             echo "No se encontró sdkmanager dentro de $ANDROID_HOME/cmdline-tools"
             exit 1
           fi
+          # Buildozer/python-for-android consulta su propio SDK, no el SDK global del runner.
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK_ROOT"
           set +o pipefail
-          yes | "$SDKMANAGER" --licenses >/dev/null
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
           set -o pipefail
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          test -d "$ANDROID_HOME/platforms/android-34"
-          test -x "$ANDROID_HOME/build-tools/34.0.0/aapt"
-          echo "Android SDK API 34 y Build Tools 34.0.0 instalados y verificados."
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          test -d "$SDK_ROOT/platforms/android-34"
+          test -x "$SDK_ROOT/build-tools/34.0.0/aapt"
+          echo "Android SDK API 34 y Build Tools 34.0.0 instalados en el SDK que utiliza Buildozer."
       - name: Integrar módulos compartidos del rellenador
         run: |
           rm -rf android/capturador/shared
