@@ -1,9 +1,6 @@
 name: Compilar APK - Formatos Traducidos
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - desarrollo
 permissions:
   contents: read
 jobs:
@@ -12,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [configurador, capturador]
+        app: [configurador]
     steps:
       # Ejecución nueva para validar asignación de runners.
       - name: Descargar proyecto
