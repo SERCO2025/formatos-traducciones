@@ -442,8 +442,54 @@ class CapturadorApp:
             vista.coords(foto_id, x, y)
             vista.configure(scrollregion=(0, 0, max(ancho, x + nuevo_ancho), max(alto, y + nuevo_alto)))
 
+        def actualizar_region():
+            caja = vista.bbox(foto_id)
+            if caja:
+                ancho = max(1, vista.winfo_width() - 8)
+                alto = max(1, vista.winfo_height() - 8)
+                vista.configure(scrollregion=(
+                    min(0, caja[0]), min(0, caja[1]),
+                    max(ancho, caja[2]), max(alto, caja[3]),
+                ))
+
         def rueda(event):
             mostrar(event=event, factor=1.15 if event.delta > 0 else 1 / 1.15)
+            return "break"
+
+        # Clic izquierdo sin arrastre: acercar. Arrastre izquierdo: desplazar.
+        # Esto también admite touchpads que emiten eventos de arrastre de Tkinter.
+        arrastre = {"x": 0, "y": 0, "imagen_x": 0, "imagen_y": 0, "movido": False}
+
+        def iniciar_arrastre(event):
+            arrastre["x"] = event.x
+            arrastre["y"] = event.y
+            arrastre["imagen_x"], arrastre["imagen_y"] = vista.coords(foto_id)
+            arrastre["movido"] = False
+            vista.configure(cursor="fleur")
+
+        def mover_arrastre(event):
+            dx = event.x - arrastre["x"]
+            dy = event.y - arrastre["y"]
+            if not arrastre["movido"] and (abs(dx) > 3 or abs(dy) > 3):
+                arrastre["movido"] = True
+            if arrastre["movido"]:
+                vista.coords(
+                    foto_id,
+                    arrastre["imagen_x"] + dx,
+                    arrastre["imagen_y"] + dy,
+                )
+                actualizar_region()
+
+        def terminar_arrastre(event):
+            vista.configure(cursor="")
+            if not arrastre["movido"]:
+                mostrar(event=event, factor=1.15)
+            else:
+                actualizar_region()
+            return "break"
+
+        def alejar(event):
+            mostrar(event=event, factor=1 / 1.15)
             return "break"
 
         # En Windows, Tkinter no ofrece un evento de pellizco portátil.
@@ -554,6 +600,10 @@ class CapturadorApp:
 
         vista.bind("<Configure>", lambda event: mostrar(ajustar=not zoom["inicializado"]))
         vista.bind("<MouseWheel>", rueda)
+        vista.bind("<Button-1>", iniciar_arrastre)
+        vista.bind("<B1-Motion>", mover_arrastre)
+        vista.bind("<ButtonRelease-1>", terminar_arrastre)
+        vista.bind("<Button-3>", alejar)
         vista.bind("<Button-4>", lambda event: (mostrar(event=event, factor=1.15), "break")[1])
         vista.bind("<Button-5>", lambda event: (mostrar(event=event, factor=1 / 1.15), "break")[1])
         dialog.after(150, lambda: mostrar(ajustar=not zoom["inicializado"]))
