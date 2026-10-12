@@ -25,6 +25,77 @@ from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
+
+class PinchZoomScrollView(ScrollView):
+    """ScrollView con zoom de pellizco para la vista previa final."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._zoom_image = None
+        self._base_size = None
+        self._zoom = 1.0
+        self._pinch_touches = {}
+        self._pinch_active = False
+        self._pinch_start_distance = 0.0
+        self._pinch_start_zoom = 1.0
+
+    def configurar_imagen_zoom(self, image_widget, base_size):
+        self._zoom_image = image_widget
+        self._base_size = base_size
+        self._zoom = 1.0
+        self._aplicar_zoom()
+
+    def _distancia_pellizco(self):
+        if len(self._pinch_touches) < 2:
+            return 0.0
+        a, b = list(self._pinch_touches.values())[:2]
+        return max(1.0, ((b.x - a.x) ** 2 + (b.y - a.y) ** 2) ** 0.5)
+
+    def _aplicar_zoom(self):
+        if self._zoom_image is None or self._base_size is None:
+            return
+        self._zoom_image.size = (
+            max(1, self._base_size[0] * self._zoom),
+            max(1, self._base_size[1] * self._zoom),
+        )
+
+    def on_touch_down(self, touch):
+        dentro = self.collide_point(*touch.pos)
+        if dentro:
+            self._pinch_touches[touch.uid] = touch
+            if len(self._pinch_touches) >= 2:
+                self._pinch_active = True
+                self._pinch_start_distance = self._distancia_pellizco()
+                self._pinch_start_zoom = self._zoom
+                touch.grab(self)
+                return True
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if touch.uid in self._pinch_touches:
+            self._pinch_touches[touch.uid] = touch
+            if self._pinch_active and len(self._pinch_touches) >= 2:
+                distancia = self._distancia_pellizco()
+                if self._pinch_start_distance > 0:
+                    factor = distancia / self._pinch_start_distance
+                    self._zoom = max(0.25, min(5.0, self._pinch_start_zoom * factor))
+                    self._aplicar_zoom()
+                return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        estaba_en_pellizco = self._pinch_active
+        if touch.uid in self._pinch_touches:
+            self._pinch_touches.pop(touch.uid, None)
+        if touch.grab_current is self:
+            touch.ungrab(self)
+        if estaba_en_pellizco:
+            if len(self._pinch_touches) < 2:
+                self._pinch_active = False
+                self._pinch_start_distance = 0.0
+            return True
+        return super().on_touch_up(touch)
+
 from PIL import Image as PILImage
 
 from shared.fdt import cargar_fdt
@@ -482,12 +553,15 @@ class CapturadorApp(App):
 
     def _popup_final(self, imagen):
         contenido = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
-        scroll = ScrollView()
+        scroll = PinchZoomScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(5))
         ruta_preview = os.path.join(tempfile.gettempdir(), "formatos_traducidos_final_preview.png")
         copia = imagen.copy()
         copia.thumbnail((1200, 1600), PILImage.Resampling.LANCZOS)
         copia.save(ruta_preview, format="PNG")
-        vista = Image(source=ruta_preview, allow_stretch=True, keep_ratio=True, size_hint=(1, None), height=dp(420))
+        vista = Image(
+            source=ruta_preview, allow_stretch=True, keep_ratio=True,
+            size_hint=(None, None), size=(dp(320), dp(420)),
+        )
         scroll.add_widget(vista)
         contenido.add_widget(scroll)
         contenido.add_widget(Label(
@@ -504,7 +578,19 @@ class CapturadorApp(App):
         popup = Popup(title="Revisar documento terminado", content=contenido, size_hint=(0.96, 0.92))
         cerrar.bind(on_release=popup.dismiss)
         guardar.bind(on_release=lambda *_: (popup.dismiss(), self._guardar_resultado()))
+        popup.bind(on_open=lambda *_: Clock.schedule_once(
+            lambda _dt: self._ajustar_zoom_preview(scroll, vista, copia.width, copia.height), 0
+        ))
         popup.open()
+
+    def _ajustar_zoom_preview(self, scroll, vista, ancho_imagen, alto_imagen):
+        ancho_disponible = max(dp(100), scroll.width - dp(12))
+        alto_disponible = max(dp(100), scroll.height - dp(12))
+        factor = min(ancho_disponible / float(ancho_imagen), alto_disponible / float(alto_imagen), 1.0)
+        vista.allow_stretch = True
+        scroll.configurar_imagen_zoom(
+            vista, (max(1, ancho_imagen * factor), max(1, alto_imagen * factor))
+        )
 
     def _seleccionar_carpeta(self, request_code):
         if not ANDROID_NATIVE:
