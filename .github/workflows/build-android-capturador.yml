@@ -1,8 +1,6 @@
 name: Compilar APK - Rellenador Android
 on:
   workflow_dispatch:
-  push:
-    branches: [desarrollo]
 permissions:
   contents: read
 jobs:
