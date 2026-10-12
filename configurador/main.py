@@ -1415,7 +1415,7 @@ class Configurador:
         dialog.configure(bg="#202020")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("430x650")
+        dialog.geometry("430x690")
         dialog.resizable(False, False)
 
         def label(text):
@@ -1438,6 +1438,25 @@ class Configurador:
         tk.Checkbutton(dialog, text="Respuesta obligatoria", variable=required_var,
                        bg="#202020", fg="white", selectcolor="#303030",
                        activebackground="#202020", activeforeground="white").pack(anchor="w", padx=16, pady=8)
+
+        uppercase_var = tk.BooleanVar(value=bool(getattr(campo, "uppercase", False)))
+        uppercase_row = tk.Frame(dialog, bg="#202020")
+        uppercase_row.pack(fill="x", padx=16, pady=(0, 6))
+        uppercase_button = tk.Button(
+            uppercase_row, text="A" if uppercase_var.get() else "a", width=3,
+            command=lambda: (
+                uppercase_var.set(not uppercase_var.get()),
+                uppercase_button.config(
+                    text="A" if uppercase_var.get() else "a",
+                    bg="#005f73" if uppercase_var.get() else "#303030",
+                ),
+            ),
+            bg="#005f73" if uppercase_var.get() else "#303030",
+            fg="white", activebackground="#006f83", relief="flat",
+        )
+        uppercase_button.pack(side="left")
+        tk.Label(uppercase_row, text="Convertir captura a MAYÚSCULAS",
+                 bg="#202020", fg="white").pack(side="left", padx=10)
 
         label("Tipografía").pack(fill="x", padx=16, pady=(8, 2))
         font_names = list(self._font_inventory.keys())
@@ -1542,6 +1561,7 @@ class Configurador:
             campo.field_id = nuevo_id
             campo.question = question.get("1.0", "end-1c").strip()
             campo.required = required_var.get()
+            campo.uppercase = uppercase_var.get()
             familia_fuente = font_var.get().strip()
             campo.text_style.font_family = self._ruta_fuente_seleccionada(
                 familia_fuente, bold_var.get(), italic_var.get()
