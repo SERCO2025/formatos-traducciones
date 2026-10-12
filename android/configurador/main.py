@@ -138,6 +138,8 @@ class CampoWidget(FloatLayout):
         else:
             texto = "ABCDE"
         estilo = self.campo.text_style
+        if getattr(self.campo, "uppercase", False):
+            texto = texto.upper()
         if estilo.bold:
             texto = "[b]" + texto + "[/b]"
         if estilo.italic:
@@ -146,10 +148,10 @@ class CampoWidget(FloatLayout):
             text=texto,
             markup=True,
             size_hint=(1, 1),
-            # FloatLayout no coloca automáticamente en el origen del padre
-            # a un hijo con size_hint si no tiene pos_hint. Sin esto, el texto
-            # podía quedarse en la esquina inferior izquierda de la pantalla.
+            # La muestra respeta la alineación configurada y empieza a 10 px
+            # del borde superior del campo, escalados con la plantilla.
             pos_hint={"x": 0, "y": 0},
+            padding=(0, 10 * self.editor.scale),
             color=(
                 estilo.color.r / 255.0,
                 estilo.color.g / 255.0,
@@ -158,7 +160,7 @@ class CampoWidget(FloatLayout):
             ),
             font_size=max(dp(7), estilo.font_size_px * self.editor.scale),
             halign=estilo.alignment if estilo.alignment in ("left", "center", "right") else "left",
-            valign="middle",
+            valign="top",
         )
         etiqueta.bind(size=lambda inst, value: setattr(inst, "text_size", value))
         if estilo.font_family and os.path.isfile(estilo.font_family):
