@@ -390,20 +390,58 @@ class CapturadorApp:
         area = tk.Frame(dialog, bg="#101010")
         area.pack(fill="both", expand=True, padx=12, pady=(12, 6))
 
-        etiqueta = tk.Label(area, bg="#101010")
-        etiqueta.pack(fill="both", expand=True)
+        barra_y = tk.Scrollbar(area, orient="vertical")
+        barra_x = tk.Scrollbar(area, orient="horizontal")
+        vista = tk.Canvas(
+            area, bg="#101010", highlightthickness=0,
+            xscrollcommand=barra_x.set, yscrollcommand=barra_y.set,
+        )
+        barra_y.config(command=vista.yview)
+        barra_x.config(command=vista.xview)
+        barra_y.pack(side="right", fill="y")
+        barra_x.pack(side="bottom", fill="x")
+        vista.pack(side="left", fill="both", expand=True)
 
-        def mostrar():
-            ancho = max(300, etiqueta.winfo_width() - 20)
-            alto = max(300, etiqueta.winfo_height() - 20)
-            copia = imagen.copy()
-            copia.thumbnail((ancho, alto), Image.Resampling.LANCZOS)
+        foto_id = vista.create_image(0, 0, anchor="nw")
+        zoom = {"valor": 1.0, "inicializado": False, "manual": False}
+
+        def mostrar(event=None, factor=None, ajustar=False):
+            ancho = max(1, vista.winfo_width() - 8)
+            alto = max(1, vista.winfo_height() - 8)
+            if ajustar or not zoom["inicializado"]:
+                zoom["valor"] = min(1.0, ancho / float(imagen.width), alto / float(imagen.height))
+                zoom["inicializado"] = True
+            elif factor is not None:
+                zoom["valor"] = max(0.02, min(5.0, zoom["valor"] * factor))
+                zoom["manual"] = True
+
+            nuevo_ancho = max(1, int(round(imagen.width * zoom["valor"])))
+            nuevo_alto = max(1, int(round(imagen.height * zoom["valor"])))
+            copia = imagen.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
             foto = ImageTk.PhotoImage(copia)
             self._final_preview_photo = foto
-            etiqueta.config(image=foto)
 
-        etiqueta.bind("<Configure>", lambda event: mostrar())
-        dialog.after(100, mostrar)
+            x = y = 0
+            if event is not None and factor is not None:
+                px = vista.canvasx(event.x)
+                py = vista.canvasy(event.y)
+                anterior_x, anterior_y = vista.coords(foto_id)
+                proporcion = zoom["valor"] / (zoom["valor"] / factor)
+                x = px - (px - anterior_x) * proporcion
+                y = py - (py - anterior_y) * proporcion
+            vista.itemconfigure(foto_id, image=foto)
+            vista.coords(foto_id, x, y)
+            vista.configure(scrollregion=(0, 0, max(ancho, x + nuevo_ancho), max(alto, y + nuevo_alto)))
+
+        def rueda(event):
+            mostrar(event=event, factor=1.15 if event.delta > 0 else 1 / 1.15)
+            return "break"
+
+        vista.bind("<Configure>", lambda event: mostrar(ajustar=not zoom["inicializado"]))
+        vista.bind("<MouseWheel>", rueda)
+        vista.bind("<Button-4>", lambda event: (mostrar(event=event, factor=1.15), "break")[1])
+        vista.bind("<Button-5>", lambda event: (mostrar(event=event, factor=1 / 1.15), "break")[1])
+        dialog.after(150, lambda: mostrar(ajustar=not zoom["inicializado"]))
 
         nombre = construir_nombre_archivo(self.formato, self.respuestas)
         papel, _ = self._seleccionar_papel(imagen)
