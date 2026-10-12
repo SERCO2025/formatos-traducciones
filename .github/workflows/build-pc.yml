@@ -1,9 +1,6 @@
 name: Compilar EXE - Formatos Traducidos
 on:
   workflow_dispatch:
-  push:
-    branches: [desarrollo]
-    paths: ["shared/**","configurador/**","capturador/**","requirements-pc.txt",".github/workflows/build-pc.yml"]
 permissions:
   contents: read
 jobs:
