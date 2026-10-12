@@ -1304,6 +1304,7 @@ class ConfiguradorApp(App):
         )
         form.add_widget(pregunta)
 
+        estado_mayusculas = {"valor": bool(getattr(campo, "uppercase", False))}
         fuente_spinner = None
         tamano = None
         boton_negrita = None
@@ -1314,6 +1315,25 @@ class ConfiguradorApp(App):
         orientacion = None
 
         if not es_imagen:
+            fila_mayusculas = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+            boton_mayusculas = Button(
+                text="A" if estado_mayusculas["valor"] else "a",
+                size_hint_x=None,
+                width=dp(48),
+                background_normal="",
+                background_color=(0.12, 0.48, 0.78, 1) if estado_mayusculas["valor"] else (0.22, 0.22, 0.22, 1),
+            )
+            def alternar_mayusculas(_boton):
+                estado_mayusculas["valor"] = not estado_mayusculas["valor"]
+                boton_mayusculas.text = "A" if estado_mayusculas["valor"] else "a"
+                boton_mayusculas.background_color = (
+                    (0.12, 0.48, 0.78, 1) if estado_mayusculas["valor"] else (0.22, 0.22, 0.22, 1)
+                )
+            boton_mayusculas.bind(on_release=alternar_mayusculas)
+            fila_mayusculas.add_widget(boton_mayusculas)
+            fila_mayusculas.add_widget(Label(text="Convertir captura a MAYÚSCULAS", halign="left"))
+            form.add_widget(fila_mayusculas)
+
             form.add_widget(Label(
                 text="Tipografía y tamaño",
                 size_hint_y=None,
@@ -1651,6 +1671,7 @@ class ConfiguradorApp(App):
                 self.push_undo()
                 campo.question = pregunta.text.strip()
                 campo.required = requerido.text.strip().lower() in ("sí", "si", "yes", "1", "true")
+                campo.uppercase = estado_mayusculas["valor"]
                 campo.position.x = min(max(0, entero(entradas_posicion["x"], campo.position.x)), max(0, self.formato.template.width - 2))
                 campo.position.y = min(max(0, entero(entradas_posicion["y"], campo.position.y)), max(0, self.formato.template.height - 2))
                 campo.position.width = max(2, entero(entradas_posicion["width"], campo.position.width))
