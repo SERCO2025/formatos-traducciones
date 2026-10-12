@@ -481,17 +481,22 @@ class CapturadorApp:
                 close_gesture.argtypes = [wintypes.HANDLE]
                 close_gesture.restype = wintypes.BOOL
 
+                get_proc_index = -4
+                LRESULT = ctypes.c_ssize_t
                 if ctypes.sizeof(ctypes.c_void_p) == 8:
                     set_proc = user32.SetWindowLongPtrW
-                    get_proc_index = -4
+                    get_proc = user32.GetWindowLongPtrW
+                    pointer_type = ctypes.c_ssize_t
                 else:
                     set_proc = user32.SetWindowLongW
-                    get_proc_index = -4
+                    get_proc = user32.GetWindowLongW
+                    pointer_type = ctypes.c_long
+                set_proc.argtypes = [wintypes.HWND, ctypes.c_int, pointer_type]
+                set_proc.restype = pointer_type
+                get_proc.argtypes = [wintypes.HWND, ctypes.c_int]
+                get_proc.restype = pointer_type
 
-                old_proc = user32.GetWindowLongPtrW(wintypes.HWND(hwnd), get_proc_index)
-                if not old_proc:
-                    old_proc = user32.GetWindowLongW(wintypes.HWND(hwnd), get_proc_index)
-                LRESULT = ctypes.c_ssize_t
+                old_proc = get_proc(wintypes.HWND(hwnd), get_proc_index)
                 WNDPROC = ctypes.WINFUNCTYPE(
                     LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
                 )
