@@ -956,17 +956,21 @@ class Configurador:
         # Así el configurador deja de mostrar una referencia tipográfica
         # diferente a la del documento final.
         if (
-            campo.field_type != FIELD_TYPE_IMAGE
-            and campo.text_style.font_family
+            campo.field_type == FIELD_TYPE_IMAGE
+            or campo.text_style.font_family
         ):
             try:
-                fuente = _cargar_fuente(
-                    campo.text_style.font_family,
-                    campo.text_style.font_size_px,
-                    campo.text_style.bold,
-                    campo.text_style.italic,
-                )
+                if campo.text_style.font_family:
+                    fuente = _cargar_fuente(
+                        campo.text_style.font_family,
+                        campo.text_style.font_size_px,
+                        campo.text_style.bold,
+                        campo.text_style.italic,
+                    )
+                else:
+                    fuente = ImageFont.load_default()
                 muestra = {
+                    FIELD_TYPE_IMAGE: "IMAGEN",
                     FIELD_TYPE_NUMBER: "123456",
                     FIELD_TYPE_ALPHANUMERIC: "A1B2C3",
                 }.get(campo.field_type, "Texto")
