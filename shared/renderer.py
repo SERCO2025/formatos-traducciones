@@ -231,6 +231,8 @@ def renderizar_imagen(formato, respuestas):
             continue
 
         texto = str(texto)
+        if getattr(campo, "uppercase", False):
+            texto = texto.upper()
         estilo = campo.text_style
         posicion = campo.position
         fuente = _cargar_fuente(
