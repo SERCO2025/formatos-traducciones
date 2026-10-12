@@ -127,6 +127,7 @@ class Field:
     position: Position = field(default_factory=Position)
     text_style: TextStyle = field(default_factory=TextStyle)
     text: str = ""
+    uppercase: bool = False
 
     def to_dict(self):
         return {
@@ -139,6 +140,7 @@ class Field:
             "position": self.position.to_dict(),
             "text_style": self.text_style.to_dict(),
             "text": self.text,
+            "uppercase": self.uppercase,
         }
 
     @classmethod
@@ -154,6 +156,7 @@ class Field:
             position=Position.from_dict(data.get("position", {})),
             text_style=TextStyle.from_dict(data.get("text_style", {})),
             text=str(data.get("text", "")),
+            uppercase=bool(data.get("uppercase", False)),
         )
 
 
