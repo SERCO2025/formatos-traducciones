@@ -5,6 +5,7 @@ package.domain = com.serco
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,json,fdt,ttf,otf
 version = 0.1.0
+icon.filename = icon.png
 
 # ¡CRÍTICO! pyjnius es obligatorio para que funcione el selector de archivos de Android
 requirements = python3,kivy,pillow,pyjnius
