@@ -1634,10 +1634,23 @@ class Configurador:
             self.zoom_label.config(text="%d %%" % int(round(self.zoom * 100)))
 
     def on_mousewheel(self, event):
+        # En touchpads de precisión, el pellizco suele llegar como rueda
+        # con Ctrl; el desplazamiento con dos dedos llega como rueda normal.
         if self.tool == TOOL_ZOOM or (event.state & 0x0004):
             self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
             return
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+
+        # El desplazamiento horizontal de dos dedos suele exponerse como
+        # Shift + rueda. Invertimos el desplazamiento de la vista para que
+        # la plantilla se mueva en el sentido opuesto al gesto de los dedos.
+        if event.state & 0x0001:
+            unidades = max(1, int(abs(event.delta) / 120))
+            self.canvas.xview_scroll(unidades if event.delta > 0 else -unidades, "units")
+            return
+
+        # Incluye touchpads que envían deltas pequeños, no múltiplos de 120.
+        unidades = max(1, int(abs(event.delta) / 120))
+        self.canvas.yview_scroll(-unidades if event.delta > 0 else unidades, "units")
 
     def on_ctrl_wheel(self, event):
         self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
