@@ -955,9 +955,8 @@ class Configurador:
         # la misma fuente y el mismo cálculo de tamaño que usará el renderer.
         # Así el configurador deja de mostrar una referencia tipográfica
         # diferente a la del documento final.
-        if (
-            campo.field_type == FIELD_TYPE_IMAGE
-            or campo.text_style.font_family
+        if campo.field_type in (
+            FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC
         ):
             try:
                 if campo.text_style.font_family:
@@ -968,7 +967,12 @@ class Configurador:
                         campo.text_style.italic,
                     )
                 else:
-                    fuente = ImageFont.load_default()
+                    try:
+                        fuente = ImageFont.load_default(
+                            size=max(1, int(campo.text_style.font_size_px))
+                        )
+                    except TypeError:
+                        fuente = ImageFont.load_default()
                 muestra = {
                     FIELD_TYPE_IMAGE: "IMAGEN",
                     FIELD_TYPE_NUMBER: "123456",
