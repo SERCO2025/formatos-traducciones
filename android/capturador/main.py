@@ -448,6 +448,10 @@ class CapturadorApp(App):
         if campo.field_type == FIELD_TYPE_IMAGE:
             return True
         respuesta = self.entrada.text
+        if getattr(campo, "uppercase", False):
+            respuesta = respuesta.upper()
+            if self.entrada.text != respuesta:
+                self.entrada.text = respuesta
         valido, mensaje = validar_respuesta(campo, respuesta)
         if not valido:
             self._mensaje("Respuesta no válida", mensaje)
