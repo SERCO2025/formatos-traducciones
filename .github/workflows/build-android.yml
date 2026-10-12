@@ -1,9 +1,6 @@
 name: Compilar APK - Formatos Traducidos
 on:
   workflow_dispatch:
-  push:
-    branches: [desarrollo]
-    paths: ["android/**", "shared/**", ".github/workflows/build-android.yml"]
 permissions:
   contents: read
 jobs:
