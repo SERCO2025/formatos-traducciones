@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-import sys
-import ctypes
 import tempfile
 import tkinter as tk
 from pathlib import Path
@@ -492,112 +490,6 @@ class CapturadorApp:
             mostrar(event=event, factor=1 / 1.15)
             return "break"
 
-        # En Windows, Tkinter no ofrece un evento de pellizco portátil.
-        # Se usa WM_GESTURE para recibir GID_ZOOM desde pantallas táctiles.
-        def instalar_pellizco_windows():
-            if sys.platform != "win32":
-                return
-            try:
-                from ctypes import wintypes
-
-                user32 = ctypes.windll.user32
-                hwnd = vista.winfo_id()
-                if not user32.RegisterTouchWindow(wintypes.HWND(hwnd), 0):
-                    return
-
-                class POINT(ctypes.Structure):
-                    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
-
-                class GESTUREINFO(ctypes.Structure):
-                    _fields_ = [
-                        ("cbSize", wintypes.UINT),
-                        ("dwFlags", wintypes.DWORD),
-                        ("dwID", wintypes.DWORD),
-                        ("hwndTarget", wintypes.HWND),
-                        ("ptsLocation", POINT),
-                        ("dwInstanceID", wintypes.DWORD),
-                        ("dwSequenceID", wintypes.DWORD),
-                        ("ullArguments", ctypes.c_ulonglong),
-                        ("cbExtraArgs", wintypes.UINT),
-                    ]
-
-                GID_ZOOM = 3
-                WM_GESTURE = 0x0119
-                GESTUREINFO_SIZE = ctypes.sizeof(GESTUREINFO)
-                get_gesture = user32.GetGestureInfo
-                get_gesture.argtypes = [wintypes.HANDLE, ctypes.POINTER(GESTUREINFO)]
-                get_gesture.restype = wintypes.BOOL
-                close_gesture = user32.CloseGestureInfoHandle
-                close_gesture.argtypes = [wintypes.HANDLE]
-                close_gesture.restype = wintypes.BOOL
-
-                get_proc_index = -4
-                LRESULT = ctypes.c_ssize_t
-                if ctypes.sizeof(ctypes.c_void_p) == 8:
-                    set_proc = user32.SetWindowLongPtrW
-                    get_proc = user32.GetWindowLongPtrW
-                    pointer_type = ctypes.c_ssize_t
-                else:
-                    set_proc = user32.SetWindowLongW
-                    get_proc = user32.GetWindowLongW
-                    pointer_type = ctypes.c_long
-                set_proc.argtypes = [wintypes.HWND, ctypes.c_int, pointer_type]
-                set_proc.restype = pointer_type
-                get_proc.argtypes = [wintypes.HWND, ctypes.c_int]
-                get_proc.restype = pointer_type
-
-                old_proc = get_proc(wintypes.HWND(hwnd), get_proc_index)
-                WNDPROC = ctypes.WINFUNCTYPE(
-                    LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
-                )
-                zoom_state = {"distance": None}
-
-                def procedure(window, message, wparam, lparam):
-                    if message == WM_GESTURE:
-                        gi = GESTUREINFO()
-                        gi.cbSize = GESTUREINFO_SIZE
-                        if get_gesture(wintypes.HANDLE(lparam), ctypes.byref(gi)):
-                            try:
-                                if gi.dwID == GID_ZOOM:
-                                    distancia = float(gi.ullArguments)
-                                    if gi.dwFlags & 1:  # GF_BEGIN
-                                        zoom_state["distance"] = distancia
-                                    elif zoom_state["distance"] and distancia > 0:
-                                        factor = distancia / zoom_state["distance"]
-                                        zoom_state["distance"] = distancia
-                                        class Punto:
-                                            pass
-                                        evento = Punto()
-                                        evento.x = gi.ptsLocation.x - vista.winfo_rootx()
-                                        evento.y = gi.ptsLocation.y - vista.winfo_rooty()
-                                        mostrar(event=evento, factor=max(0.5, min(2.0, factor)))
-                                    if gi.dwFlags & 4:  # GF_END
-                                        zoom_state["distance"] = None
-                                    return 0
-                            finally:
-                                close_gesture(wintypes.HANDLE(lparam))
-                    return call_old_proc(window, message, wparam, lparam)
-
-                call_old_proc = ctypes.WINFUNCTYPE(
-                    LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
-                )(old_proc)
-                callback = WNDPROC(procedure)
-                set_proc(wintypes.HWND(hwnd), get_proc_index, ctypes.cast(callback, ctypes.c_void_p).value)
-                vista._pinch_wndproc = callback
-                vista._pinch_old_proc = call_old_proc
-
-                def restaurar(_event=None):
-                    try:
-                        set_proc(wintypes.HWND(hwnd), get_proc_index, ctypes.cast(call_old_proc, ctypes.c_void_p).value)
-                        user32.UnregisterTouchWindow(wintypes.HWND(hwnd))
-                    except Exception:
-                        pass
-
-                dialog.bind("<Destroy>", lambda event: restaurar() if event.widget is dialog else None, add="+")
-            except Exception:
-                # Si el sistema no expone la API de gestos, la rueda sigue disponible.
-                return
-
         vista.bind("<Configure>", lambda event: mostrar(ajustar=not zoom["inicializado"]))
         vista.bind("<MouseWheel>", rueda)
         vista.bind("<Button-1>", iniciar_arrastre)
@@ -607,7 +499,6 @@ class CapturadorApp:
         vista.bind("<Button-4>", lambda event: (mostrar(event=event, factor=1.15), "break")[1])
         vista.bind("<Button-5>", lambda event: (mostrar(event=event, factor=1 / 1.15), "break")[1])
         dialog.after(150, lambda: mostrar(ajustar=not zoom["inicializado"]))
-        dialog.after(250, instalar_pellizco_windows)
 
         nombre = construir_nombre_archivo(self.formato, self.respuestas)
         papel, _ = self._seleccionar_papel(imagen)
