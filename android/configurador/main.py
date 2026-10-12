@@ -517,12 +517,21 @@ class CanvasEditor(StencilView):
                 alignment="left",
             ),
         )
+        mayusculas_anteriores = next(
+            (
+                bool(getattr(c, "uppercase", False))
+                for c in sorted(self.app.formato.fields, key=lambda item: item.order, reverse=True)
+                if c.field_type != FIELD_TYPE_IMAGE
+            ),
+            False,
+        )
         campo = Field(
             field_id=self.app.nuevo_id(),
             question="",
             field_type=tool,
             position=Position(left, top, width, height),
             text_style=estilo_anterior,
+            uppercase=mayusculas_anteriores,
         )
         self.app.formato.agregar_campo(campo)
         self.app.seleccionar(campo)
