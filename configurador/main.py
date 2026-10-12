@@ -1256,12 +1256,21 @@ class Configurador:
                 font_family="", font_size_px=24, color=Color(0, 0, 0),
                 alignment="left", bold=False, italic=False,
             )
+        mayusculas_anteriores = next(
+            (
+                bool(getattr(c, "uppercase", False))
+                for c in reversed(self.formato.fields)
+                if c.field_type != TOOL_IMAGE
+            ),
+            False,
+        )
         campo = Field(
             field_id=self._nuevo_id(),
             question="",
             field_type=self.tool,
             position=Position(left, top, width, height),
             text_style=estilo_anterior,
+            uppercase=mayusculas_anteriores,
         )
         self.formato.agregar_campo(campo)
         self.selected_field = campo
