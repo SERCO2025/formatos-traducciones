@@ -1,6 +1,8 @@
 name: Compilar EXE - Formatos Traducidos
 on:
   workflow_dispatch:
+  push:
+    branches: [desarrollo]
 permissions:
   contents: read
 jobs:

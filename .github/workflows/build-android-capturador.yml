@@ -3,10 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: [desarrollo]
-    paths:
-      - "android/capturador/**"
-      - "shared/**"
-      - ".github/workflows/build-android-capturador.yml"
 permissions:
   contents: read
 jobs:
