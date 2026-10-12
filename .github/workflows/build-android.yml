@@ -88,6 +88,20 @@ jobs:
       - name: Instalar Buildozer
         run: |
           python -m pip install --upgrade buildozer
+          python -m pip install pillow
+      - name: Preparar icono de la aplicación
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+
+          app = "${{ matrix.app }}"
+          source = "FdT Config Icon.ico" if app == "configurador" else "FdT Icon.ico"
+          target = Path("android") / app / "icon.png"
+          with Image.open(source) as icon:
+              icon.convert("RGBA").save(target, format="PNG")
+          print(f"Icono preparado: {target}")
+          PY
       - name: Preparar fuente Android
         run: |
           rm -rf "android/${{ matrix.app }}/shared"
