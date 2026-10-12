@@ -408,6 +408,8 @@ class CapturadorApp:
         def mostrar(event=None, factor=None, ajustar=False):
             ancho = max(1, vista.winfo_width() - 8)
             alto = max(1, vista.winfo_height() - 8)
+            if not zoom["inicializado"] and (ancho <= 50 or alto <= 50):
+                return
             if ajustar or not zoom["inicializado"]:
                 zoom["valor"] = min(1.0, ancho / float(imagen.width), alto / float(imagen.height))
                 zoom["inicializado"] = True
