@@ -956,8 +956,7 @@ class Configurador:
         # Así el configurador deja de mostrar una referencia tipográfica
         # diferente a la del documento final.
         if (
-            campo is self.selected_field
-            and campo.field_type != FIELD_TYPE_IMAGE
+            campo.field_type != FIELD_TYPE_IMAGE
             and campo.text_style.font_family
         ):
             try:
@@ -971,6 +970,8 @@ class Configurador:
                     FIELD_TYPE_NUMBER: "123456",
                     FIELD_TYPE_ALPHANUMERIC: "A1B2C3",
                 }.get(campo.field_type, "Texto")
+                if getattr(campo, "uppercase", False):
+                    muestra = muestra.upper()
                 color_rgb = (
                     campo.text_style.color.r,
                     campo.text_style.color.g,
@@ -981,14 +982,16 @@ class Configurador:
                 alto = max(1, int(round(p.height)))
                 capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
                 capa_draw = ImageDraw.Draw(capa)
-                if campo.text_style.alignment == "center":
-                    xy = (ancho // 2, 0)
+                alineacion = campo.text_style.alignment
+                y_muestra = min(10, max(0, alto - 1))
+                if alineacion == "center":
+                    xy = (ancho // 2, y_muestra)
                     anchor = "mt"
-                elif campo.text_style.alignment == "right":
-                    xy = (ancho, 0)
+                elif alineacion == "right":
+                    xy = (ancho, y_muestra)
                     anchor = "rt"
                 else:
-                    xy = (0, 0)
+                    xy = (0, y_muestra)
                     anchor = "lt"
                 capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
                 visible_capa = capa.resize(
@@ -1119,6 +1122,7 @@ class Configurador:
             self.cambiar_zoom(1.25)
             return
         if self.tool == TOOL_HAND:
+            self.canvas.scan_mark(event.x, event.y)
             self._pan_last = (event.x, event.y)
             return
         if self.tool == TOOL_MEASURE:
@@ -1170,10 +1174,8 @@ class Configurador:
             return
 
         if self.tool == TOOL_HAND and self._pan_last is not None:
-            dx = event.x - self._pan_last[0]
-            dy = event.y - self._pan_last[1]
-            self.canvas.xview_scroll(int(-dx / 2), "units")
-            self.canvas.yview_scroll(int(-dy / 2), "units")
+            # El escaneo del Canvas desplaza la vista a la misma velocidad del puntero.
+            self.canvas.scan_dragto(event.x, event.y, gain=1)
             self._pan_last = (event.x, event.y)
             return
 
