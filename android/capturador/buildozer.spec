@@ -5,6 +5,7 @@ package.domain = com.serco
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,json,fdt,ttf
 version = 0.1.0
+icon.filename = icon.png
 requirements = python3,kivy,pillow
 orientation = portrait
 fullscreen = 0
