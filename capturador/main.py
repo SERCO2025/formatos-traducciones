@@ -408,13 +408,14 @@ class CapturadorApp:
         def mostrar(event=None, factor=None, ajustar=False):
             ancho = max(1, vista.winfo_width() - 8)
             alto = max(1, vista.winfo_height() - 8)
+            zoom_anterior = zoom["valor"]
             if not zoom["inicializado"] and (ancho <= 50 or alto <= 50):
                 return
             if ajustar or not zoom["inicializado"]:
                 zoom["valor"] = min(1.0, ancho / float(imagen.width), alto / float(imagen.height))
                 zoom["inicializado"] = True
             elif factor is not None:
-                zoom["valor"] = max(0.02, min(5.0, zoom["valor"] * factor))
+                zoom["valor"] = max(0.02, min(2.0, zoom["valor"] * factor))
                 zoom["manual"] = True
 
             nuevo_ancho = max(1, int(round(imagen.width * zoom["valor"])))
@@ -428,7 +429,7 @@ class CapturadorApp:
                 px = vista.canvasx(event.x)
                 py = vista.canvasy(event.y)
                 anterior_x, anterior_y = vista.coords(foto_id)
-                proporcion = zoom["valor"] / (zoom["valor"] / factor)
+                proporcion = zoom["valor"] / zoom_anterior
                 x = px - (px - anterior_x) * proporcion
                 y = py - (py - anterior_y) * proporcion
             vista.itemconfigure(foto_id, image=foto)
