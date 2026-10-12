@@ -290,6 +290,10 @@ class CapturadorApp:
             return True
 
         respuesta = self.entrada.get("1.0", "end-1c")
+        if getattr(campo, "uppercase", False):
+            respuesta = respuesta.upper()
+            self.entrada.delete("1.0", "end")
+            self.entrada.insert("1.0", respuesta)
         valido, mensaje = validar_respuesta(campo, respuesta)
 
         if not valido:
