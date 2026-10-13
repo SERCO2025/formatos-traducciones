@@ -17,6 +17,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.metrics import dp
+from kivy.graphics import Color, Line, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -24,6 +25,53 @@ from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
+
+
+class GradientExitButton(Button):
+    """Botón rojo con degradado vertical y bisel que se invierte al presionar."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("text", "Salir")
+        kwargs.setdefault("font_size", "22sp")
+        kwargs.setdefault("bold", True)
+        kwargs.setdefault("color", (1, 1, 1, 1))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(62))
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        super().__init__(**kwargs)
+        self._bandas = []
+        with self.canvas.before:
+            for color in (
+                (1.0, .30, .30, 1), (.96, .20, .20, 1),
+                (.88, .09, .09, 1), (.76, .035, .035, 1),
+                (.62, 0, 0, 1), (.43, 0, 0, 1),
+            ):
+                instruccion_color = Color(*color)
+                rectangulo = Rectangle(pos=self.pos, size=self.size)
+                self._bandas.append((instruccion_color, rectangulo))
+            self._borde_color = Color(.30, 0, 0, 1)
+            self._borde = Line(rectangle=(self.x, self.y, self.width, self.height), width=2)
+            self._bisel_color = Color(1, .55, .55, 1)
+            self._bisel = Line(points=[self.x, self.y, self.x + self.width, self.y], width=3)
+        self.bind(pos=self._actualizar_dibujo, size=self._actualizar_dibujo, state=self._actualizar_dibujo)
+        self._actualizar_dibujo()
+
+    def _actualizar_dibujo(self, *_):
+        if not self._bandas:
+            return
+        presionado = self.state == "down"
+        alto = max(1, self.height / float(len(self._bandas)))
+        for i, (color, rectangulo) in enumerate(self._bandas):
+            y = self.y + (i * alto if not presionado else (len(self._bandas) - 1 - i) * alto)
+            rectangulo.pos = (self.x + dp(3), y + dp(2))
+            rectangulo.size = (max(1, self.width - dp(6)), alto + dp(1))
+        self._borde_color.rgba = (.95, .35, .35, 1) if presionado else (.25, 0, 0, 1)
+        self._borde.rectangle = (self.x + dp(2), self.y + dp(2), self.width - dp(4), self.height - dp(4))
+        self._bisel_color.rgba = (.30, 0, 0, 1) if presionado else (1, .65, .65, 1)
+        y_bisel = self.y + (dp(5) if presionado else self.height - dp(5))
+        self._bisel.points = [self.x + dp(8), y_bisel, self.x + self.width - dp(8), y_bisel]
 
 
 class PinchZoomScrollView(ScrollView):
@@ -204,6 +252,18 @@ class CapturadorApp(App):
         controls_nav.add_widget(self.btn_siguiente)
         root.add_widget(controls_nav)
 
+        # Salida aislada en la parte inferior, lejos de los controles de captura.
+        root.add_widget(BoxLayout(size_hint_y=None, height=dp(10)))
+        controls_exit = BoxLayout(size_hint_y=None, height=dp(66), padding=(dp(40), 0))
+        self.btn_salir = Button(
+            text="Salir", size_hint=(None, 1), width=dp(120),
+            font_size="15sp", bold=True,
+        )
+        self.btn_salir.bind(on_release=lambda *_: self._confirmar_salida())
+        controls_exit.add_widget(Label())
+        controls_exit.add_widget(self.btn_salir)
+        root.add_widget(controls_exit)
+
         if ANDROID_NATIVE:
             try:
                 activity.bind(on_activity_result=self._on_activity_result)
@@ -212,6 +272,55 @@ class CapturadorApp(App):
         else:
             self.estado.text = "Entorno de prueba: los selectores requieren Android."
         return root
+
+    def _confirmar_salida(self):
+        contenido = BoxLayout(
+            orientation="vertical", padding=(dp(18), dp(18)),
+            spacing=dp(10),
+        )
+        contenido.canvas.before.clear()
+        with contenido.canvas.before:
+            Color(0, 0, 0, 1)
+            fondo = Rectangle(pos=contenido.pos, size=contenido.size)
+        contenido.bind(pos=lambda obj, value: setattr(fondo, "pos", value))
+        contenido.bind(size=lambda obj, value: setattr(fondo, "size", value))
+
+        encabezado = Label(
+            text="Confirma para salir", color=(1, 1, 0, 1),
+            font_size="26sp", bold=True, size_hint_y=None, height=dp(48),
+            halign="center", valign="middle",
+        )
+        encabezado.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        contenido.add_widget(encabezado)
+
+        aviso = Label(
+            text="Recuerda grabar los avances o se perdera toda la informacion capturada",
+            color=(1, 1, 1, 1), font_size="14sp",
+            size_hint_y=None, height=dp(54), halign="center", valign="middle",
+        )
+        aviso.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        contenido.add_widget(aviso)
+
+        instruccion = Label(
+            text="para cerrar presione el boton rojo",
+            color=(1, 1, 1, 1), font_size="14sp",
+            size_hint_y=None, height=dp(30), halign="center", valign="middle",
+        )
+        instruccion.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        contenido.add_widget(instruccion)
+
+        boton = GradientExitButton()
+        contenido.add_widget(boton)
+        popup = Popup(
+            title="", content=contenido, size_hint=(0.94, None),
+            height=dp(300), auto_dismiss=False, background="",
+            background_color=(0, 0, 0, 1), separator_height=0,
+        )
+        def salir_confirmado(*_):
+            popup.dismiss()
+            App.get_running_app().stop()
+        boton.bind(on_release=salir_confirmado)
+        popup.open()
 
     def _mensaje(self, titulo, mensaje):
         # Los tracebacks largos deben poder desplazarse; el Label anterior
