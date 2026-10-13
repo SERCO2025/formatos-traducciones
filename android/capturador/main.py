@@ -16,6 +16,7 @@ from pathlib import Path
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.graphics import Color, Line, Rectangle
 from kivy.uix.boxlayout import BoxLayout
@@ -170,6 +171,8 @@ class CapturadorApp(App):
     REQUEST_SAVE_DRAFT_FOLDER = 736
 
     def build(self):
+        self._popup_salida = None
+        Window.bind(on_keyboard=self._manejar_tecla_android)
         self.formato = None
         self.respuestas = {}
         self.indice = 0
@@ -271,6 +274,16 @@ class CapturadorApp(App):
             self.estado.text = "Entorno de prueba: los selectores requieren Android."
         return root
 
+    def _manejar_tecla_android(self, window, key, scancode, codepoint, modifiers):
+        # El botón Atrás de Android nunca cierra la aplicación.
+        # Si está abierta la confirmación, solo la descarta y vuelve al capturador.
+        if key in (27, 1001):
+            popup = getattr(self, "_popup_salida", None)
+            if popup is not None and popup.parent is not None:
+                popup.dismiss()
+            return True
+        return False
+
     def _confirmar_salida(self):
         contenido = BoxLayout(
             orientation="vertical", padding=(dp(18), dp(18)),
@@ -311,9 +324,11 @@ class CapturadorApp(App):
         contenido.add_widget(boton)
         popup = Popup(
             title="", content=contenido, size_hint=(0.94, None),
-            height=dp(300), auto_dismiss=False, background="",
+            height=dp(300), auto_dismiss=True, background="",
             background_color=(0, 0, 0, 1), separator_height=0,
         )
+        self._popup_salida = popup
+        popup.bind(on_dismiss=lambda *_: setattr(self, "_popup_salida", None))
         def salir_confirmado(*_):
             popup.dismiss()
             App.get_running_app().stop()
