@@ -157,6 +157,93 @@ class CapturadorApp:
         )
         self.btn_siguiente.pack(side="right")
 
+        # El botón de salida queda separado de los controles de captura.
+        salida = tk.Frame(principal, bg="#202020")
+        salida.pack(fill="x", padx=24, pady=(0, 16))
+        tk.Label(salida, text="", bg="#202020").pack(side="left", expand=True, fill="x")
+        self.btn_salir = tk.Button(
+            salida, text="Salir", command=self._confirmar_salida,
+            bg="#8b0000", fg="white", activebackground="#b00000",
+            activeforeground="white", font=("Segoe UI", 10, "bold"),
+            relief="raised", bd=4, padx=22, pady=5,
+        )
+        self.btn_salir.pack(side="right", padx=(24, 0))
+
+    def _confirmar_salida(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Confirmar salida")
+        dialog.configure(bg="black")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        ancho, alto = 560, 300
+        self.root.update_idletasks()
+        x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - ancho) // 2)
+        y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - alto) // 2)
+        dialog.geometry("%dx%d+%d+%d" % (ancho, alto, x, y))
+
+        tk.Label(
+            dialog, text="Confirma para salir", bg="black", fg="#ffff00",
+            font=("Segoe UI", 24, "bold"),
+        ).pack(pady=(24, 10))
+        tk.Label(
+            dialog, text="Recuerda grabar los avances o se perdera toda la informacion capturada",
+            bg="black", fg="white", font=("Segoe UI", 11), wraplength=510,
+        ).pack(pady=(0, 8))
+        tk.Label(
+            dialog, text="para cerrar presione el boton rojo",
+            bg="black", fg="white", font=("Segoe UI", 11),
+        ).pack(pady=(0, 18))
+
+        # Botón dibujado para lograr el degradado y el relieve 3D.
+        boton = tk.Canvas(dialog, width=220, height=62, bg="black",
+                          highlightthickness=0, bd=0, cursor="hand2")
+        boton.pack()
+        estado = {"presionado": False}
+
+        def dibujar(presionado=False):
+            boton.delete("all")
+            desplazamiento = 4 if presionado else 0
+            # Sombra exterior y bisel cambian de orientación al presionar.
+            if presionado:
+                boton.create_rectangle(8, 5, 212, 58, fill="#430000", outline="#300000", width=2)
+                top, bottom = 9, 55
+            else:
+                boton.create_rectangle(8, 8, 212, 61, fill="#310000", outline="#220000", width=2)
+                top, bottom = 4, 51
+            colores = ["#ff5555", "#f04444", "#df2929", "#c91616", "#a90000", "#850000"]
+            alto_banda = max(1, (bottom - top) // len(colores))
+            for i, color in enumerate(colores):
+                y1 = top + i * alto_banda
+                y2 = bottom if i == len(colores) - 1 else top + (i + 1) * alto_banda
+                boton.create_rectangle(12, y1, 208, y2, fill=color, outline=color)
+            if not presionado:
+                boton.create_line(14, top + 2, 206, top + 2, fill="#ffaaaa", width=2)
+                boton.create_line(14, bottom - 1, 206, bottom - 1, fill="#690000", width=3)
+            else:
+                boton.create_line(14, top + 1, 206, top + 1, fill="#690000", width=3)
+                boton.create_line(14, bottom - 1, 206, bottom - 1, fill="#ff7777", width=2)
+            boton.create_text(110, (top + bottom) // 2, text="Salir",
+                              fill="white", font=("Segoe UI", 18, "bold"))
+
+        def presionar(event):
+            estado["presionado"] = True
+            dibujar(True)
+
+        def soltar(event):
+            estaba_dentro = 0 <= event.x <= 220 and 0 <= event.y <= 62
+            estado["presionado"] = False
+            dibujar(False)
+            if estaba_dentro:
+                dialog.destroy()
+                self.root.destroy()
+
+        boton.bind("<ButtonPress-1>", presionar)
+        boton.bind("<ButtonRelease-1>", soltar)
+        dibujar(False)
+        dialog.grab_set()
+        dialog.focus_force()
+
     def _mostrar_inicio(self):
         self.pregunta.config(text="Abra un formato .fdt para comenzar.")
         self.entrada.config(state="disabled")
