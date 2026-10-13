@@ -64,7 +64,7 @@ class GradientExitButton(Button):
         presionado = self.state == "down"
         alto = max(1, self.height / float(len(self._bandas)))
         for i, (color, rectangulo) in enumerate(self._bandas):
-            y = self.y + (i * alto if not presionado else (len(self._bandas) - 1 - i) * alto)
+            y = self.y + ((len(self._bandas) - 1 - i) * alto if not presionado else i * alto)
             rectangulo.pos = (self.x + dp(3), y + dp(2))
             rectangulo.size = (max(1, self.width - dp(6)), alto + dp(1))
         self._borde_color.rgba = (.95, .35, .35, 1) if presionado else (.25, 0, 0, 1)
