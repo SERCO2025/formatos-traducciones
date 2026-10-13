@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import re
 
 
 def validar_respuesta(campo, respuesta):
@@ -8,13 +7,14 @@ def validar_respuesta(campo, respuesta):
     if campo.required and not respuesta.strip():
         return False, "Este campo es obligatorio."
 
+    # Los campos numéricos aceptan dígitos, espacios y símbolos (por ejemplo:
+    # 123-45, +52 664, 10/12/2026). Se rechazan únicamente las letras.
     if campo.validation.numeric_only and respuesta.strip():
-        if not respuesta.strip().isdigit():
-            return False, "Este campo solo permite números."
+        if any(caracter.isalpha() for caracter in respuesta):
+            return False, "Este campo permite números, espacios y símbolos, pero no letras."
 
-    if campo.validation.alphanumeric_only and respuesta.strip():
-        if not respuesta.strip().isalnum():
-            return False, "Este campo solo permite letras y números."
+    # Los campos alfanuméricos y de texto aceptan letras, números, espacios
+    # y símbolos sin restricciones adicionales.
 
     return True, ""
 
