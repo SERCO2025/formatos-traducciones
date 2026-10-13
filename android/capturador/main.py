@@ -182,11 +182,19 @@ class CapturadorApp(App):
         self._draft_dirs = []
 
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
-        root.add_widget(Label(
+        encabezado = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
+        encabezado.add_widget(Label(
             text="Formatos Traducidos",
-            size_hint_y=None, height=dp(42),
-            font_size="22sp", bold=True,
+            font_size="22sp", bold=True, halign="left",
         ))
+        # Botón Salir en la esquina superior derecha y al 50 % del tamaño anterior.
+        self.btn_salir = Button(
+            text="Salir", size_hint=(None, None),
+            width=dp(60), height=dp(33), font_size="7.5sp", bold=True,
+        )
+        self.btn_salir.bind(on_release=lambda *_: self._confirmar_salida())
+        encabezado.add_widget(self.btn_salir)
+        root.add_widget(encabezado)
         self.estado = Label(
             text="Abra un formato .fdt para comenzar.",
             size_hint_y=None, height=dp(42),
@@ -252,17 +260,7 @@ class CapturadorApp(App):
         controls_nav.add_widget(self.btn_siguiente)
         root.add_widget(controls_nav)
 
-        # Salida aislada en la parte inferior, lejos de los controles de captura.
-        root.add_widget(BoxLayout(size_hint_y=None, height=dp(10)))
-        controls_exit = BoxLayout(size_hint_y=None, height=dp(66), padding=(dp(40), 0))
-        self.btn_salir = Button(
-            text="Salir", size_hint=(None, 1), width=dp(120),
-            font_size="15sp", bold=True,
-        )
-        self.btn_salir.bind(on_release=lambda *_: self._confirmar_salida())
-        controls_exit.add_widget(Label())
-        controls_exit.add_widget(self.btn_salir)
-        root.add_widget(controls_exit)
+        # El botón Salir ya está aislado en el encabezado superior derecho.
 
         if ANDROID_NATIVE:
             try:
