@@ -41,6 +41,14 @@ class CapturadorApp:
         encabezado = tk.Frame(principal, bg="#202020")
         encabezado.pack(fill="x", padx=24, pady=(18, 8))
 
+        self.btn_salir = tk.Button(
+            encabezado, text="Salir", command=self._confirmar_salida,
+            bg="#8b0000", fg="white", activebackground="#b00000",
+            activeforeground="white", font=("Segoe UI", 5, "bold"),
+            relief="raised", bd=2, padx=11, pady=2,
+        )
+        self.btn_salir.pack(side="right", anchor="ne")
+
         self.titulo = tk.Label(
             encabezado,
             text="Formatos Traducidos",
@@ -157,17 +165,7 @@ class CapturadorApp:
         )
         self.btn_siguiente.pack(side="right")
 
-        # El botón de salida queda separado de los controles de captura.
-        salida = tk.Frame(principal, bg="#202020")
-        salida.pack(fill="x", padx=24, pady=(0, 16))
-        tk.Label(salida, text="", bg="#202020").pack(side="left", expand=True, fill="x")
-        self.btn_salir = tk.Button(
-            salida, text="Salir", command=self._confirmar_salida,
-            bg="#8b0000", fg="white", activebackground="#b00000",
-            activeforeground="white", font=("Segoe UI", 10, "bold"),
-            relief="raised", bd=4, padx=22, pady=5,
-        )
-        self.btn_salir.pack(side="right", padx=(24, 0))
+        # El botón Salir está aislado en la esquina superior derecha.
 
     def _confirmar_salida(self):
         dialog = tk.Toplevel(self.root)
