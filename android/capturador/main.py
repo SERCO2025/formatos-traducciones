@@ -936,7 +936,7 @@ class CapturadorApp(App):
         contenido.add_widget(botones)
         popup = Popup(
             title="Configuración", content=contenido,
-            size_hint=(0.94, None), height=dp(420), auto_dismiss=False,
+            size_hint=(0.94, None), height=dp(500), auto_dismiss=False,
         )
         cancelar.bind(on_release=popup.dismiss)
 
@@ -960,13 +960,15 @@ class CapturadorApp(App):
 
         def elegir_carpeta(*_):
             texto_dias = (dias.text or "").strip()
-            try:
-                valor = int(texto_dias)
-                if 1 <= valor <= 365:
-                    self._retention_days = valor
-                    self._guardar_configuracion_salida()
-            except ValueError:
-                pass
+            if limpieza.active:
+                try:
+                    valor = int(texto_dias)
+                    if 1 <= valor <= 365:
+                        self._retention_days = valor
+                except ValueError:
+                    pass
+            self._cleanup_enabled = bool(limpieza.active)
+            self._guardar_configuracion_salida()
             popup.dismiss()
             self._seleccionar_carpeta(self.REQUEST_CONFIG_OUTPUT_FOLDER)
 
