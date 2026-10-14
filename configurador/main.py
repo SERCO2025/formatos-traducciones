@@ -1494,9 +1494,79 @@ class Configurador:
             dialog, textvariable=font_var, values=font_names,
             state="readonly" if font_names else "normal", height=18
         )
-        font_combo.pack(fill="x", padx=16)
+        fila_fuente = tk.Frame(dialog, bg="#202020")
+        fila_fuente.pack(fill="x", padx=16)
+        font_combo.pack(in_=fila_fuente, side="left", fill="x", expand=True)
         if not initial_family and font_names:
             font_combo.current(0)
+
+        def importar_tipografia():
+            ruta = filedialog.askopenfilename(
+                title="Seleccionar archivo de tipografía",
+                parent=dialog,
+                filetypes=[
+                    ("Archivos de tipografía", "*.ttf *.otf *.ttc"),
+                    ("Todos los archivos", "*.*"),
+                ],
+            )
+            if not ruta:
+                return
+            extension = os.path.splitext(ruta)[1].lower()
+            if extension not in (".ttf", ".otf", ".ttc"):
+                messagebox.showwarning(
+                    "Tipografía no válida",
+                    "Selecciona un archivo .ttf, .otf o .ttc.",
+                    parent=dialog,
+                )
+                return
+            try:
+                # Verifica que Pillow pueda abrir el archivo antes de agregarlo.
+                ImageFont.truetype(ruta, size=20)
+            except Exception as exc:
+                messagebox.showerror(
+                    "No se pudo abrir la tipografía",
+                    "El archivo seleccionado no se pudo leer como fuente.\\n\\n%s" % exc,
+                    parent=dialog,
+                )
+                return
+
+            nombre_base = os.path.basename(ruta)
+            familia_importada = nombre_base
+            sufijo = 2
+            while familia_importada in self._font_inventory:
+                existente = self._font_inventory[familia_importada]
+                if ruta in existente.values():
+                    break
+                familia_importada = "%s (%d)" % (nombre_base, sufijo)
+                sufijo += 1
+
+            if familia_importada not in self._font_inventory:
+                self._font_inventory[familia_importada] = {
+                    "regular": ruta,
+                    "bold": ruta,
+                    "italic": ruta,
+                    "bold_italic": ruta,
+                }
+            elif ruta not in self._font_inventory[familia_importada].values():
+                self._font_inventory[familia_importada] = {
+                    "regular": ruta,
+                    "bold": ruta,
+                    "italic": ruta,
+                    "bold_italic": ruta,
+                }
+            valores = list(font_combo.cget("values"))
+            if familia_importada not in valores:
+                valores.append(familia_importada)
+                valores.sort(key=lambda item: item.lower())
+                font_combo.configure(values=valores)
+            font_var.set(familia_importada)
+            self._set_status("Tipografía importada. Se incluirá en el FDT al guardar el formato.")
+
+        tk.Button(
+            fila_fuente, text="＋ Fuente", command=importar_tipografia,
+            bg="#005f73", fg="white", activebackground="#087f8c",
+            activeforeground="white", relief="flat", padx=10,
+        ).pack(side="left", padx=(8, 0))
 
         row = tk.Frame(dialog, bg="#202020")
         row.pack(fill="x", padx=16, pady=8)
