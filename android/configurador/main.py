@@ -868,6 +868,7 @@ class ConfiguradorApp(App):
                 raise IOError("Android devolvió un resultado sin archivo (URI nula).")
             self.estado.text = "Archivo seleccionado; leyendo contenido..."
             if guardar:
+                uri = self._asegurar_extension_fdt_uri(uri)
                 self._guardar_fdt_uri(uri)
             else:
                 ruta = self._copiar_uri_a_cache(uri, tipo)
@@ -899,6 +900,32 @@ class ConfiguradorApp(App):
                 cursor.close()
         except Exception:
             return ""
+
+    def _asegurar_extension_fdt_uri(self, uri):
+        """Añade .fdt al nombre elegido en el selector SAF de Android."""
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        resolver = PythonActivity.mActivity.getContentResolver()
+        nombre = self._nombre_display_uri(resolver, uri).strip()
+        if not nombre:
+            raise IOError("Android no devolvió el nombre del archivo que se va a guardar.")
+        if nombre.lower().endswith(".fdt"):
+            return uri
+
+        DocumentsContract = autoclass("android.provider.DocumentsContract")
+        nuevo_nombre = nombre + ".fdt"
+        try:
+            uri_renombrado = DocumentsContract.renameDocument(resolver, uri, nuevo_nombre)
+        except Exception as exc:
+            raise IOError(
+                "No se pudo añadir automáticamente la extensión .fdt al archivo. "
+                "Elija una carpeta o proveedor de archivos que permita renombrar documentos."
+            ) from exc
+        if uri_renombrado is None:
+            raise IOError(
+                "Android no pudo aplicar la extensión .fdt automáticamente. "
+                "Elija una carpeta o proveedor de archivos que permita renombrar documentos."
+            )
+        return uri_renombrado
 
     def _copiar_uri_a_cache(self, uri, tipo):
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
