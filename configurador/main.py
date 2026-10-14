@@ -905,6 +905,10 @@ class Configurador:
         )
         if not ruta:
             return
+        # Algunos cuadros de diálogo no aplican defaultextension si el usuario
+        # escribe el nombre sin extensión; garantizar .fdt explícitamente.
+        if not ruta.lower().endswith(".fdt"):
+            ruta += ".fdt"
         try:
             validar_fdt(self.formato)
             guardar_fdt(self.formato, ruta)
