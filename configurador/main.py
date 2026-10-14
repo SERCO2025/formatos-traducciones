@@ -1490,13 +1490,13 @@ class Configurador:
                 initial_family = familia
                 break
         font_var = tk.StringVar(value=initial_family)
-        font_combo = ttk.Combobox(
-            dialog, textvariable=font_var, values=font_names,
-            state="readonly" if font_names else "normal", height=18
-        )
         fila_fuente = tk.Frame(dialog, bg="#202020")
         fila_fuente.pack(fill="x", padx=16)
-        font_combo.pack(in_=fila_fuente, side="left", fill="x", expand=True)
+        font_combo = ttk.Combobox(
+            fila_fuente, textvariable=font_var, values=font_names,
+            state="readonly" if font_names else "normal", height=18
+        )
+        font_combo.pack(side="left", fill="x", expand=True)
         if not initial_family and font_names:
             font_combo.current(0)
 
