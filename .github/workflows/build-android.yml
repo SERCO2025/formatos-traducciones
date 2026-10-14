@@ -161,6 +161,7 @@ jobs:
       - name: Instalar Backblaze B2 CLI
         run: python -m pip install b2
       - name: Subir APK a Backblaze B2
+        continue-on-error: true
         env:
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
