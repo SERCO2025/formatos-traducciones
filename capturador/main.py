@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import tkinter as tk
 import zipfile
 from pathlib import Path
@@ -35,9 +36,18 @@ class CapturadorApp:
         self._final_preview_photo = None
         self._fdt_path = None
         self._draft_dirs = []
+        self._output_folder = ""
+        self._retention_days = 7
+        self._auto_cleanup_enabled = True
+        self._generated_files = {}
+        base_config = Path(os.environ.get("APPDATA") or str(Path.home()))
+        self._settings_dir = base_config / "FormatosTraducidos"
+        self._settings_file = self._settings_dir / "capturador_settings.json"
+        self._cargar_configuracion_salida()
 
         self._crear_interfaz()
         self._mostrar_inicio()
+        self.root.after(1500, self._limpiar_archivos_vencidos)
 
     def _crear_interfaz(self):
         principal = tk.Frame(self.root, bg="#202020")
@@ -45,6 +55,11 @@ class CapturadorApp:
 
         encabezado = tk.Frame(principal, bg="#202020")
         encabezado.pack(fill="x", padx=24, pady=(18, 8))
+
+        self.btn_configuracion = ttk.Button(
+            encabezado, text="Configuración", command=self._mostrar_configuracion
+        )
+        self.btn_configuracion.pack(side="right", padx=(0, 8), anchor="ne")
 
         self.btn_salir = tk.Button(
             encabezado, text="Salir", command=self._confirmar_salida,
@@ -182,6 +197,126 @@ class CapturadorApp:
         self.btn_siguiente.pack(side="right")
 
         # El botón Salir está aislado en la esquina superior derecha.
+
+    def _cargar_configuracion_salida(self):
+        try:
+            with open(self._settings_file, "r", encoding="utf-8") as archivo:
+                datos = json.load(archivo) or {}
+        except (OSError, ValueError, TypeError):
+            datos = {}
+        self._output_folder = str(datos.get("output_folder") or "")
+        try:
+            self._retention_days = max(1, min(365, int(datos.get("retention_days", 7))))
+        except (TypeError, ValueError):
+            self._retention_days = 7
+        self._auto_cleanup_enabled = bool(datos.get("auto_cleanup_enabled", True))
+        registros = datos.get("generated_files", {})
+        self._generated_files = registros if isinstance(registros, dict) else {}
+
+    def _guardar_configuracion_salida(self):
+        self._settings_dir.mkdir(parents=True, exist_ok=True)
+        datos = {
+            "output_folder": self._output_folder,
+            "retention_days": self._retention_days,
+            "auto_cleanup_enabled": self._auto_cleanup_enabled,
+            "generated_files": self._generated_files,
+        }
+        temporal = str(self._settings_file) + ".tmp"
+        with open(temporal, "w", encoding="utf-8") as archivo:
+            json.dump(datos, archivo, ensure_ascii=False, indent=2)
+        os.replace(temporal, self._settings_file)
+
+    def _mostrar_configuracion(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Configuración del capturador")
+        dialog.configure(bg="#202020")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.geometry("590x330")
+        dialog.grab_set()
+
+        tk.Label(dialog, text="Carpeta de destino para los JPEG", bg="#202020", fg="white").pack(anchor="w", padx=16, pady=(16, 5))
+        carpeta_var = tk.StringVar(value=self._output_folder)
+        fila = tk.Frame(dialog, bg="#202020")
+        fila.pack(fill="x", padx=16)
+        ttk.Entry(fila, textvariable=carpeta_var).pack(side="left", fill="x", expand=True)
+
+        def elegir_carpeta():
+            seleccion = filedialog.askdirectory(title="Seleccione la carpeta de destino", parent=dialog, initialdir=carpeta_var.get() or str(Path.home()))
+            if seleccion:
+                carpeta_var.set(seleccion)
+        ttk.Button(fila, text="Examinar...", command=elegir_carpeta).pack(side="left", padx=(6, 0))
+
+        limpieza_var = tk.BooleanVar(value=self._auto_cleanup_enabled)
+        ttk.Checkbutton(dialog, text="Activar limpieza automática de JPEG antiguos", variable=limpieza_var).pack(anchor="w", padx=16, pady=(18, 8))
+        tk.Label(dialog, text="Días de conservación (1 a 365)", bg="#202020", fg="white").pack(anchor="w", padx=16)
+        dias_var = tk.StringVar(value=str(self._retention_days))
+        dias = ttk.Spinbox(dialog, from_=1, to=365, textvariable=dias_var, width=8)
+        dias.pack(anchor="w", padx=16, pady=(4, 8))
+        def estado_dias(*_):
+            dias.configure(state="normal" if limpieza_var.get() else "disabled")
+        limpieza_var.trace_add("write", estado_dias)
+        estado_dias()
+        tk.Label(dialog, text="Solo se eliminan JPEG generados por esta aplicación que sigan en la carpeta configurada.", bg="#202020", fg="#c8c8c8", wraplength=550, justify="left").pack(anchor="w", padx=16, pady=8)
+        botones = tk.Frame(dialog, bg="#202020")
+        botones.pack(fill="x", padx=16, pady=12)
+
+        def guardar():
+            carpeta = carpeta_var.get().strip()
+            if not carpeta or not os.path.isdir(carpeta):
+                messagebox.showwarning("Carpeta requerida", "Selecciona una carpeta de destino válida.", parent=dialog)
+                return
+            try:
+                dias_nuevo = int(dias_var.get())
+            except (TypeError, ValueError):
+                dias_nuevo = 0
+            if limpieza_var.get() and not 1 <= dias_nuevo <= 365:
+                messagebox.showwarning("Días no válidos", "Indica un número entero entre 1 y 365.", parent=dialog)
+                return
+            self._output_folder = os.path.abspath(carpeta)
+            if limpieza_var.get():
+                self._retention_days = dias_nuevo
+            self._auto_cleanup_enabled = bool(limpieza_var.get())
+            self._guardar_configuracion_salida()
+            dialog.destroy()
+            if self._auto_cleanup_enabled:
+                self._limpiar_archivos_vencidos()
+            messagebox.showinfo("Configuración guardada", "Los ajustes se guardaron correctamente.")
+
+        ttk.Button(botones, text="Cerrar", command=dialog.destroy).pack(side="left")
+        ttk.Button(botones, text="Guardar ajustes", command=guardar).pack(side="right")
+
+    def _limpiar_archivos_vencidos(self):
+        if not self._auto_cleanup_enabled or not self._output_folder or not os.path.isdir(self._output_folder):
+            return
+        carpeta = os.path.abspath(self._output_folder)
+        ahora = time.time()
+        cambios = False
+        for registrada, datos in list(self._generated_files.items()):
+            ruta = os.path.abspath(registrada)
+            if os.path.dirname(ruta) != carpeta:
+                self._generated_files.pop(registrada, None)
+                cambios = True
+                continue
+            if not os.path.isfile(ruta):
+                self._generated_files.pop(registrada, None)
+                cambios = True
+                continue
+            if not ruta.lower().endswith((".jpg", ".jpeg")):
+                continue
+            try:
+                creado = float(datos.get("created_at", ahora))
+            except (TypeError, ValueError, AttributeError):
+                creado = ahora
+            if ahora - creado >= self._retention_days * 86400:
+                try:
+                    os.remove(ruta)
+                    self._generated_files.pop(registrada, None)
+                    cambios = True
+                except OSError:
+                    pass
+        if cambios:
+            self._guardar_configuracion_salida()
 
     def _confirmar_salida(self):
         dialog = tk.Toplevel(self.root)
@@ -784,11 +919,16 @@ class CapturadorApp:
         ).pack(side="right", padx=4)
 
     def _guardar_desde_preview(self, imagen, nombre, dialog):
-        carpeta = filedialog.askdirectory(title="Seleccione la carpeta donde guardar el archivo")
-        if not carpeta:
+        if not self._output_folder or not os.path.isdir(self._output_folder):
+            messagebox.showwarning(
+                "Configura la carpeta",
+                "Antes de guardar, configura la carpeta de destino.",
+                parent=dialog,
+            )
+            self._mostrar_configuracion()
             return
 
-        salida = Path(carpeta) / nombre
+        salida = Path(self._output_folder) / nombre
         if salida.exists():
             if not messagebox.askyesno(
                 "Confirmar reemplazo",
@@ -799,6 +939,7 @@ class CapturadorApp:
 
         try:
             renderizar_formato(self.formato, self.respuestas, salida)
+            self._registrar_jpeg_generado(salida)
         except Exception as exc:
             messagebox.showerror(
                 "No se pudo guardar",
