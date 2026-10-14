@@ -63,70 +63,26 @@ class HamburgerButton(Button):
 
     def _redraw_icon(self, *args):
         self.canvas.after.clear()
-        with self.canvas.after:
-            Color(1, 1, 1, 1)
-            margen = dp(16)
-            y = self.height / 2.0
-            separacion = dp(8)
-            ancho = max(dp(24), self.width - margen * 2)
-            for offset in (-separacion, 0, separacion):
-                Line(points=(self.x + margen, self.y + y + offset,
-                             self.x + margen + ancho, self.y + y + offset),
-                     width=dp(3.0))
-
-
-TOOLS = [
-    ("SEL", "select"),
-    ("A", FIELD_TYPE_TEXT),
-    ("1", FIELD_TYPE_NUMBER),
-    ("A1", FIELD_TYPE_ALPHANUMERIC),
-    ("IMG", FIELD_TYPE_IMAGE),
-    ("ZOOM", "zoom"),
-]
-
-
-class CampoWidget(FloatLayout):
-    def __init__(self, campo, editor, **kwargs):
-        super().__init__(**kwargs)
-        self.campo = campo
-        self.editor = editor
-        self.size_hint = (None, None)
-        self.actualizar()
-
-    def actualizar(self):
-        p = self.campo.position
-        self.size = (p.width * self.editor.scale, p.height * self.editor.scale)
-        tw = self.editor.template_widget
-        if tw is not None:
-            # CampoWidget y plantilla son hermanos dentro de CanvasEditor:
-            # ambos deben posicionarse en las coordenadas de su padre.
-            self.pos = (
-                tw.x + p.x * self.editor.scale,
-                tw.y + tw.height - (p.y + p.height) * self.editor.scale,
-            )
-
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(0, 0, 0, 1)
-            Line(rectangle=(self.x, self.y, self.width, self.height), width=2.0)
-            if self.editor.app.seleccionado is self.campo:
-                Color(0.0, 0.75, 1.0, 1)
-                Line(rectangle=(self.x, self.y, self.width, self.height), width=3.0)
-
-        self.canvas.after.clear()
         if self.editor.app.seleccionado is self.campo:
+            # Ocho controles blancos con borde oscuro: cuatro esquinas y
+            # el centro de cada lado. Se dibujan sobre el borde seleccionado.
             with self.canvas.after:
-                Color(0.0, 0.75, 1.0, 1)
-                s = min(dp(12), max(dp(7), min(self.width, self.height) / 5.0))
-                points = [
-                    (self.x, self.y), (self.x + self.width / 2, self.y), (self.x + self.width, self.y),
-                    (self.x, self.y + self.height / 2), (self.x + self.width, self.y + self.height / 2),
-                    (self.x, self.y + self.height), (self.x + self.width / 2, self.y + self.height),
-                    (self.x + self.width, self.y + self.height / 2), (self.x + self.width, self.y + self.height),
-                ]
-                for x, y in points:
-                    Line(points=(x - s/2, y, x + s/2, y), width=2)
-                    Line(points=(x, y - s/2, x, y + s/2), width=2)
+                s = min(dp(14), max(dp(10), min(self.width, self.height) / 5.0))
+                puntos = (
+                    (self.x, self.y),
+                    (self.x + self.width / 2, self.y),
+                    (self.x + self.width, self.y),
+                    (self.x + self.width, self.y + self.height / 2),
+                    (self.x + self.width, self.y + self.height),
+                    (self.x + self.width / 2, self.y + self.height),
+                    (self.x, self.y + self.height),
+                    (self.x, self.y + self.height / 2),
+                )
+                for x, y in puntos:
+                    Color(1, 1, 1, 1)
+                    Rectangle(pos=(x - s / 2, y - s / 2), size=(s, s))
+                    Color(0, 0, 0, 1)
+                    Line(rectangle=(x - s / 2, y - s / 2, s, s), width=1)
 
         self.clear_widgets()
         if self.campo.field_type == FIELD_TYPE_IMAGE:
