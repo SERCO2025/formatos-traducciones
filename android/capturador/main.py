@@ -183,6 +183,13 @@ class CapturadorApp(App):
         self._temp_files = []
         self._fdt_path = None
         self._draft_dirs = []
+        self._save_jpeg_folder_uri = None
+        self._save_folder_config = os.path.join(self.user_data_dir, "save_jpeg_folder.json")
+        try:
+            with open(self._save_folder_config, "r", encoding="utf-8") as archivo_config:
+                self._save_jpeg_folder_uri = json.load(archivo_config).get("uri") or None
+        except (OSError, ValueError, AttributeError):
+            self._save_jpeg_folder_uri = None
 
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         encabezado = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
@@ -414,13 +421,8 @@ class CapturadorApp(App):
                 self._abrir_archivo_avance(ruta)
             elif request_code in (self.REQUEST_SAVE_JPEG_FOLDER, self.REQUEST_SAVE_DRAFT_FOLDER):
                 if request_code == self.REQUEST_SAVE_JPEG_FOLDER:
-                    destino = self._crear_documento_en_carpeta(uri, "image/jpeg", self._nombre_final)
-                    self._copiar_archivo_a_uri(self._imagen_final, destino)
-                    nombre_guardado = self._nombre_documento_uri(destino) or self._nombre_final
-                    if nombre_guardado == self._nombre_final:
-                        self._mensaje("Archivo guardado", "JPEG guardado con el nombre definido por el configurador:\n%s" % nombre_guardado)
-                    else:
-                        self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
+                    self._recordar_carpeta_jpeg(uri, intent)
+                    self._guardar_jpeg_en_carpeta(uri)
                 else:
                     ruta_avance = self._crear_archivo_avance_temporal()
                     nombre_avance = os.path.splitext(
@@ -824,7 +826,48 @@ class CapturadorApp(App):
         self._mostrar_campo()
         self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
 
+    def _recordar_carpeta_jpeg(self, uri, intent):
+        """Conserva el permiso de Android para reutilizar esta carpeta en futuros guardados."""
+        try:
+            Intent = autoclass("android.content.Intent")
+            permisos = intent.getFlags() & (
+                Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            resolver.takePersistableUriPermission(uri, permisos)
+            self._save_jpeg_folder_uri = str(uri.toString())
+            os.makedirs(self.user_data_dir, exist_ok=True)
+            with open(self._save_folder_config, "w", encoding="utf-8") as archivo_config:
+                json.dump({"uri": self._save_jpeg_folder_uri}, archivo_config)
+        except Exception:
+            # El guardado actual todavía puede completarse; si el proveedor no
+            # admite permisos persistentes, se volverá a solicitar la carpeta.
+            self._save_jpeg_folder_uri = None
+
+    def _guardar_jpeg_en_carpeta(self, tree_uri):
+        destino = self._crear_documento_en_carpeta(tree_uri, "image/jpeg", self._nombre_final)
+        self._copiar_archivo_a_uri(self._imagen_final, destino)
+        nombre_guardado = self._nombre_documento_uri(destino) or self._nombre_final
+        if nombre_guardado == self._nombre_final:
+            self._mensaje("Archivo guardado", "JPEG guardado con el nombre definido por el configurador:\n%s" % nombre_guardado)
+        else:
+            self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
+
     def _guardar_resultado(self):
+        if self._save_jpeg_folder_uri and ANDROID_NATIVE:
+            try:
+                Uri = autoclass("android.net.Uri")
+                tree_uri = Uri.parse(self._save_jpeg_folder_uri)
+                self._guardar_jpeg_en_carpeta(tree_uri)
+                return
+            except Exception:
+                # Si el permiso dejó de ser válido, pedir que se elija otra vez.
+                self._save_jpeg_folder_uri = None
+                try:
+                    os.remove(self._save_folder_config)
+                except OSError:
+                    pass
         self._seleccionar_carpeta(self.REQUEST_SAVE_JPEG_FOLDER)
 
 
