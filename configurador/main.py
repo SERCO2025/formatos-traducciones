@@ -1032,7 +1032,7 @@ class Configurador:
         objetos.append(label)
         self.field_items[campo.field_id] = tuple(objetos)
 
-        if campo is self.selected_field and self.tool == TOOL_MEASURE:
+        if campo is self.selected_field:
             self._draw_resize_handles(campo, x1, y1, x2, y2)
 
     def _draw_resize_handles(self, campo, x1, y1, x2, y2):
@@ -1155,8 +1155,29 @@ class Configurador:
                 self.redraw()
             return
         if self.tool == TOOL_SELECT:
+            # Primero comprobar los controles del campo seleccionado. Esto permite
+            # redimensionar desde los cuadrados incluso si el puntero cae justo
+            # fuera del borde geométrico del campo.
+            if self.selected_field:
+                handle = self._hit_resize_handle(self.selected_field, cx, cy)
+                if handle:
+                    self._field_resize_handle = handle
+                    self._field_resize_origin = (
+                        self.selected_field.position.x,
+                        self.selected_field.position.y,
+                        self.selected_field.position.width,
+                        self.selected_field.position.height,
+                    )
+                    self._field_resize_start = (cx, cy)
+                    self._move_start = None
+                    self._move_origin = None
+                    self._push_undo()
+                    return
             campo = self._find_field_at(cx, cy)
             self.selected_field = campo
+            self._field_resize_handle = None
+            self._field_resize_start = None
+            self._field_resize_origin = None
             if campo:
                 self._move_start = (cx, cy)
                 self._move_origin = (campo.position.x, campo.position.y)
@@ -1179,7 +1200,7 @@ class Configurador:
         elif self._magnifier_label is not None:
             self._ocultar_lupa()
 
-        if self.tool == TOOL_MEASURE and self._field_resize_handle and self._field_resize_start:
+        if self._field_resize_handle and self._field_resize_start and self.tool in (TOOL_SELECT, TOOL_MEASURE):
             dx = int(round((cx - self._field_resize_start[0]) / self.zoom))
             dy = int(round((cy - self._field_resize_start[1]) / self.zoom))
             self._resize_selected_field(dx, dy)
@@ -1230,7 +1251,7 @@ class Configurador:
         if self.tool == TOOL_HAND:
             self._pan_last = None
             return
-        if self.tool == TOOL_MEASURE:
+        if self.tool == TOOL_MEASURE or (self.tool == TOOL_SELECT and self._field_resize_handle):
             self._field_resize_handle = None
             self._field_resize_start = None
             self._field_resize_origin = None
