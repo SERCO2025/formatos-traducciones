@@ -22,6 +22,7 @@ from kivy.metrics import dp
 from kivy.graphics import Color, Line, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.checkbox import CheckBox
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
@@ -187,6 +188,7 @@ class CapturadorApp(App):
         self._draft_dirs = []
         self._save_jpeg_folder_uri = None
         self._retention_days = 7
+        self._cleanup_enabled = True
         self._generated_files = {}
         self._settings_file = os.path.join(self.user_data_dir, "output_settings.json")
         self._legacy_save_folder_config = os.path.join(self.user_data_dir, "save_jpeg_folder.json")
@@ -855,6 +857,7 @@ class CapturadorApp(App):
             self._retention_days = max(1, min(365, int(datos.get("retention_days", 7))))
         except (TypeError, ValueError):
             self._retention_days = 7
+        self._cleanup_enabled = bool(datos.get("cleanup_enabled", True))
         archivos = datos.get("generated_files", {})
         self._generated_files = archivos if isinstance(archivos, dict) else {}
         self._guardar_configuracion_salida()
@@ -863,6 +866,7 @@ class CapturadorApp(App):
         datos = {
             "output_folder_uri": self._save_jpeg_folder_uri,
             "retention_days": int(self._retention_days),
+            "cleanup_enabled": bool(self._cleanup_enabled),
             "generated_files": self._generated_files,
         }
         os.makedirs(self.user_data_dir, exist_ok=True)
@@ -892,6 +896,19 @@ class CapturadorApp(App):
             size_hint_y=None, height=dp(46),
         )
         contenido.add_widget(elegir)
+        fila_limpieza = BoxLayout(
+            orientation="horizontal", size_hint_y=None, height=dp(42), spacing=dp(8),
+        )
+        limpieza = CheckBox(
+            active=self._cleanup_enabled, size_hint=(None, None),
+            size=(dp(42), dp(42)),
+        )
+        fila_limpieza.add_widget(limpieza)
+        fila_limpieza.add_widget(Label(
+            text="Activar limpieza automática de JPEG antiguos",
+            halign="left", valign="middle",
+        ))
+        contenido.add_widget(fila_limpieza)
         contenido.add_widget(Label(
             text="Días que se conservará cada JPEG en esa carpeta",
             size_hint_y=None, height=dp(42), font_size="15sp",
@@ -903,6 +920,8 @@ class CapturadorApp(App):
             font_size="18sp", hint_text="Días (1 a 365)",
         )
         contenido.add_widget(dias)
+        dias.disabled = not limpieza.active
+        limpieza.bind(active=lambda _obj, activo: setattr(dias, "disabled", not activo))
         contenido.add_widget(Label(
             text="Solo se eliminarán JPEG creados por esta aplicación que sigan en la carpeta. "
                  "Si un archivo se mueve fuera, dejará de estar sujeto a la limpieza.",
@@ -923,20 +942,20 @@ class CapturadorApp(App):
 
         def guardar_ajustes(*_):
             texto_dias = (dias.text or "").strip()
-            if not texto_dias:
-                self._mensaje("Dato requerido", "Indica cuántos días deben conservarse los JPEG (de 1 a 365).")
-                return
-            try:
-                valor = int(texto_dias)
-            except ValueError:
-                valor = 0
-            if valor < 1 or valor > 365:
-                self._mensaje("Valor no válido", "El plazo debe ser un número entero entre 1 y 365 días.")
-                return
-            self._retention_days = valor
+            if limpieza.active:
+                try:
+                    valor = int(texto_dias)
+                except ValueError:
+                    valor = 0
+                if valor < 1 or valor > 365:
+                    self._mensaje("Valor no válido", "El plazo debe ser un número entero entre 1 y 365 días.")
+                    return
+                self._retention_days = valor
+            self._cleanup_enabled = bool(limpieza.active)
             self._guardar_configuracion_salida()
             popup.dismiss()
-            self._limpiar_archivos_vencidos()
+            if self._cleanup_enabled:
+                self._limpiar_archivos_vencidos()
             self._mensaje("Configuración guardada", "Carpeta de destino y plazo de conservación guardados.")
 
         def elegir_carpeta(*_):
@@ -990,7 +1009,7 @@ class CapturadorApp(App):
 
     def _limpiar_archivos_vencidos(self):
         """Elimina solo JPEG registrados que sigan directamente en la carpeta configurada."""
-        if not ANDROID_NATIVE or not self._save_jpeg_folder_uri:
+        if not self._cleanup_enabled or not ANDROID_NATIVE or not self._save_jpeg_folder_uri:
             return
         cursor = None
         try:
