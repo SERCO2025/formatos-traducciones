@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+import json
 import os
+import re
 import tempfile
 import tkinter as tk
+import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -30,6 +33,8 @@ class CapturadorApp:
         self._preview_after_id = None
         self._preview_photo = None
         self._final_preview_photo = None
+        self._fdt_path = None
+        self._draft_dirs = []
 
         self._crear_interfaz()
         self._mostrar_inicio()
@@ -151,6 +156,17 @@ class CapturadorApp:
         )
         self.btn_abrir.pack(side="left")
 
+        self.btn_abrir_avance = ttk.Button(
+            controles, text="Abrir avance FTC", command=self.abrir_avance
+        )
+        self.btn_abrir_avance.pack(side="left", padx=8)
+
+        self.btn_guardar_avance = ttk.Button(
+            controles, text="Guardar avance FTC", command=self.guardar_avance,
+            state="disabled",
+        )
+        self.btn_guardar_avance.pack(side="left", padx=4)
+
         self.btn_atras = ttk.Button(
             controles, text="Atrás", command=self.anterior, state="disabled"
         )
@@ -268,10 +284,161 @@ class CapturadorApp:
             return
 
         self.formato = formato
+        self._fdt_path = os.path.abspath(ruta)
         self.respuestas = {campo.field_id: "" for campo in formato.fields}
         self.indice = 0
         self.titulo.config(text=formato.name)
+        self.btn_guardar_avance.config(state="normal")
         self._mostrar_campo()
+
+    def abrir_avance(self):
+        ruta = filedialog.askopenfilename(
+            title="Abrir avance de captura",
+            filetypes=[("Avance de Formatos Traducidos", "*.ftc"), ("Todos los archivos", "*.*")],
+        )
+        if not ruta:
+            return
+
+        directorio = None
+        try:
+            with zipfile.ZipFile(ruta, "r") as paquete:
+                nombres = set(paquete.namelist())
+                if "formato.fdt" not in nombres or "captura.json" not in nombres:
+                    raise ValueError("El archivo no contiene formato.fdt y captura.json; no es un avance FTC válido.")
+
+                directorio = tempfile.mkdtemp(prefix="formatos_traducidos_avance_")
+                ruta_fdt = os.path.join(directorio, "formato.fdt")
+                with open(ruta_fdt, "wb") as destino:
+                    destino.write(paquete.read("formato.fdt"))
+
+                ruta_json = os.path.join(directorio, "captura.json")
+                with open(ruta_json, "wb") as destino:
+                    destino.write(paquete.read("captura.json"))
+
+                with open(ruta_json, "r", encoding="utf-8") as archivo:
+                    datos = json.load(archivo)
+
+                # Extraer únicamente imágenes declaradas en captura.json y dentro de
+                # la carpeta interna "imagenes/", evitando rutas externas al avance.
+                imagenes = datos.get("imagenes", {}) or {}
+                for campo_id, interno in imagenes.items():
+                    interno = str(interno).replace("\\\\", "/")
+                    partes = interno.split("/")
+                    if len(partes) != 2 or partes[0] != "imagenes" or partes[1] in ("", ".", ".."):
+                        raise ValueError("El avance contiene una ruta de imagen no válida.")
+                    if interno not in nombres:
+                        continue
+                    destino = os.path.join(directorio, "imagenes", partes[1])
+                    os.makedirs(os.path.dirname(destino), exist_ok=True)
+                    with open(destino, "wb") as archivo_imagen:
+                        archivo_imagen.write(paquete.read(interno))
+
+            formato = cargar_fdt(ruta_fdt)
+            respuestas = {campo.field_id: "" for campo in formato.fields}
+            respuestas.update(datos.get("respuestas", {}) or {})
+            for campo_id, interno in (datos.get("imagenes", {}) or {}).items():
+                ruta_imagen = os.path.join(directorio, *str(interno).replace("\\\\", "/").split("/"))
+                if os.path.isfile(ruta_imagen):
+                    respuestas[campo_id] = ruta_imagen
+
+            self.formato = formato
+            self._fdt_path = ruta_fdt
+            self._draft_dirs.append(directorio)
+            directorio = None
+            self.respuestas = respuestas
+            try:
+                self.indice = max(0, min(int(datos.get("indice", 0)), len(formato.fields) - 1))
+            except (TypeError, ValueError):
+                self.indice = 0
+            self.titulo.config(text=formato.name)
+            self.btn_guardar_avance.config(state="normal")
+            self._mostrar_campo()
+            if formato.fields:
+                messagebox.showinfo(
+                    "Avance abierto",
+                    "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d."
+                    % (self.indice + 1, len(formato.fields)),
+                )
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo abrir el avance",
+                "El archivo FTC no pudo cargarse correctamente.\\n\\n%s" % exc,
+            )
+        finally:
+            if directorio and os.path.isdir(directorio):
+                import shutil
+                shutil.rmtree(directorio, ignore_errors=True)
+
+    def guardar_avance(self):
+        if not self.formato or not self._fdt_path or not os.path.isfile(self._fdt_path):
+            messagebox.showwarning(
+                "Sin captura",
+                "Primero abre un formato .FDT o un archivo de avance FTC.",
+            )
+            return
+
+        # Como en Android, guardar un avance no exige completar ni validar todos
+        # los campos; conserva también el texto que siga en el cuadro actual.
+        if self.formato.fields:
+            campo_actual = self.formato.fields[self.indice]
+            if campo_actual.field_type != FIELD_TYPE_IMAGE:
+                valor = self.entrada.get("1.0", "end-1c")
+                if getattr(campo_actual, "uppercase", False):
+                    valor = valor.upper()
+                self.respuestas[campo_actual.field_id] = valor
+
+        base = os.path.splitext(construir_nombre_archivo(self.formato, self.respuestas))[0]
+        base = re.sub(r'[\\\\/:*?"<>|]+', "_", base).strip(" ._") or "captura_pendiente"
+        ruta = filedialog.asksaveasfilename(
+            title="Guardar avance de captura",
+            defaultextension=".ftc",
+            initialfile=base + ".ftc",
+            filetypes=[("Avance de Formatos Traducidos", "*.ftc"), ("Todos los archivos", "*.*")],
+        )
+        if not ruta:
+            return
+        if not ruta.lower().endswith(".ftc"):
+            ruta += ".ftc"
+
+        datos = {"version": 1, "indice": self.indice, "respuestas": {}, "imagenes": {}}
+        try:
+            with zipfile.ZipFile(ruta, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+                paquete.write(self._fdt_path, "formato.fdt")
+                for campo in self.formato.fields:
+                    valor = self.respuestas.get(campo.field_id, "")
+                    if campo.field_type == FIELD_TYPE_IMAGE and valor:
+                        imagen_path = str(valor)
+                        if os.path.isfile(imagen_path):
+                            extension = os.path.splitext(imagen_path)[1].lower()
+                            if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
+                                extension = ".jpg"
+                            seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
+                            interno = "imagenes/%s%s" % (seguro, extension)
+                            # Evitar que campos distintos con el mismo ID sanitizado
+                            # colisionen al guardar sus imágenes.
+                            if interno in datos["imagenes"].values():
+                                interno = "imagenes/%s_%d%s" % (seguro, len(datos["imagenes"]), extension)
+                            datos["imagenes"][campo.field_id] = interno
+                            datos["respuestas"][campo.field_id] = ""
+                            paquete.write(imagen_path, interno)
+                        else:
+                            datos["respuestas"][campo.field_id] = ""
+                    else:
+                        datos["respuestas"][campo.field_id] = "" if valor is None else str(valor)
+                paquete.writestr(
+                    "captura.json",
+                    json.dumps(datos, ensure_ascii=False, indent=2).encode("utf-8"),
+                )
+            messagebox.showinfo(
+                "Avance guardado",
+                "La captura pendiente se guardó correctamente como:\\n%s\\n\\nPuedes abrirla después con «Abrir avance FTC»."
+                % ruta,
+            )
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo guardar el avance",
+                "Ocurrió un error al guardar el archivo FTC.\\n\\n%s" % exc,
+            )
 
     def _respuestas_para_preview(self):
         respuestas = dict(self.respuestas)
