@@ -286,6 +286,11 @@ class CapturadorApp:
         ttk.Button(botones, text="Cerrar", command=dialog.destroy).pack(side="left")
         ttk.Button(botones, text="Guardar ajustes", command=guardar).pack(side="right")
 
+    def _registrar_jpeg_generado(self, ruta):
+        ruta = os.path.abspath(str(ruta))
+        self._generated_files[ruta] = {"created_at": time.time()}
+        self._guardar_configuracion_salida()
+
     def _limpiar_archivos_vencidos(self):
         if not self._auto_cleanup_enabled or not self._output_folder or not os.path.isdir(self._output_folder):
             return
