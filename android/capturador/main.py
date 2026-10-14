@@ -9,6 +9,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import traceback
 import zipfile
 from pathlib import Path
@@ -169,6 +170,7 @@ class CapturadorApp(App):
     REQUEST_OPEN_DRAFT = 734
     REQUEST_SAVE_JPEG_FOLDER = 735
     REQUEST_SAVE_DRAFT_FOLDER = 736
+    REQUEST_CONFIG_OUTPUT_FOLDER = 737
 
     def build(self):
         self._popup_salida = None
@@ -184,12 +186,12 @@ class CapturadorApp(App):
         self._fdt_path = None
         self._draft_dirs = []
         self._save_jpeg_folder_uri = None
-        self._save_folder_config = os.path.join(self.user_data_dir, "save_jpeg_folder.json")
-        try:
-            with open(self._save_folder_config, "r", encoding="utf-8") as archivo_config:
-                self._save_jpeg_folder_uri = json.load(archivo_config).get("uri") or None
-        except (OSError, ValueError, AttributeError):
-            self._save_jpeg_folder_uri = None
+        self._retention_days = 7
+        self._generated_files = {}
+        self._settings_file = os.path.join(self.user_data_dir, "output_settings.json")
+        self._legacy_save_folder_config = os.path.join(self.user_data_dir, "save_jpeg_folder.json")
+        self._cargar_configuracion_salida()
+        Clock.schedule_once(lambda _dt: self._limpiar_archivos_vencidos(), 2)
 
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         encabezado = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
@@ -197,7 +199,13 @@ class CapturadorApp(App):
             text="Formatos Traducidos",
             font_size="22sp", bold=True, halign="left",
         ))
-        # Botón Salir en la esquina superior derecha y al 50 % del tamaño anterior.
+        self.btn_configuracion = Button(
+            text="Configuración", size_hint=(None, None),
+            width=dp(104), height=dp(33), font_size="11sp",
+        )
+        self.btn_configuracion.bind(on_release=lambda *_: self._mostrar_configuracion())
+        encabezado.add_widget(self.btn_configuracion)
+        # Botón Salir en la esquina superior derecha.
         self.btn_salir = Button(
             text="Salir", size_hint=(None, None),
             width=dp(60), height=dp(33), font_size="7.5sp", bold=True,
@@ -419,18 +427,18 @@ class CapturadorApp(App):
             elif request_code == self.REQUEST_OPEN_DRAFT:
                 ruta = self._copiar_uri_a_cache(uri, ".ftc")
                 self._abrir_archivo_avance(ruta)
-            elif request_code in (self.REQUEST_SAVE_JPEG_FOLDER, self.REQUEST_SAVE_DRAFT_FOLDER):
-                if request_code == self.REQUEST_SAVE_JPEG_FOLDER:
-                    self._recordar_carpeta_jpeg(uri, intent)
-                    self._guardar_jpeg_en_carpeta(uri)
-                else:
-                    ruta_avance = self._crear_archivo_avance_temporal()
-                    nombre_avance = os.path.splitext(
-                        construir_nombre_archivo(self.formato, self.respuestas)
-                    )[0] + ".ftc"
-                    destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
-                    self._copiar_archivo_a_uri(ruta_avance, destino)
-                    self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
+            elif request_code == self.REQUEST_CONFIG_OUTPUT_FOLDER:
+                self._recordar_carpeta_destino(uri, intent)
+                self._limpiar_archivos_vencidos()
+                self._mostrar_configuracion()
+            elif request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
+                ruta_avance = self._crear_archivo_avance_temporal()
+                nombre_avance = os.path.splitext(
+                    construir_nombre_archivo(self.formato, self.respuestas)
+                )[0] + ".ftc"
+                destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
+                self._copiar_archivo_a_uri(ruta_avance, destino)
+                self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
             elif request_code == self.REQUEST_OPEN_IMAGE:
                 ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri_text, ".jpg"))
                 if not self.formato or not self.formato.fields:
@@ -826,49 +834,258 @@ class CapturadorApp(App):
         self._mostrar_campo()
         self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
 
-    def _recordar_carpeta_jpeg(self, uri, intent):
-        """Conserva el permiso de Android para reutilizar esta carpeta en futuros guardados."""
+    def _cargar_configuracion_salida(self):
+        """Carga preferencias persistentes y migra la carpeta de la versión anterior."""
+        datos = {}
         try:
-            Intent = autoclass("android.content.Intent")
-            permisos = intent.getFlags() & (
-                Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
-            resolver.takePersistableUriPermission(uri, permisos)
-            self._save_jpeg_folder_uri = str(uri.toString())
-            os.makedirs(self.user_data_dir, exist_ok=True)
-            with open(self._save_folder_config, "w", encoding="utf-8") as archivo_config:
-                json.dump({"uri": self._save_jpeg_folder_uri}, archivo_config)
+            with open(self._settings_file, "r", encoding="utf-8") as archivo_config:
+                datos = json.load(archivo_config) or {}
+        except (OSError, ValueError, TypeError):
+            datos = {}
+        if not datos:
+            try:
+                with open(self._legacy_save_folder_config, "r", encoding="utf-8") as archivo_config:
+                    anterior = json.load(archivo_config) or {}
+                if anterior.get("uri"):
+                    datos["output_folder_uri"] = anterior.get("uri")
+            except (OSError, ValueError, TypeError):
+                pass
+        self._save_jpeg_folder_uri = datos.get("output_folder_uri") or None
+        try:
+            self._retention_days = max(1, min(365, int(datos.get("retention_days", 7))))
+        except (TypeError, ValueError):
+            self._retention_days = 7
+        archivos = datos.get("generated_files", {})
+        self._generated_files = archivos if isinstance(archivos, dict) else {}
+        self._guardar_configuracion_salida()
+
+    def _guardar_configuracion_salida(self):
+        datos = {
+            "output_folder_uri": self._save_jpeg_folder_uri,
+            "retention_days": int(self._retention_days),
+            "generated_files": self._generated_files,
+        }
+        os.makedirs(self.user_data_dir, exist_ok=True)
+        temporal = self._settings_file + ".tmp"
+        with open(temporal, "w", encoding="utf-8") as archivo_config:
+            json.dump(datos, archivo_config, ensure_ascii=False, indent=2)
+        os.replace(temporal, self._settings_file)
+
+    def _mostrar_configuracion(self):
+        contenido = BoxLayout(
+            orientation="vertical", padding=dp(14), spacing=dp(10),
+        )
+        contenido.add_widget(Label(
+            text="Carpeta de documentos terminados",
+            size_hint_y=None, height=dp(34), font_size="16sp",
+            bold=True, halign="left", valign="middle",
+        ))
+        ruta = self._texto_carpeta_destino()
+        self._config_ruta_label = Label(
+            text=ruta, size_hint_y=None, height=dp(62),
+            font_size="12sp", halign="left", valign="middle",
+        )
+        self._config_ruta_label.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        contenido.add_widget(self._config_ruta_label)
+        elegir = Button(
+            text="Elegir carpeta de destino",
+            size_hint_y=None, height=dp(46),
+        )
+        contenido.add_widget(elegir)
+        contenido.add_widget(Label(
+            text="Días que se conservará cada JPEG en esa carpeta",
+            size_hint_y=None, height=dp(42), font_size="15sp",
+            halign="left", valign="middle",
+        ))
+        dias = TextInput(
+            text=str(self._retention_days), multiline=False,
+            input_filter="int", size_hint_y=None, height=dp(46),
+            font_size="18sp", hint_text="Días (1 a 365)",
+        )
+        contenido.add_widget(dias)
+        contenido.add_widget(Label(
+            text="Solo se eliminarán JPEG creados por esta aplicación que sigan en la carpeta. "
+                 "Si un archivo se mueve fuera, dejará de estar sujeto a la limpieza.",
+            size_hint_y=None, height=dp(66), font_size="12sp",
+            halign="left", valign="middle",
+        ))
+        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        cancelar = Button(text="Cerrar")
+        guardar = Button(text="Guardar ajustes")
+        botones.add_widget(cancelar)
+        botones.add_widget(guardar)
+        contenido.add_widget(botones)
+        popup = Popup(
+            title="Configuración", content=contenido,
+            size_hint=(0.94, None), height=dp(420), auto_dismiss=False,
+        )
+        cancelar.bind(on_release=popup.dismiss)
+
+        def guardar_ajustes(*_):
+            texto_dias = (dias.text or "").strip()
+            if not texto_dias:
+                self._mensaje("Dato requerido", "Indica cuántos días deben conservarse los JPEG (de 1 a 365).")
+                return
+            try:
+                valor = int(texto_dias)
+            except ValueError:
+                valor = 0
+            if valor < 1 or valor > 365:
+                self._mensaje("Valor no válido", "El plazo debe ser un número entero entre 1 y 365 días.")
+                return
+            self._retention_days = valor
+            self._guardar_configuracion_salida()
+            popup.dismiss()
+            self._limpiar_archivos_vencidos()
+            self._mensaje("Configuración guardada", "Carpeta de destino y plazo de conservación guardados.")
+
+        def elegir_carpeta(*_):
+            texto_dias = (dias.text or "").strip()
+            try:
+                valor = int(texto_dias)
+                if 1 <= valor <= 365:
+                    self._retention_days = valor
+                    self._guardar_configuracion_salida()
+            except ValueError:
+                pass
+            popup.dismiss()
+            self._seleccionar_carpeta(self.REQUEST_CONFIG_OUTPUT_FOLDER)
+
+        guardar.bind(on_release=guardar_ajustes)
+        elegir.bind(on_release=elegir_carpeta)
+        popup.open()
+
+    def _texto_carpeta_destino(self):
+        if not self._save_jpeg_folder_uri:
+            return "No configurada. Elige la carpeta donde se guardarán los JPEG finales."
+        try:
+            Uri = autoclass("android.net.Uri")
+            nombre = self._nombre_documento_uri(Uri.parse(self._save_jpeg_folder_uri))
+            return "Carpeta seleccionada: %s" % (nombre or self._save_jpeg_folder_uri)
         except Exception:
-            # El guardado actual todavía puede completarse; si el proveedor no
-            # admite permisos persistentes, se volverá a solicitar la carpeta.
-            self._save_jpeg_folder_uri = None
+            return "Carpeta seleccionada. URI: %s" % self._save_jpeg_folder_uri
+
+    def _recordar_carpeta_destino(self, uri, intent):
+        """Conserva autorización SAF y registra la carpeta elegida en Configuración."""
+        Intent = autoclass("android.content.Intent")
+        permisos = intent.getFlags() & (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION |
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        if not permisos:
+            permisos = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+        resolver.takePersistableUriPermission(uri, permisos)
+        self._save_jpeg_folder_uri = str(uri.toString())
+        self._guardar_configuracion_salida()
+
+    def _registrar_jpeg_generado(self, uri):
+        DocumentsContract = autoclass("android.provider.DocumentsContract")
+        document_id = str(DocumentsContract.getDocumentId(uri))
+        self._generated_files[document_id] = {
+            "name": self._nombre_documento_uri(uri) or self._nombre_final,
+            "created_at": time.time(),
+        }
+        self._guardar_configuracion_salida()
+
+    def _limpiar_archivos_vencidos(self):
+        """Elimina solo JPEG registrados que sigan directamente en la carpeta configurada."""
+        if not ANDROID_NATIVE or not self._save_jpeg_folder_uri:
+            return
+        cursor = None
+        try:
+            Uri = autoclass("android.net.Uri")
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
+            Document = autoclass("android.provider.DocumentsContract$Document")
+            contexto = autoclass("org.kivy.android.PythonActivity").mActivity
+            resolver = contexto.getContentResolver()
+            tree_uri = Uri.parse(self._save_jpeg_folder_uri)
+            root_id = DocumentsContract.getTreeDocumentId(tree_uri)
+            children_uri = DocumentsContract.buildChildDocumentsUriUsingTree(tree_uri, root_id)
+            columnas = [
+                Document.COLUMN_DOCUMENT_ID,
+                Document.COLUMN_DISPLAY_NAME,
+                Document.COLUMN_MIME_TYPE,
+            ]
+            cursor = resolver.query(children_uri, columnas, None, None, None)
+            if cursor is None:
+                return
+            presentes = {}
+            indice_id = cursor.getColumnIndex(Document.COLUMN_DOCUMENT_ID)
+            indice_nombre = cursor.getColumnIndex(Document.COLUMN_DISPLAY_NAME)
+            indice_mime = cursor.getColumnIndex(Document.COLUMN_MIME_TYPE)
+            while cursor.moveToNext():
+                doc_id = str(cursor.getString(indice_id))
+                nombre = str(cursor.getString(indice_nombre)) if indice_nombre >= 0 else ""
+                mime = str(cursor.getString(indice_mime)) if indice_mime >= 0 else ""
+                presentes[doc_id] = {"name": nombre, "mime": mime}
+            cursor.close()
+            cursor = None
+            ahora = time.time()
+            vencimiento = self._retention_days * 86400
+            cambios = False
+            for doc_id, registro in list(self._generated_files.items()):
+                if doc_id not in presentes:
+                    # Movido, copiado fuera o eliminado: se olvida el registro.
+                    self._generated_files.pop(doc_id, None)
+                    cambios = True
+                    continue
+                elemento = presentes[doc_id]
+                if not elemento["mime"].startswith("image/") or not elemento["name"].lower().endswith((".jpg", ".jpeg")):
+                    continue
+                try:
+                    creado = float(registro.get("created_at", ahora))
+                except (TypeError, ValueError):
+                    creado = ahora
+                if ahora - creado < vencimiento:
+                    continue
+                documento_uri = DocumentsContract.buildDocumentUriUsingTree(tree_uri, doc_id)
+                if DocumentsContract.deleteDocument(resolver, documento_uri):
+                    self._generated_files.pop(doc_id, None)
+                    cambios = True
+            if cambios:
+                self._guardar_configuracion_salida()
+        except Exception:
+            # Un proveedor SAF puede no permitir listar o borrar. No se arriesga
+            # a eliminar por nombre ni se borra nada si no puede verificarse.
+            pass
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
 
     def _guardar_jpeg_en_carpeta(self, tree_uri):
         destino = self._crear_documento_en_carpeta(tree_uri, "image/jpeg", self._nombre_final)
         self._copiar_archivo_a_uri(self._imagen_final, destino)
+        self._registrar_jpeg_generado(destino)
+        self._limpiar_archivos_vencidos()
         nombre_guardado = self._nombre_documento_uri(destino) or self._nombre_final
         if nombre_guardado == self._nombre_final:
-            self._mensaje("Archivo guardado", "JPEG guardado con el nombre definido por el configurador:\n%s" % nombre_guardado)
+            self._mensaje("Archivo guardado", "JPEG guardado en la carpeta configurada:\n%s" % nombre_guardado)
         else:
             self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
 
     def _guardar_resultado(self):
-        if self._save_jpeg_folder_uri and ANDROID_NATIVE:
-            try:
-                Uri = autoclass("android.net.Uri")
-                tree_uri = Uri.parse(self._save_jpeg_folder_uri)
-                self._guardar_jpeg_en_carpeta(tree_uri)
-                return
-            except Exception:
-                # Si el permiso dejó de ser válido, pedir que se elija otra vez.
-                self._save_jpeg_folder_uri = None
-                try:
-                    os.remove(self._save_folder_config)
-                except OSError:
-                    pass
-        self._seleccionar_carpeta(self.REQUEST_SAVE_JPEG_FOLDER)
+        if not self._save_jpeg_folder_uri or not ANDROID_NATIVE:
+            self._mensaje(
+                "Configura la carpeta de destino",
+                "Antes de guardar el JPEG, abre Configuración y elige la carpeta de documentos terminados.",
+            )
+            self._mostrar_configuracion()
+            return
+        try:
+            Uri = autoclass("android.net.Uri")
+            tree_uri = Uri.parse(self._save_jpeg_folder_uri)
+            self._guardar_jpeg_en_carpeta(tree_uri)
+        except Exception as exc:
+            self._mensaje(
+                "No se pudo guardar el JPEG",
+                "%s\n\nRevisa la carpeta configurada desde Configuración y vuelve a intentarlo." % exc,
+            )
+
+
 
 
 if __name__ == "__main__":
