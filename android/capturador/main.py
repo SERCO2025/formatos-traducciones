@@ -879,55 +879,63 @@ class CapturadorApp(App):
         contenido = BoxLayout(
             orientation="vertical", padding=dp(14), spacing=dp(10),
         )
-        contenido.add_widget(Label(
+        titulo_carpeta = Label(
             text="Carpeta de documentos terminados",
-            size_hint_y=None, height=dp(34), font_size="16sp",
+            size_hint_y=None, height=dp(30), font_size="13sp",
             bold=True, halign="left", valign="middle",
-        ))
+        )
+        titulo_carpeta.bind(size=lambda obj, size: setattr(obj, "text_size", (size[0], None)))
+        contenido.add_widget(titulo_carpeta)
         ruta = self._texto_carpeta_destino()
         self._config_ruta_label = Label(
-            text=ruta, size_hint_y=None, height=dp(62),
-            font_size="12sp", halign="left", valign="middle",
+            text=ruta, size_hint_y=None, height=dp(58),
+            font_size="10sp", halign="left", valign="middle",
         )
-        self._config_ruta_label.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        self._config_ruta_label.bind(size=lambda obj, size: setattr(obj, "text_size", (max(1, size[0] - dp(8)), None)))
         contenido.add_widget(self._config_ruta_label)
         elegir = Button(
             text="Elegir carpeta de destino",
-            size_hint_y=None, height=dp(46),
+            size_hint_y=None, height=dp(42), font_size="12sp",
         )
         contenido.add_widget(elegir)
         fila_limpieza = BoxLayout(
-            orientation="horizontal", size_hint_y=None, height=dp(42), spacing=dp(8),
+            orientation="horizontal", size_hint_y=None, height=dp(46), spacing=dp(6),
         )
         limpieza = CheckBox(
             active=self._cleanup_enabled, size_hint=(None, None),
-            size=(dp(42), dp(42)),
+            size=(dp(38), dp(38)),
         )
         fila_limpieza.add_widget(limpieza)
-        fila_limpieza.add_widget(Label(
+        texto_limpieza = Label(
             text="Activar limpieza automática de JPEG antiguos",
-            halign="left", valign="middle",
-        ))
+            font_size="11sp", halign="left", valign="middle",
+        )
+        texto_limpieza.bind(size=lambda obj, size: setattr(obj, "text_size", (max(1, size[0] - dp(4)), None)))
+        fila_limpieza.add_widget(texto_limpieza)
         contenido.add_widget(fila_limpieza)
-        contenido.add_widget(Label(
+        texto_dias = Label(
             text="Días que se conservará cada JPEG en esa carpeta",
-            size_hint_y=None, height=dp(42), font_size="15sp",
+            size_hint_y=None, height=dp(38), font_size="12sp",
             halign="left", valign="middle",
-        ))
+        )
+        texto_dias.bind(size=lambda obj, size: setattr(obj, "text_size", (max(1, size[0] - dp(8)), None)))
+        contenido.add_widget(texto_dias)
         dias = TextInput(
             text=str(self._retention_days), multiline=False,
-            input_filter="int", size_hint_y=None, height=dp(46),
-            font_size="18sp", hint_text="Días (1 a 365)",
+            input_filter="int", size_hint_y=None, height=dp(42),
+            font_size="16sp", hint_text="Días (1 a 365)",
         )
         contenido.add_widget(dias)
         dias.disabled = not limpieza.active
         limpieza.bind(active=lambda _obj, activo: setattr(dias, "disabled", not activo))
-        contenido.add_widget(Label(
+        aviso_limpieza = Label(
             text="Solo se eliminarán JPEG creados por esta aplicación que sigan en la carpeta. "
                  "Si un archivo se mueve fuera, dejará de estar sujeto a la limpieza.",
-            size_hint_y=None, height=dp(66), font_size="12sp",
+            size_hint_y=None, height=dp(62), font_size="10sp",
             halign="left", valign="middle",
-        ))
+        )
+        aviso_limpieza.bind(size=lambda obj, size: setattr(obj, "text_size", (max(1, size[0] - dp(8)), None)))
+        contenido.add_widget(aviso_limpieza)
         botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         cancelar = Button(text="Cerrar")
         guardar = Button(text="Guardar ajustes")
