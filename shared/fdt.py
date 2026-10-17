@@ -8,7 +8,6 @@ import zipfile
 from pathlib import Path
 
 from .models import (
-    FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
     FIELD_TYPE_TEXT,
@@ -19,7 +18,6 @@ FDT_VERSION = 3
 FIELD_TYPES = {
     FIELD_TYPE_TEXT,
     FIELD_TYPE_NUMBER,
-    FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
 }
 
@@ -351,9 +349,6 @@ def validar_fdt(formato: Formato):
         if campo.field_type == FIELD_TYPE_NUMBER:
             campo.validation.numeric_only = True
             campo.validation.alphanumeric_only = False
-        elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-            campo.validation.numeric_only = False
-            campo.validation.alphanumeric_only = True
         else:
             campo.validation.numeric_only = False
             campo.validation.alphanumeric_only = False
