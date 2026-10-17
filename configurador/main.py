@@ -9,7 +9,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 from shared.fdt import guardar_fdt, validar_fdt
 from shared.renderer import _cargar_fuente
 from shared.models import (
-    FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
     FIELD_TYPE_TEXT,
@@ -26,11 +25,9 @@ from shared.models import (
 TOOL_SELECT = "select"
 TOOL_TEXT = FIELD_TYPE_TEXT
 TOOL_NUMBER = FIELD_TYPE_NUMBER
-TOOL_ALPHANUMERIC = FIELD_TYPE_ALPHANUMERIC
 TOOL_IMAGE = FIELD_TYPE_IMAGE
 TOOL_ZOOM = "zoom"
 TOOL_HAND = "hand"
-TOOL_MEASURE = "measure"
 
 
 class ToolTip:
@@ -166,10 +163,8 @@ class Configurador:
         herramientas.add_command(label="Desplazar", command=lambda: self.set_tool(TOOL_HAND))
         herramientas.add_command(label="Texto (A)", command=lambda: self.set_tool(TOOL_TEXT))
         herramientas.add_command(label="Número (1)", command=lambda: self.set_tool(TOOL_NUMBER))
-        herramientas.add_command(label="Alfanumérico (A1)", command=lambda: self.set_tool(TOOL_ALPHANUMERIC))
         herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE))
         herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM))
-        herramientas.add_command(label="Medida", command=lambda: self.set_tool(TOOL_MEASURE))
         herramientas.add_separator()
         herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel)
         herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado)
@@ -202,10 +197,8 @@ class Configurador:
             ("hand-paper", "Desplazar", TOOL_HAND),
             ("font", "Texto", TOOL_TEXT),
             ("hashtag", "Número", TOOL_NUMBER),
-            ("id-card", "Alfanumérico", TOOL_ALPHANUMERIC),
             ("image", "Imagen", TOOL_IMAGE),
             ("search-plus", "Lupa", TOOL_ZOOM),
-            ("arrows-alt", "Medida", TOOL_MEASURE),
         ]
         for icon, label, tool in tools:
             button = tk.Button(
@@ -225,8 +218,8 @@ class Configurador:
                 "Herramienta: " + {
                     TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
                     TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
-                    TOOL_ALPHANUMERIC: "Alfanumérico", TOOL_IMAGE: "Imagen",
-                    TOOL_ZOOM: "Lupa", TOOL_MEASURE: "Medida",
+                    TOOL_IMAGE: "Imagen",
+                    TOOL_ZOOM: "Lupa",
                 }.get(self.tool, self.tool)
             ))
 
@@ -776,8 +769,8 @@ class Configurador:
         nombres = {
             TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
             TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
-            TOOL_ALPHANUMERIC: "Alfanumérico", TOOL_IMAGE: "Imagen",
-            TOOL_ZOOM: "Lupa", TOOL_MEASURE: "Medida",
+            TOOL_IMAGE: "Imagen",
+            TOOL_ZOOM: "Lupa",
         }
         self._set_status("Herramienta: " + nombres.get(tool, tool))
 
@@ -960,7 +953,7 @@ class Configurador:
         # Así el configurador deja de mostrar una referencia tipográfica
         # diferente a la del documento final.
         if campo.field_type in (
-            FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC
+            FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER
         ):
             try:
                 if campo.text_style.font_family:
@@ -980,7 +973,6 @@ class Configurador:
                 muestra = {
                     FIELD_TYPE_IMAGE: "IMAGEN",
                     FIELD_TYPE_NUMBER: "123456",
-                    FIELD_TYPE_ALPHANUMERIC: "A1B2C3",
                 }.get(campo.field_type, "Texto")
                 if getattr(campo, "uppercase", False):
                     muestra = muestra.upper()
@@ -1137,23 +1129,6 @@ class Configurador:
             self.canvas.scan_mark(event.x, event.y)
             self._pan_last = (event.x, event.y)
             return
-        if self.tool == TOOL_MEASURE:
-            campo = self._find_field_at(cx, cy)
-            if campo:
-                self.selected_field = campo
-                self._field_resize_handle = self._hit_resize_handle(campo, cx, cy)
-                if self._field_resize_handle:
-                    self._push_undo()
-                    self._field_resize_origin = (
-                        campo.position.x, campo.position.y,
-                        campo.position.width, campo.position.height
-                    )
-                    self._field_resize_start = (cx, cy)
-                else:
-                    self._field_resize_origin = None
-                    self._field_resize_start = None
-                self.redraw()
-            return
         if self.tool == TOOL_SELECT:
             # Primero comprobar los controles del campo seleccionado. Esto permite
             # redimensionar desde los cuadrados incluso si el puntero cae justo
@@ -1200,7 +1175,7 @@ class Configurador:
         elif self._magnifier_label is not None:
             self._ocultar_lupa()
 
-        if self._field_resize_handle and self._field_resize_start and self.tool in (TOOL_SELECT, TOOL_MEASURE):
+        if self._field_resize_handle and self._field_resize_start and self.tool == TOOL_SELECT:
             dx = int(round((cx - self._field_resize_start[0]) / self.zoom))
             dy = int(round((cy - self._field_resize_start[1]) / self.zoom))
             self._resize_selected_field(dx, dy)
@@ -1232,7 +1207,7 @@ class Configurador:
                 self.redraw()
             return
 
-        if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
+        if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_IMAGE):
             return
         x0, y0 = self.drag_start
         x1, y1 = self._canvas_to_document(cx, cy)
@@ -1251,7 +1226,7 @@ class Configurador:
         if self.tool == TOOL_HAND:
             self._pan_last = None
             return
-        if self.tool == TOOL_MEASURE or (self.tool == TOOL_SELECT and self._field_resize_handle):
+        if self.tool == TOOL_SELECT and self._field_resize_handle:
             self._field_resize_handle = None
             self._field_resize_start = None
             self._field_resize_origin = None
@@ -1265,7 +1240,7 @@ class Configurador:
             return
         if self.drag_start is None:
             return
-        if self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_ALPHANUMERIC, TOOL_IMAGE):
+        if self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_IMAGE):
             self.drag_start = None
             return
 
@@ -1691,9 +1666,6 @@ class Configurador:
             if campo.field_type == FIELD_TYPE_NUMBER:
                 campo.validation.numeric_only = True
                 campo.validation.alphanumeric_only = False
-            elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-                campo.validation.numeric_only = False
-                campo.validation.alphanumeric_only = True
 
             self.formato.ordenar_campos()
             self.unsaved = True
