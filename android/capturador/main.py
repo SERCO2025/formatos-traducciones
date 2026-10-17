@@ -248,6 +248,14 @@ class CapturadorApp(App):
         controls_nav.add_widget(self.btn_siguiente)
         root.add_widget(controls_nav)
 
+        # Mantener el objeto porque _mostrar_campo actualiza su texto,
+        # pero no añadirlo al layout: así no ocupa espacio ni baja el preview.
+        self.info_imagen = Label(
+            text="", size_hint_y=None, height=dp(34),
+            font_size="12sp", halign="left", valign="middle",
+        )
+        self.info_imagen.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+
         preview_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         self.preview = Image(
             allow_stretch=True, keep_ratio=True,
