@@ -238,8 +238,7 @@ class CapturadorApp(App):
         self.entrada.bind(text=self._entrada_cambio)
         root.add_widget(self.entrada)
 
-        # Navegación inmediatamente debajo de la respuesta para que siga accesible
-        # mientras el teclado de Android está abierto.
+        # Navegación en el espacio existente entre la respuesta y la vista previa.
         controls_nav = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
         self.btn_atras = Button(text="Volver", font_size="15sp", disabled=True)
         self.btn_atras.bind(on_release=lambda *_: self.anterior())
@@ -248,13 +247,6 @@ class CapturadorApp(App):
         self.btn_siguiente.bind(on_release=lambda *_: self.siguiente())
         controls_nav.add_widget(self.btn_siguiente)
         root.add_widget(controls_nav)
-
-        self.info_imagen = Label(
-            text="", size_hint_y=None, height=dp(34),
-            font_size="12sp", halign="left", valign="middle",
-        )
-        self.info_imagen.bind(size=lambda obj, size: setattr(obj, "text_size", size))
-        root.add_widget(self.info_imagen)
 
         preview_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         self.preview = Image(
