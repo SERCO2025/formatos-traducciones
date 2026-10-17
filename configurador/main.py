@@ -169,10 +169,6 @@ class Configurador:
         herramientas.add_separator()
         herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel)
         herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado)
-        herramientas.add_command(label="Acoplar herramientas arriba", command=lambda: self._dock_toolbar("top"))
-        herramientas.add_command(label="Acoplar herramientas abajo", command=lambda: self._dock_toolbar("bottom"))
-        herramientas.add_command(label="Acoplar herramientas izquierda", command=lambda: self._dock_toolbar("left"))
-        herramientas.add_command(label="Acoplar herramientas derecha", command=lambda: self._dock_toolbar("right"))
         menubar.add_cascade(label="Herramientas", menu=herramientas)
 
         ayuda = tk.Menu(menubar, tearoff=0)
@@ -184,13 +180,6 @@ class Configurador:
 
         self.toolbar_host = tk.Frame(self.root, bg="#171717", height=42)
         self.toolbar_host.pack(side="top", fill="x")
-
-        grip = tk.Label(self.toolbar_host, text="⋮⋮", bg="#171717", fg="#888888",
-                        font=("Arial", 11), cursor="fleur")
-        grip.pack(side="left", padx=(4, 2))
-        grip.bind("<ButtonPress-1>", self._dock_start)
-        grip.bind("<B1-Motion>", self._dock_motion)
-        grip.bind("<ButtonRelease-1>", self._dock_release)
 
         self._tool_buttons = []
         tools = [
@@ -310,7 +299,13 @@ class Configurador:
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
         self.canvas.bind("<ButtonPress-3>", self.on_right_down)
         self.root.bind_all("<Control-z>", lambda e: self.deshacer())
+        self.root.bind_all("<Control-r>", lambda e: self.rehacer())
         self.root.bind_all("<Control-y>", lambda e: self.rehacer())
+        self.root.bind_all("<Left>", self._mover_seleccionado_tecla)
+        self.root.bind_all("<Right>", self._mover_seleccionado_tecla)
+        self.root.bind_all("<Up>", self._mover_seleccionado_tecla)
+        self.root.bind_all("<Down>", self._mover_seleccionado_tecla)
+        self.root.bind_all("<Delete>", self._eliminar_con_tecla)
 
         status = tk.Frame(self.root, bg="#111111")
         status.pack(side="bottom", fill="x")
@@ -1118,6 +1113,7 @@ class Configurador:
         return None
 
     def on_mouse_down(self, event):
+        self.canvas.focus_set()
         if not self.formato or self.template_image is None:
             return
         cx, cy = self._event_to_canvas(event)
@@ -1309,7 +1305,39 @@ class Configurador:
         campo = self._find_field_at(cx, cy)
         if campo:
             self.selected_field = campo
+            self.redraw()
             self.editar_seleccionado()
+
+    def _mover_seleccionado_tecla(self, event):
+        # Los atajos de edición solo actúan cuando el lienzo tiene el foco,
+        # para no interceptar flechas dentro de entradas o cuadros de diálogo.
+        if self.root.focus_get() not in (self.canvas, self.root):
+            return
+        if not self.formato or not self.selected_field:
+            return
+        pasos = 1 if (event.state & 0x0008) else (25 if (event.state & 0x0001) else 5)
+        dx = -pasos if event.keysym == "Left" else pasos if event.keysym == "Right" else 0
+        dy = pasos if event.keysym == "Down" else -pasos if event.keysym == "Up" else 0
+        campo = self.selected_field
+        max_x = max(0, self.template_image.width - campo.position.width)
+        max_y = max(0, self.template_image.height - campo.position.height)
+        nx = max(0, min(max_x, campo.position.x + dx))
+        ny = max(0, min(max_y, campo.position.y + dy))
+        if (nx, ny) == (campo.position.x, campo.position.y):
+            return "break"
+        self._push_undo()
+        campo.position = Position(nx, ny, campo.position.width, campo.position.height)
+        self.unsaved = True
+        self.redraw()
+        self._refresh_field_list()
+        return "break"
+
+    def _eliminar_con_tecla(self, event):
+        if self.root.focus_get() not in (self.canvas, self.root):
+            return
+        if self.selected_field:
+            self.eliminar_seleccionado()
+            return "break"
 
     def on_canvas_motion(self, event):
         if self.tool == TOOL_ZOOM:
