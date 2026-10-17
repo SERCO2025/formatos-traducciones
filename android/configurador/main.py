@@ -229,6 +229,7 @@ class CanvasEditor(StencilView):
         self.template_widget = None
         self._template_core_image = None
         self.start_touch = None
+        self.start_touch_screen = None
         self.active_field_touch = None
         self.active_field = None
         self.active_handle = None
@@ -303,6 +304,7 @@ class CanvasEditor(StencilView):
         self.pan_start = None
         self.pan_template_pos = None
         self.start_touch = None
+        self.start_touch_screen = None
         self.app.clear_drawing_preview()
         self.app.estado.text = "Zoom táctil"
         return True
@@ -425,6 +427,7 @@ class CanvasEditor(StencilView):
         if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE):
             if self._inside_template(touch):
                 self.start_touch = self._document_point(touch)
+                self.start_touch_screen = (touch.x, touch.y)
                 self.app.estado.text = "Dibujando campo..."
                 return True
 
@@ -495,12 +498,26 @@ class CanvasEditor(StencilView):
 
         x0, y0 = self.start_touch
         x1, y1 = self._document_point(touch)
-        left, right = sorted((x0, x1))
-        top, bottom = sorted((y0, y1))
-        width = max(2, right - left)
-        height = max(2, bottom - top)
+        inicio_pantalla = self.start_touch_screen or (touch.x, touch.y)
+        arrastro = (
+            abs(touch.x - inicio_pantalla[0]) >= dp(8)
+            or abs(touch.y - inicio_pantalla[1]) >= dp(8)
+        )
         self.start_touch = None
+        self.start_touch_screen = None
         self.app.clear_drawing_preview()
+
+        if not arrastro and self.app.formato.fields:
+            anterior = max(self.app.formato.fields, key=lambda item: item.order)
+            width = min(anterior.position.width, self.app.formato.template.width)
+            height = min(anterior.position.height, self.app.formato.template.height)
+            left = max(0, min(x0, self.app.formato.template.width - width))
+            top = max(0, min(y0, self.app.formato.template.height - height))
+        else:
+            left, right = sorted((x0, x1))
+            top, bottom = sorted((y0, y1))
+            width = max(2, right - left)
+            height = max(2, bottom - top)
 
         if width < 4 or height < 4:
             self.app.estado.text = "Área demasiado pequeña."
