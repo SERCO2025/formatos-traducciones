@@ -79,7 +79,7 @@ TOOLS = [
     ("A", FIELD_TYPE_TEXT),
     ("1", FIELD_TYPE_NUMBER),
     ("IMG", FIELD_TYPE_IMAGE),
-    ("ZOOM", "zoom"),
+    ("D", "hand"),
 ]
 
 
@@ -204,6 +204,12 @@ class CampoWidget(FloatLayout):
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
         if self.editor.app.tool == "select":
+            if getattr(touch, "is_double_tap", False):
+                self.editor.app.seleccionar(self.campo)
+                Clock.schedule_once(
+                    lambda _dt: self.editor.app.mostrar_propiedades(self.campo), 0
+                )
+                return True
             handle = self._handle_at(local_x, local_y)
             self.editor.begin_field_interaction(self.campo, touch, handle)
             return True
@@ -317,11 +323,14 @@ class CanvasEditor(StencilView):
         factor = distancia / self._pinch_start_distance
         midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
+        # El zoom depende proporcionalmente de la distancia entre los dedos.
+        # El desplazamiento usa el delta entre cuadros consecutivos (1:1);
+        # no se vuelve a sumar todo el recorrido desde el inicio del gesto.
         self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
 
         if self.template_widget is not None:
-            dx = midpoint[0] - self._pinch_anchor[0]
-            dy = midpoint[1] - self._pinch_anchor[1]
+            dx = midpoint[0] - self._pinch_last_midpoint[0]
+            dy = midpoint[1] - self._pinch_last_midpoint[1]
             self.template_widget.pos = (
                 self.template_widget.x + dx,
                 self.template_widget.y + dy,
@@ -1318,6 +1327,10 @@ class ConfiguradorApp(App):
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         estilo = campo.text_style
         contenido = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(10))
+        # Los botones van justo debajo del título/línea azul del Popup para
+        # que sigan accesibles cuando Android despliega el teclado.
+        botones = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        contenido.add_widget(botones)
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         form = GridLayout(cols=1, spacing=dp(7), size_hint_y=None)
         form.bind(minimum_height=form.setter("height"))
@@ -1706,7 +1719,6 @@ class ConfiguradorApp(App):
 
         scroll.add_widget(form)
         contenido.add_widget(scroll)
-        botones = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
 
         def entero(entrada, actual):
             try:
@@ -1779,7 +1791,6 @@ class ConfiguradorApp(App):
 
         botones.add_widget(Button(text="Cancelar", on_release=lambda _: popup.dismiss()))
         botones.add_widget(Button(text="Aceptar", on_release=aceptar))
-        contenido.add_widget(botones)
         popup = Popup(
             title="Propiedades del campo",
             content=contenido,
