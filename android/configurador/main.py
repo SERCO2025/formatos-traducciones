@@ -38,7 +38,6 @@ except Exception:
 
 from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt
 from shared.models import (
-    FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
     FIELD_TYPE_TEXT,
@@ -79,7 +78,6 @@ TOOLS = [
     ("SEL", "select"),
     ("A", FIELD_TYPE_TEXT),
     ("1", FIELD_TYPE_NUMBER),
-    ("A1", FIELD_TYPE_ALPHANUMERIC),
     ("IMG", FIELD_TYPE_IMAGE),
     ("ZOOM", "zoom"),
 ]
@@ -140,8 +138,6 @@ class CampoWidget(FloatLayout):
             texto = "IMAGEN"
         elif self.campo.field_type == FIELD_TYPE_NUMBER:
             texto = "12345"
-        elif self.campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-            texto = "ABC123"
         else:
             texto = "ABCDE"
         estilo = self.campo.text_style
@@ -426,7 +422,7 @@ class CanvasEditor(StencilView):
                 self.pan_template_pos = self.template_widget.pos
                 return True
 
-        if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC, FIELD_TYPE_IMAGE):
+        if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE)
             if self._inside_template(touch):
                 self.start_touch = self._document_point(touch)
                 self.app.estado.text = "Dibujando campo..."
@@ -463,7 +459,7 @@ class CanvasEditor(StencilView):
             return True
 
         if self.start_touch and self.app.tool in (
-            FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC, FIELD_TYPE_IMAGE
+            FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE
         ):
             self.app.redraw_drawing_preview(self.start_touch, self._document_point(touch))
             return True
@@ -492,7 +488,7 @@ class CanvasEditor(StencilView):
             return super().on_touch_up(touch)
 
         tool = self.app.tool
-        if tool not in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_ALPHANUMERIC, FIELD_TYPE_IMAGE):
+        if tool not in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE)
             self.start_touch = None
             self.app.clear_drawing_preview()
             return super().on_touch_up(touch)
@@ -511,8 +507,7 @@ class CanvasEditor(StencilView):
             return True
 
         self.app.push_undo()
-        # Los campos de texto, número y alfanumérico comparten los últimos
-        # atributos tipográficos usados; el tipo solo cambia el ejemplo y la validación.
+        # Los campos de texto y número comparten los últimos atributos tipográficos usados.
         estilo_anterior = next(
             (
                 copy.deepcopy(c.text_style)
@@ -765,7 +760,6 @@ class ConfiguradorApp(App):
         opcion("Desplazar", lambda: self.set_tool("hand"))
         opcion("Texto", lambda: self.set_tool(FIELD_TYPE_TEXT))
         opcion("Número", lambda: self.set_tool(FIELD_TYPE_NUMBER))
-        opcion("Alfanumérico", lambda: self.set_tool(FIELD_TYPE_ALPHANUMERIC))
         opcion("Imagen", lambda: self.set_tool(FIELD_TYPE_IMAGE))
         opcion("Lupa", lambda: self.set_tool("zoom"))
         opcion("Lista de campos", self.mostrar_lista_campos)
@@ -787,7 +781,6 @@ class ConfiguradorApp(App):
             "zoom": "Lupa",
             FIELD_TYPE_TEXT: "Texto",
             FIELD_TYPE_NUMBER: "Número",
-            FIELD_TYPE_ALPHANUMERIC: "Alfanumérico",
             FIELD_TYPE_IMAGE: "Imagen",
         }
         self.estado.text = "Herramienta: " + nombres.get(tool, str(tool))
@@ -1727,9 +1720,6 @@ class ConfiguradorApp(App):
                 if campo.field_type == FIELD_TYPE_NUMBER:
                     from shared.models import Validation
                     campo.validation = Validation(numeric_only=True, alphanumeric_only=False)
-                elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-                    from shared.models import Validation
-                    campo.validation = Validation(numeric_only=False, alphanumeric_only=True)
 
                 if not es_imagen:
                     seleccion_fuente = fuente_spinner.text
