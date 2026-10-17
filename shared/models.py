@@ -5,13 +5,11 @@ from typing import List
 
 FIELD_TYPE_TEXT = "text"
 FIELD_TYPE_NUMBER = "number"
-FIELD_TYPE_ALPHANUMERIC = "alphanumeric"
 FIELD_TYPE_IMAGE = "image"
 
 FIELD_TYPES = (
     FIELD_TYPE_TEXT,
     FIELD_TYPE_NUMBER,
-    FIELD_TYPE_ALPHANUMERIC,
     FIELD_TYPE_IMAGE,
 )
 
