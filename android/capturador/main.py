@@ -238,6 +238,17 @@ class CapturadorApp(App):
         self.entrada.bind(text=self._entrada_cambio)
         root.add_widget(self.entrada)
 
+        # Navegación inmediatamente debajo de la respuesta para que siga accesible
+        # mientras el teclado de Android está abierto.
+        controls_nav = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        self.btn_atras = Button(text="Volver", font_size="15sp", disabled=True)
+        self.btn_atras.bind(on_release=lambda *_: self.anterior())
+        controls_nav.add_widget(self.btn_atras)
+        self.btn_siguiente = Button(text="Continuar", font_size="15sp", disabled=True)
+        self.btn_siguiente.bind(on_release=lambda *_: self.siguiente())
+        controls_nav.add_widget(self.btn_siguiente)
+        root.add_widget(controls_nav)
+
         self.info_imagen = Label(
             text="", size_hint_y=None, height=dp(34),
             font_size="12sp", halign="left", valign="middle",
@@ -270,15 +281,6 @@ class CapturadorApp(App):
         self.btn_guardar_avance.bind(on_release=lambda *_: self.guardar_avance())
         controls_draft.add_widget(self.btn_guardar_avance)
         root.add_widget(controls_draft)
-
-        controls_nav = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
-        self.btn_atras = Button(text="Volver", font_size="17sp", disabled=True)
-        self.btn_atras.bind(on_release=lambda *_: self.anterior())
-        controls_nav.add_widget(self.btn_atras)
-        self.btn_siguiente = Button(text="Continuar", font_size="17sp", disabled=True)
-        self.btn_siguiente.bind(on_release=lambda *_: self.siguiente())
-        controls_nav.add_widget(self.btn_siguiente)
-        root.add_widget(controls_nav)
 
         # El botón Salir ya está aislado en el encabezado superior derecho.
 
