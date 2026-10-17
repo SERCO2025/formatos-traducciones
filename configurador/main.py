@@ -105,6 +105,7 @@ class Configurador:
         self.selected_field = None
         self.field_items = {}
         self.drag_start = None
+        self._draw_start_canvas = None
         self.drawing_rect = None
         self.current_fdt_path = None
         self.unsaved = False
@@ -1164,6 +1165,7 @@ class Configurador:
             return
 
         self.drag_start = self._canvas_to_document(cx, cy)
+        self._draw_start_canvas = (cx, cy)
         self.drawing_rect = self.canvas.create_rectangle(
             cx, cy, cx, cy, outline="black", width=3
         )
@@ -1247,15 +1249,26 @@ class Configurador:
         cx, cy = self._event_to_canvas(event)
         x0, y0 = self.drag_start
         x1, y1 = self._canvas_to_document(cx, cy)
-        left, right = sorted((x0, x1))
-        top, bottom = sorted((y0, y1))
-        width = max(1, right - left)
-        height = max(1, bottom - top)
+        inicio_canvas = self._draw_start_canvas or (cx, cy)
+        arrastro = abs(cx - inicio_canvas[0]) > 4 or abs(cy - inicio_canvas[1]) > 4
+
+        if not arrastro and self.formato.fields:
+            anterior = max(self.formato.fields, key=lambda item: item.order)
+            width = min(anterior.position.width, self.template_image.width)
+            height = min(anterior.position.height, self.template_image.height)
+            left = max(0, min(x0, self.template_image.width - width))
+            top = max(0, min(y0, self.template_image.height - height))
+        else:
+            left, right = sorted((x0, x1))
+            top, bottom = sorted((y0, y1))
+            width = max(1, right - left)
+            height = max(1, bottom - top)
 
         if self.drawing_rect:
             self.canvas.delete(self.drawing_rect)
             self.drawing_rect = None
         self.drag_start = None
+        self._draw_start_canvas = None
 
         self._push_undo()
         import copy
