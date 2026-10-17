@@ -422,7 +422,7 @@ class CanvasEditor(StencilView):
                 self.pan_template_pos = self.template_widget.pos
                 return True
 
-        if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE)
+        if tool in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE):
             if self._inside_template(touch):
                 self.start_touch = self._document_point(touch)
                 self.app.estado.text = "Dibujando campo..."
@@ -488,7 +488,7 @@ class CanvasEditor(StencilView):
             return super().on_touch_up(touch)
 
         tool = self.app.tool
-        if tool not in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE)
+        if tool not in (FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER, FIELD_TYPE_IMAGE):
             self.start_touch = None
             self.app.clear_drawing_preview()
             return super().on_touch_up(touch)
