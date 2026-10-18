@@ -318,7 +318,7 @@ class CanvasEditor(StencilView):
         a, b = list(self._touches.values())[:2]
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
         self._pinch_last_distance = self._pinch_start_distance
-        self._pinch_last_midpoint = self._pinch_anchor
+        self._pinch_last_midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
         self._pinch_active = True
         self._pinch_zoom_activated = False
 
