@@ -69,6 +69,14 @@ jobs:
           mkdir -p "$BUILDOZER_SDK/cmdline-tools/latest"
           # Buildozer también necesita encontrar sdkmanager dentro de su propio SDK.
           cp -a "$ANDROID_HOME/cmdline-tools/latest/." "$BUILDOZER_SDK/cmdline-tools/latest/"
+          # Buildozer instalado por pip todavía busca sdkmanager en la ruta
+          # heredada tools/bin/sdkmanager. Este wrapper delega al CLI moderno.
+          mkdir -p "$BUILDOZER_SDK/tools/bin"
+          cat > "$BUILDOZER_SDK/tools/bin/sdkmanager" <<EOF
+          #!/usr/bin/env bash
+          exec "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" "\$@"
+          EOF
+          chmod +x "$BUILDOZER_SDK/tools/bin/sdkmanager"
           set +o pipefail
           yes | "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --licenses >/dev/null
           set -o pipefail
