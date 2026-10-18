@@ -150,8 +150,8 @@ def guardar_fdt(formato: Formato, ruta):
             "No se encontró la imagen de plantilla: %s" % template_path
         )
 
-    # Las rutas almacenadas dentro del FDT son internas al contenedor.
-    data["template"]["path"] = "template/" + template_path.name
+    # El FDT incluye una copia JPEG RGB sin alterar las dimensiones en píxeles.
+    data["template"]["path"] = "template/plantilla.jpg"
 
     # Las tipografías utilizadas por los campos también quedan dentro del FDT.
     # Esto evita que el renderizador dependa de que la misma fuente exista
@@ -193,10 +193,26 @@ def guardar_fdt(formato: Formato, ruta):
         campo_data["text_style"]["font_family"] = fuentes_empaquetadas[clave][1]
 
     temp_path = ruta.with_suffix(ruta.suffix + ".tmp")
+    normalized_path = None
     if temp_path.exists():
         temp_path.unlink()
 
     try:
+        from PIL import Image
+
+        fd, normalized_name = tempfile.mkstemp(
+            prefix="fdt_template_", suffix=".jpg", dir=str(ruta.parent)
+        )
+        os.close(fd)
+        normalized_path = Path(normalized_name)
+        with Image.open(str(template_path)) as imagen_original:
+            imagen_rgb = imagen_original.convert("RGB")
+            imagen_rgb.save(
+                str(normalized_path), format="JPEG", quality=100,
+                subsampling=0, optimize=False, dpi=(300, 300),
+            )
+            imagen_rgb.close()
+
         with zipfile.ZipFile(
             str(temp_path), "w", compression=zipfile.ZIP_DEFLATED
         ) as paquete:
@@ -204,10 +220,7 @@ def guardar_fdt(formato: Formato, ruta):
                 "format.json",
                 json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
             )
-            paquete.write(
-                str(template_path),
-                "template/" + template_path.name,
-            )
+            paquete.write(str(normalized_path), "template/plantilla.jpg")
 
             for fuente_path, nombre_interno in fuentes_empaquetadas.values():
                 paquete.write(str(fuente_path), nombre_interno)
@@ -233,12 +246,13 @@ def guardar_fdt(formato: Formato, ruta):
                 ).encode("utf-8"),
             )
 
-        if ruta.exists():
-            ruta.unlink()
-        temp_path.replace(ruta)
+        # Reemplazo atómico sin borrar primero la versión anterior.
+        os.replace(str(temp_path), str(ruta))
     finally:
         if temp_path.exists():
             temp_path.unlink()
+        if normalized_path is not None and normalized_path.exists():
+            normalized_path.unlink()
 
 
 def cargar_fdt(ruta):
@@ -253,6 +267,18 @@ def cargar_fdt(ruta):
                 if "format.json" not in nombres:
                     raise ValueError("El FDT no contiene format.json.")
 
+                raiz_segura = directorio.resolve()
+                for miembro in paquete.infolist():
+                    destino = (directorio / miembro.filename).resolve()
+                    try:
+                        comun = os.path.commonpath((str(raiz_segura), str(destino)))
+                    except ValueError:
+                        comun = ""
+                    if comun != str(raiz_segura):
+                        raise ValueError(
+                            "El FDT contiene una ruta de archivo insegura: %s"
+                            % miembro.filename
+                        )
                 paquete.extractall(str(directorio))
 
             with (directorio / "format.json").open("r", encoding="utf-8") as archivo:
@@ -340,9 +366,20 @@ def validar_fdt(formato: Formato):
             )
         ordenes.add(campo.order)
 
-        if campo.position.width < 0 or campo.position.height < 0:
+        posicion = campo.position
+        if posicion.width <= 0 or posicion.height <= 0:
             errores.append(
-                "El área del campo %s no puede tener dimensiones negativas."
+                "El área del campo %s debe tener anchura y altura mayores que cero."
+                % (campo.field_id or "(sin ID)")
+            )
+        if (
+            posicion.x < 0
+            or posicion.y < 0
+            or posicion.x + posicion.width > formato.template.width
+            or posicion.y + posicion.height > formato.template.height
+        ):
+            errores.append(
+                "El campo %s queda fuera de los límites de la plantilla."
                 % (campo.field_id or "(sin ID)")
             )
 
