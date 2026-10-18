@@ -114,7 +114,7 @@ jobs:
         working-directory: android/${{ matrix.app }}
         env:
           P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
-          P4A_RELEASE_BRANCH: "8ef9d1dbbf769d2c14681dbc3c116c85e2e93bae"
+          P4A_RELEASE_BRANCH: "develop"
           PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
         run: |
           echo "Python utilizado:"
@@ -131,7 +131,7 @@ jobs:
         working-directory: android/${{ matrix.app }}
         env:
           P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
-          P4A_RELEASE_BRANCH: "8ef9d1dbbf769d2c14681dbc3c116c85e2e93bae"
+          P4A_RELEASE_BRANCH: "develop"
           PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
