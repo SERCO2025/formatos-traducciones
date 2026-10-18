@@ -295,6 +295,26 @@ class CanvasEditor(StencilView):
         # El toque y la plantilla usan el mismo sistema de coordenadas de ventana.
         return self.template_widget.collide_point(touch.x, touch.y)
 
+    def cancel_active_gestures(self):
+        """Limpia estados de interacción al cambiar de herramienta."""
+        self._touches.clear()
+        self._pinch_active = False
+        self._pinch_anchor = None
+        self._pinch_start_distance = 0.0
+        self._pinch_start_template_pos = None
+        self._pinch_last_midpoint = None
+        self.pan_start = None
+        self.pan_template_pos = None
+        self.start_touch = None
+        self.start_touch_screen = None
+        self.active_field_touch = None
+        self.active_field = None
+        self.active_handle = None
+        self.initial_position = None
+        self._interaction_start_doc = None
+        self.app._interaction_changed = False
+        self.app.clear_drawing_preview()
+
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
             return False
@@ -813,6 +833,8 @@ class ConfiguradorApp(App):
         panel.open()
 
     def set_tool(self, tool):
+        if self.editor is not None:
+            self.editor.cancel_active_gestures()
         self.tool = tool
         nombres = {
             "select": "Seleccionar",
