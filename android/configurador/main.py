@@ -203,28 +203,34 @@ class CampoWidget(FloatLayout):
         local_x, local_y = touch.x - self.x, touch.y - self.y
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
-        if self.editor.app.tool == "select":
-            if getattr(touch, "is_double_tap", False):
-                self.editor.app.seleccionar(self.campo)
-                Clock.schedule_once(
-                    lambda _dt: self.editor.app.mostrar_propiedades(self.campo), 0
-                )
-                return True
-            handle = self._handle_at(local_x, local_y)
-            self.editor.begin_field_interaction(self.campo, touch, handle)
+        if self.editor.app.tool != "select":
+            # Los widgets de campo son solo una capa visual fuera de Selección.
+            # Dejar que el gesto llegue a CanvasEditor (dibujar/desplazar/pellizcar).
+            return False
+        if getattr(touch, "is_double_tap", False):
+            self.editor.app.seleccionar(self.campo)
+            Clock.schedule_once(
+                lambda _dt: self.editor.app.mostrar_propiedades(self.campo), 0
+            )
             return True
-        return super().on_touch_down(touch)
+        handle = self._handle_at(local_x, local_y)
+        self.editor.begin_field_interaction(self.campo, touch, handle)
+        return True
 
     def on_touch_move(self, touch):
         if self.editor.active_field_touch is touch:
             self.editor.update_field_interaction(touch)
             return True
+        if self.editor.app.tool != "select":
+            return False
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
         if self.editor.active_field_touch is touch:
             self.editor.end_field_interaction(touch)
             return True
+        if self.editor.app.tool != "select":
+            return False
         return super().on_touch_up(touch)
 
 
@@ -288,6 +294,26 @@ class CanvasEditor(StencilView):
             return False
         # El toque y la plantilla usan el mismo sistema de coordenadas de ventana.
         return self.template_widget.collide_point(touch.x, touch.y)
+
+    def cancel_active_gestures(self):
+        """Limpia estados de interacción al cambiar de herramienta."""
+        self._touches.clear()
+        self._pinch_active = False
+        self._pinch_anchor = None
+        self._pinch_start_distance = 0.0
+        self._pinch_start_template_pos = None
+        self._pinch_last_midpoint = None
+        self.pan_start = None
+        self.pan_template_pos = None
+        self.start_touch = None
+        self.start_touch_screen = None
+        self.active_field_touch = None
+        self.active_field = None
+        self.active_handle = None
+        self.initial_position = None
+        self._interaction_start_doc = None
+        self.app._interaction_changed = False
+        self.app.clear_drawing_preview()
 
     def _start_pinch(self):
         if len(self._touches) < 2 or not self.template_widget:
@@ -453,7 +479,14 @@ class CanvasEditor(StencilView):
             self._touches[touch.uid] = touch
 
         if self._pinch_active:
-            return self._update_pinch()
+            if len(self._touches) >= 2:
+                return self._update_pinch()
+            # No continuar aplicando zoom si queda un solo dedo activo.
+            self._pinch_active = False
+            self._pinch_anchor = None
+            self._pinch_start_distance = 0.0
+            self._pinch_start_template_pos = None
+            self._pinch_last_midpoint = None
 
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             # Arrastre incremental en el mismo sistema local del lienzo.
@@ -800,6 +833,8 @@ class ConfiguradorApp(App):
         panel.open()
 
     def set_tool(self, tool):
+        if self.editor is not None:
+            self.editor.cancel_active_gestures()
         self.tool = tool
         nombres = {
             "select": "Seleccionar",
@@ -1854,7 +1889,8 @@ class ConfiguradorApp(App):
         widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
         with widget.canvas:
             Color(0, 0, 0, 1)
-            Line(rectangle=(x, y, w, h), width=3)
+            # Las instrucciones del canvas usan coordenadas locales al widget.
+            Line(rectangle=(0, 0, w, h), width=3)
 
         self._drawing_widget = widget
         # Se agrega directamente al editor, no a una capa intermedia
