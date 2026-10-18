@@ -300,6 +300,7 @@ class CanvasEditor(StencilView):
         """Limpia estados de interacción al cambiar de herramienta."""
         self._touches.clear()
         self._pinch_active = False
+        self._pinch_zoom_activated = False
         self._pinch_anchor = None
         self._pinch_start_distance = 0.0
         self._pinch_last_distance = 0.0
@@ -328,6 +329,7 @@ class CanvasEditor(StencilView):
         self._pinch_start_template_pos = self.template_widget.pos
         self._pinch_last_midpoint = self._pinch_anchor
         self._pinch_active = True
+        self._pinch_zoom_activated = False
 
         self.active_field_touch = None
         self.active_field = None
@@ -351,15 +353,24 @@ class CanvasEditor(StencilView):
         distancia = max(1.0, hypot(b.x - a.x, b.y - a.y))
         midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
-        # Filtra pequeñas variaciones de distancia causadas por el seguimiento
-        # táctil: solo cambia el zoom cuando la distancia varía al menos 8 dp.
-        # Cada ajuste es incremental; el movimiento del punto medio se procesa
-        # por separado para que trasladar ambos dedos no provoque zoom.
-        delta_distancia = distancia - self._pinch_last_distance
-        if abs(delta_distancia) >= dp(8):
+        # No se activa el zoom por pequeñas variaciones mientras el usuario
+        # desplaza dos dedos. Primero se exige un cambio acumulado claro desde
+        # el inicio del gesto; una vez identificado el pellizco, el zoom sigue
+        # de forma incremental y el punto medio continúa controlando el paneo.
+        cambio_desde_inicio = distancia - self._pinch_start_distance
+        umbral_zoom = max(dp(18), self._pinch_start_distance * 0.12)
+        if not getattr(self, "_pinch_zoom_activated", False):
+            if abs(cambio_desde_inicio) >= umbral_zoom:
+                self._pinch_zoom_activated = True
+                self._pinch_last_distance = distancia
+        else:
             factor = distancia / max(1.0, self._pinch_last_distance)
-            self.app.set_zoom(self.app.scale * factor, anchor=self._pinch_last_midpoint)
-            self._pinch_last_distance = distancia
+            if abs(distancia - self._pinch_last_distance) >= dp(1):
+                self.app.set_zoom(
+                    self.app.scale * factor,
+                    anchor=self._pinch_last_midpoint,
+                )
+                self._pinch_last_distance = distancia
 
         if self.template_widget is not None:
             dx = midpoint[0] - self._pinch_last_midpoint[0]
@@ -525,6 +536,7 @@ class CanvasEditor(StencilView):
         if self._pinch_active:
             if len(self._touches) < 2:
                 self._pinch_active = False
+                self._pinch_zoom_activated = False
                 self._pinch_anchor = None
                 self._pinch_start_distance = 0.0
                 self._pinch_last_distance = 0.0
@@ -677,9 +689,9 @@ class CanvasEditor(StencilView):
         self.app.estado.text = "Campo actualizado."
 
     def redraw_preview(self):
+        # Compatibilidad con llamadas antiguas; el dibujo provisional se
+        # actualiza únicamente desde redraw_drawing_preview().
         self.app.clear_drawing_preview()
-        if self.start_touch:
-            pass
 
 
 class ConfiguradorApp(App):
@@ -871,13 +883,19 @@ class ConfiguradorApp(App):
         return x, y
 
     def nuevo(self):
-        self.push_undo() if self.formato else None
+        # Un formato nuevo no debe conservar widgets ni referencias a la
+        # plantilla anterior. El historial anterior tampoco debe sobrevivir.
+        if self.editor is not None:
+            self.editor.cancel_active_gestures()
+            self.editor.clear_widgets()
+            self.editor.template_widget = None
+            self.editor._template_core_image = None
+        self.clear_drawing_preview()
         self.formato = None
         self.seleccionado = None
         self._visual_template_path = None
         self._undo = []
         self._redo = []
-        self.editor.clear_widgets()
         self.estado.text = "Nuevo formato."
         self.estado_menu.text = "Nuevo"
 
@@ -1898,8 +1916,9 @@ class ConfiguradorApp(App):
         widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
         with widget.canvas:
             Color(0, 0, 0, 1)
-            # Las instrucciones del canvas usan coordenadas locales al widget.
-            Line(rectangle=(0, 0, w, h), width=3)
+            # Las instrucciones del canvas deben usar las coordenadas de
+            # posición del widget dentro del padre, no el origen (0, 0).
+            Line(rectangle=(x, y, w, h), width=3)
 
         self._drawing_widget = widget
         # Se agrega directamente al editor, no a una capa intermedia
