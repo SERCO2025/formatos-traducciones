@@ -349,7 +349,6 @@ class CanvasEditor(StencilView):
             return False
         a, b = list(self._touches.values())[:2]
         distancia = max(1.0, hypot(b.x - a.x, b.y - a.y))
-        factor = distancia / self._pinch_start_distance
         midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
         # Filtra pequeñas variaciones de distancia causadas por el seguimiento
@@ -494,7 +493,6 @@ class CanvasEditor(StencilView):
             self._pinch_anchor = None
             self._pinch_start_distance = 0.0
             self._pinch_last_distance = 0.0
-        self._pinch_last_distance = 0.0
             self._pinch_start_template_pos = None
             self._pinch_last_midpoint = None
 
