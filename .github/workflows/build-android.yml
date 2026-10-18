@@ -2,7 +2,7 @@ name: Compilar APK - Formatos Traducidos
 on:
   workflow_dispatch:
   push:
-    branches: [desarrollo]
+    branches: [desarrollo, 'fix/**']
 permissions:
   contents: read
 jobs:
@@ -22,7 +22,7 @@ jobs:
           path: |
             android/${{ matrix.app }}/.buildozer
             ~/.cache/pip
-          key: buildozer-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('android/configurador/buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('android/{0}/buildozer.spec', matrix.app)) }}
           restore-keys: |
             buildozer-${{ runner.os }}-${{ matrix.app }}-
       - name: Preparar Python 3.12
