@@ -20,7 +20,6 @@ from kivy.uix.image import Image as KivyImage
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
-from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.spinner import Spinner
@@ -36,7 +35,7 @@ except Exception:
     activity = None
     ANDROID_AVAILABLE = False
 
-from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt
+from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt, limpiar_fdt_temporales
 from shared.models import (
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
@@ -891,6 +890,7 @@ class ConfiguradorApp(App):
             self.editor.template_widget = None
             self.editor._template_core_image = None
         self.clear_drawing_preview()
+        limpiar_fdt_temporales()
         self.formato = None
         self.seleccionado = None
         self._visual_template_path = None
@@ -1075,6 +1075,12 @@ class ConfiguradorApp(App):
             flujo.close()
 
     def _crear_imagen_visual(self, ruta, imagen):
+        # El empaquetado FDT normaliza la imagen al guardar. Al abrir, se
+        # conserva la ruta extraída para no recomprimir una plantilla existente.
+        if not os.path.isfile(ruta):
+            raise IOError("No existe la imagen extraída del FDT.")
+        if imagen.mode != "RGB":
+            raise ValueError("La imagen de plantilla no pudo convertirse a RGB.")
         return ruta
 
     def _importar_ruta(self, ruta):
@@ -1101,6 +1107,7 @@ class ConfiguradorApp(App):
             self.editor.scale = self.scale
             
             self.editor.cargar_plantilla(ruta)
+            limpiar_fdt_temporales(keep_path=ruta)
             self.actualizar_zoom()
             
             self.estado.text = f"ÉXITO: Imagen {imagen.width}x{imagen.height}px cargada."
@@ -1128,6 +1135,7 @@ class ConfiguradorApp(App):
             except Exception as exc:
                 self._visual_template_path = None
                 raise IOError("La plantilla del FDT no se pudo mostrar: " + str(exc))
+            limpiar_fdt_temporales(keep_path=formato.template.path)
             self.actualizar_zoom()
             self.estado.text = "FDT abierto. %d campo(s)." % len(self.formato.fields)
         except Exception as exc:
@@ -1173,11 +1181,13 @@ class ConfiguradorApp(App):
             resolver = actividad.getContentResolver()
             temporal = os.path.join(actividad.getCacheDir().getAbsolutePath(), "fdt_" + uuid.uuid4().hex + ".fdt")
             guardar_fdt(self.formato, temporal)
-            entrada = open(temporal, "rb")
-            salida = resolver.openOutputStream(uri)
-            if salida is None:
-                raise IOError("Android no pudo abrir el destino.")
+            entrada = None
+            salida = None
             try:
+                entrada = open(temporal, "rb")
+                salida = resolver.openOutputStream(uri)
+                if salida is None:
+                    raise IOError("Android no pudo abrir el destino.")
                 # Esta compilación de PyJNIus no incluye jarray.
                 # Pasar bytearray al método Java, igual que en la copia desde URI.
                 while True:
@@ -1188,8 +1198,10 @@ class ConfiguradorApp(App):
                     salida.write(buffer, 0, len(buffer))
                 salida.flush()
             finally:
-                entrada.close()
-                salida.close()
+                if entrada is not None:
+                    entrada.close()
+                if salida is not None:
+                    salida.close()
             self.estado.text = "FDT guardado correctamente."
         finally:
             if temporal and os.path.exists(temporal):
