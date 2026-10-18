@@ -528,8 +528,6 @@ class CanvasEditor(StencilView):
                 self._pinch_anchor = None
                 self._pinch_start_distance = 0.0
                 self._pinch_last_distance = 0.0
-            self._pinch_last_distance = 0.0
-        self._pinch_last_distance = 0.0
                 self._pinch_start_template_pos = None
                 self._pinch_last_midpoint = None
                 self.app.estado.text = "Zoom finalizado."
