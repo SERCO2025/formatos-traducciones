@@ -14,7 +14,7 @@ android.api = 34
 android.minapi = 21
 android.sdk = 34
 android.ndk = 27c
-p4a.branch = develop
+p4a.branch = 8ef9d1dbbf769d2c14681dbc3c116c85e2e93bae
 android.archs = armeabi-v7a,arm64-v8a
 
 [buildozer]
