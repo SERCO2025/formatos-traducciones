@@ -394,3 +394,27 @@ def validar_fdt(formato: Formato):
         raise ValueError("\n".join(errores))
 
     return True
+
+
+def limpiar_fdt_temporales(keep_path=None):
+    """Elimina extracciones FDT de esta sesión, conservando la activa si se indica."""
+    conservar = None
+    if keep_path:
+        ruta_activa = os.path.realpath(str(keep_path))
+        for directorio in list(_EXTRACTED_DIRS):
+            raiz = os.path.realpath(directorio)
+            try:
+                if os.path.commonpath((raiz, ruta_activa)) == raiz:
+                    conservar = directorio
+                    break
+            except ValueError:
+                continue
+
+    for directorio in list(_EXTRACTED_DIRS):
+        if directorio == conservar:
+            continue
+        shutil.rmtree(directorio, ignore_errors=True)
+        try:
+            _EXTRACTED_DIRS.remove(directorio)
+        except ValueError:
+            pass
