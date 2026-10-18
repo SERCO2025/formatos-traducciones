@@ -251,9 +251,6 @@ class CanvasEditor(StencilView):
         self._pinch_active = False
         self._pinch_start_distance = 0.0
         self._pinch_last_distance = 0.0
-        self._pinch_start_scale = 1.0
-        self._pinch_anchor = None
-        self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
@@ -300,10 +297,8 @@ class CanvasEditor(StencilView):
         self._touches.clear()
         self._pinch_active = False
         self._pinch_zoom_activated = False
-        self._pinch_anchor = None
         self._pinch_start_distance = 0.0
         self._pinch_last_distance = 0.0
-        self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
         self.pan_start = None
         self.pan_template_pos = None
@@ -323,9 +318,6 @@ class CanvasEditor(StencilView):
         a, b = list(self._touches.values())[:2]
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
         self._pinch_last_distance = self._pinch_start_distance
-        self._pinch_start_scale = self.app.scale
-        self._pinch_anchor = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
-        self._pinch_start_template_pos = self.template_widget.pos
         self._pinch_last_midpoint = self._pinch_anchor
         self._pinch_active = True
         self._pinch_zoom_activated = False
@@ -500,11 +492,9 @@ class CanvasEditor(StencilView):
                 return self._update_pinch()
             # No continuar aplicando zoom si queda un solo dedo activo.
             self._pinch_active = False
-            self._pinch_anchor = None
-            self._pinch_start_distance = 0.0
+                self._pinch_start_distance = 0.0
             self._pinch_last_distance = 0.0
-            self._pinch_start_template_pos = None
-            self._pinch_last_midpoint = None
+                self._pinch_last_midpoint = None
 
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             # Arrastre incremental en el mismo sistema local del lienzo.
@@ -536,11 +526,9 @@ class CanvasEditor(StencilView):
             if len(self._touches) < 2:
                 self._pinch_active = False
                 self._pinch_zoom_activated = False
-                self._pinch_anchor = None
-                self._pinch_start_distance = 0.0
+                        self._pinch_start_distance = 0.0
                 self._pinch_last_distance = 0.0
-                self._pinch_start_template_pos = None
-                self._pinch_last_midpoint = None
+                        self._pinch_last_midpoint = None
                 self.app.estado.text = "Zoom finalizado."
             return True
 
@@ -1675,6 +1663,7 @@ class ConfiguradorApp(App):
                 # La importación debe ocurrir antes de convertir el RGB actual;
                 # de otro modo NameError cerraba la aplicación al tocar la muestra.
                 from colorsys import hsv_to_rgb, rgb_to_hsv
+                rgb_original = (color_r.text, color_g.text, color_b.text)
                 ventana_color = ModalView(size_hint=(0.92, 0.78), background_color=(0.08, 0.08, 0.08, 1))
                 raiz_color = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
                 raiz_color.add_widget(Label(text="Selector HSV: elija el tono y después el matiz/brillo", size_hint_y=None, height=dp(38)))
@@ -1688,10 +1677,9 @@ class ConfiguradorApp(App):
                 from io import BytesIO
                 from PIL import Image as PILImage
                 class PaletaSV(Widget):
-                    def __init__(self, hue, on_pick, **kwargs):
+                    def __init__(self, hue, **kwargs):
                         super().__init__(**kwargs)
                         self.hue = hue
-                        self.on_pick = on_pick
                         self._texture = None
                         self.bind(pos=self.redibujar, size=self.redibujar)
                         self.redibujar()
@@ -1728,7 +1716,7 @@ class ConfiguradorApp(App):
                         val = max(0.0, min(1.0, (touch.y - self.y) / max(1.0, self.height)))
                         rgb = tuple(int(v * 255) for v in hsv_to_rgb(self.hue, sat, val))
                         aplicar_rgb(rgb)
-                paleta = PaletaSV(tono_inicial, lambda rgb: None, size_hint=(1, 1))
+                paleta = PaletaSV(tono_inicial, size_hint=(1, 1))
                 raiz_color.add_widget(paleta)
                 def aplicar_rgb(rgb):
                     color_r.text, color_g.text, color_b.text = (str(v) for v in rgb)
@@ -1738,8 +1726,12 @@ class ConfiguradorApp(App):
                     paleta.redibujar()
                 selector_hue.bind(value=actualizar_paleta)
                 raiz_color.add_widget(selector_hue)
+                def cancelar_selector(_boton):
+                    color_r.text, color_g.text, color_b.text = rgb_original
+                    actualizar_muestra_color()
+                    ventana_color.dismiss()
                 botones_color = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-                botones_color.add_widget(Button(text="Cancelar", on_release=lambda _b: ventana_color.dismiss()))
+                botones_color.add_widget(Button(text="Cancelar", on_release=cancelar_selector))
                 botones_color.add_widget(Button(text="Usar color", on_release=lambda _b: ventana_color.dismiss()))
                 raiz_color.add_widget(botones_color)
                 ventana_color.add_widget(raiz_color)
