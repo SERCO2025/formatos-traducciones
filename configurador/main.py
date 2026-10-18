@@ -928,6 +928,19 @@ class Configurador:
 
         self._update_zoom_label()
 
+    def _redraw_fields_only(self):
+        """Actualiza campos sin volver a escalar ni reconstruir la plantilla."""
+        if self.template_image is None:
+            return
+        self.canvas.delete("field")
+        self.canvas.delete("field_preview")
+        self.canvas.delete("resize_handle")
+        self.field_items.clear()
+        self._field_preview_images.clear()
+        if self.formato:
+            for campo in self.formato.fields:
+                self._draw_field(campo)
+
     def _draw_field(self, campo):
         p = campo.position
         x1 = 20 + p.x * self.zoom
@@ -1146,6 +1159,7 @@ class Configurador:
                     self._push_undo()
                     return
             campo = self._find_field_at(cx, cy)
+            seleccionado_antes = self.selected_field
             self.selected_field = campo
             self._field_resize_handle = None
             self._field_resize_start = None
@@ -1153,17 +1167,19 @@ class Configurador:
             if campo:
                 self._move_start = (cx, cy)
                 self._move_origin = (campo.position.x, campo.position.y)
-                self.redraw()
             else:
                 self._move_start = None
                 self._move_origin = None
-                self.redraw()
+            if campo is not seleccionado_antes:
+                self._redraw_fields_only()
             return
 
         self.drag_start = self._canvas_to_document(cx, cy)
         self._draw_start_canvas = (cx, cy)
+        doc_x, doc_y = self.drag_start
+        px, py = 20 + doc_x * self.zoom, 20 + doc_y * self.zoom
         self.drawing_rect = self.canvas.create_rectangle(
-            cx, cy, cx, cy, outline="black", width=3
+            px, py, px, py, outline="black", width=3
         )
 
     def on_mouse_move(self, event):
@@ -1202,7 +1218,7 @@ class Configurador:
                     campo.position.height,
                 )
                 self.unsaved = True
-                self.redraw()
+                self._redraw_fields_only()
             return
 
         if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_IMAGE):
@@ -1305,7 +1321,7 @@ class Configurador:
         campo = self._find_field_at(cx, cy)
         if campo:
             self.selected_field = campo
-            self.redraw()
+            self._redraw_fields_only()
             self.editar_seleccionado()
 
     def _mover_seleccionado_tecla(self, event):
@@ -1315,7 +1331,11 @@ class Configurador:
             return
         if not self.formato or not self.selected_field:
             return
-        pasos = 1 if (event.state & 0x0008) else (25 if (event.state & 0x0001) else 5)
+        estado = int(getattr(event, "state", 0) or 0)
+        # Tkinter/Windows: Shift=0x0001 y Alt=Mod1Mask (0x0008).
+        alt = bool(estado & 0x0008)
+        shift = bool(estado & 0x0001)
+        pasos = 1 if alt else (25 if shift else 5)
         dx = -pasos if event.keysym == "Left" else pasos if event.keysym == "Right" else 0
         dy = pasos if event.keysym == "Down" else -pasos if event.keysym == "Up" else 0
         campo = self.selected_field
@@ -1328,7 +1348,7 @@ class Configurador:
         self._push_undo()
         campo.position = Position(nx, ny, campo.position.width, campo.position.height)
         self.unsaved = True
-        self.redraw()
+        self._redraw_fields_only()
         self._refresh_field_list()
         return "break"
 
@@ -1730,7 +1750,7 @@ class Configurador:
         self.formato.ordenar_campos()
         self.selected_field = None
         self.unsaved = True
-        self.redraw()
+        self._redraw_fields_only()
         self._refresh_field_list()
         self._set_status("Campo eliminado.")
 
