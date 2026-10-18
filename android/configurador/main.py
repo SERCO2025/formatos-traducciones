@@ -251,6 +251,7 @@ class CanvasEditor(StencilView):
         self._touches = {}
         self._pinch_active = False
         self._pinch_start_distance = 0.0
+        self._pinch_last_distance = 0.0
         self._pinch_start_scale = 1.0
         self._pinch_anchor = None
         self._pinch_start_template_pos = None
@@ -301,6 +302,7 @@ class CanvasEditor(StencilView):
         self._pinch_active = False
         self._pinch_anchor = None
         self._pinch_start_distance = 0.0
+        self._pinch_last_distance = 0.0
         self._pinch_start_template_pos = None
         self._pinch_last_midpoint = None
         self.pan_start = None
@@ -320,6 +322,7 @@ class CanvasEditor(StencilView):
             return False
         a, b = list(self._touches.values())[:2]
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
+        self._pinch_last_distance = self._pinch_start_distance
         self._pinch_start_scale = self.app.scale
         self._pinch_anchor = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
         self._pinch_start_template_pos = self.template_widget.pos
@@ -349,10 +352,15 @@ class CanvasEditor(StencilView):
         factor = distancia / self._pinch_start_distance
         midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
-        # El zoom depende proporcionalmente de la distancia entre los dedos.
-        # El desplazamiento usa el delta entre cuadros consecutivos (1:1);
-        # no se vuelve a sumar todo el recorrido desde el inicio del gesto.
-        self.app.set_zoom(self._pinch_start_scale * factor, anchor=self._pinch_anchor)
+        # Filtra pequeñas variaciones de distancia causadas por el seguimiento
+        # táctil: solo cambia el zoom cuando la distancia varía al menos 8 dp.
+        # Cada ajuste es incremental; el movimiento del punto medio se procesa
+        # por separado para que trasladar ambos dedos no provoque zoom.
+        delta_distancia = distancia - self._pinch_last_distance
+        if abs(delta_distancia) >= dp(8):
+            factor = distancia / max(1.0, self._pinch_last_distance)
+            self.app.set_zoom(self.app.scale * factor, anchor=self._pinch_last_midpoint)
+            self._pinch_last_distance = distancia
 
         if self.template_widget is not None:
             dx = midpoint[0] - self._pinch_last_midpoint[0]
@@ -485,6 +493,8 @@ class CanvasEditor(StencilView):
             self._pinch_active = False
             self._pinch_anchor = None
             self._pinch_start_distance = 0.0
+            self._pinch_last_distance = 0.0
+        self._pinch_last_distance = 0.0
             self._pinch_start_template_pos = None
             self._pinch_last_midpoint = None
 
@@ -519,6 +529,9 @@ class CanvasEditor(StencilView):
                 self._pinch_active = False
                 self._pinch_anchor = None
                 self._pinch_start_distance = 0.0
+                self._pinch_last_distance = 0.0
+            self._pinch_last_distance = 0.0
+        self._pinch_last_distance = 0.0
                 self._pinch_start_template_pos = None
                 self._pinch_last_midpoint = None
                 self.app.estado.text = "Zoom finalizado."
