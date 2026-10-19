@@ -1972,6 +1972,8 @@ class ConfiguradorApp(App):
                             touch.x, touch.y, ",".join(hits) if hits else "ninguno"
                         ),
                     )
+                    if hits:
+                        popup_self.title = "DIAG: toque en " + " y ".join(hits)
                 return super(PopupPropiedadesDiagnostico, popup_self).on_touch_down(touch)
 
             def on_touch_up(popup_self, touch):
