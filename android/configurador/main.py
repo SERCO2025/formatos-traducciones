@@ -1901,7 +1901,7 @@ class ConfiguradorApp(App):
         def enfocar_pregunta(_dt):
             pregunta.focus = True
             try:
-                lineas = pregunta.text.split("\\n")
+                lineas = pregunta.text.split("\n")
                 pregunta.cursor = (len(lineas[-1]), len(lineas) - 1)
             except Exception:
                 pass
