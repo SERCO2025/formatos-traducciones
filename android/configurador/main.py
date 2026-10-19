@@ -543,7 +543,7 @@ class CanvasEditor(StencilView):
                 self._pinch_start_distance = 0.0
                 self._pinch_last_distance = 0.0
                 self._pinch_last_midpoint = None
-                self.app.estado.text = "Zoom finalizado."
+                self.app.estado.text = "Gesto de dos dedos terminado."
             return True
 
         if self.pan_start:
@@ -1929,8 +1929,6 @@ class ConfiguradorApp(App):
         w = max(1, (right - left) * self.scale)
         h = max(1, (bottom - top) * self.scale)
 
-        # Usamos Widget simple en lugar de FloatLayout para evitar conflictos de layout
-        from kivy.uix.widget import Widget
         # Dibujar directamente en canvas.after del editor evita el sistema de
         # coordenadas ambiguo de un widget auxiliar: x/y ya son coordenadas
         # del lienzo y no deben trasladarse ni compensarse por otra posición.
