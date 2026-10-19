@@ -715,8 +715,26 @@ class ConfiguradorApp(App):
         self._redo = []
         self._interaction_changed = False
         self._drawing_widget = None
+        self._popup_propiedades_intentos = 0
         if ANDROID_AVAILABLE:
             activity.bind(on_activity_result=self._on_android_activity_result)
+
+    def _registrar_diagnostico_popup(self, evento, popup=None, detalle=""):
+        """Registra eventos del panel de propiedades para diagnosticar el cierre en Android."""
+        try:
+            abierto = getattr(popup, "_is_open", None) if popup is not None else None
+            linea = "[FDT_POPUP_DIAG] evento=%s abierto=%s detalle=%s" % (
+                evento, abierto, detalle
+            )
+            print(linea, flush=True)
+            ruta = os.path.join(self.user_data_dir, "diagnostico_popup.log")
+            with open(ruta, "a", encoding="utf-8") as archivo:
+                archivo.write(linea + "\\n")
+        except Exception as exc:
+            try:
+                print("[FDT_POPUP_DIAG] no_se_pudo_guardar_log: %r" % (exc,), flush=True)
+            except Exception:
+                pass
 
     def on_resume(self):
         # Si Android devuelve el foco pero no entrega on_activity_result,
@@ -1396,6 +1414,19 @@ class ConfiguradorApp(App):
         return fuentes
 
     def mostrar_propiedades(self, campo):
+        self._popup_propiedades_intentos += 1
+        self._registrar_diagnostico_popup(
+            "SOLICITUD_APERTURA",
+            detalle="intento=%d campo=%s" % (
+                self._popup_propiedades_intentos,
+                getattr(campo, "field_id", None),
+            ),
+        )
+        try:
+            pila = "".join(traceback.format_stack(limit=6))
+            self._registrar_diagnostico_popup("PILA_APERTURA", detalle=pila)
+        except Exception:
+            pass
         if not campo:
             self._aviso("Seleccione un campo.")
             return
@@ -1859,9 +1890,20 @@ class ConfiguradorApp(App):
                 self.formato.ordenar_campos()
                 self.seleccionado = campo
 
+                # Diagnóstico temporal: registrar el flujo real sin cambiar la posición
+                # ni la distribución de los controles.
+                popup.title = "DIAG: Aceptar recibido"
+                self._registrar_diagnostico_popup("ACEPTAR_CALLBACK_INICIO", popup)
                 # Cerrar primero el panel tras aceptar los datos. La reconstrucción
                 # visual de la plantilla no debe impedir que el usuario continúe.
                 popup.dismiss()
+                self._registrar_diagnostico_popup("ACEPTAR_DESPUES_DISMISS", popup)
+                Clock.schedule_once(
+                    lambda _dt: self._registrar_diagnostico_popup(
+                        "ACEPTAR_ESTADO_SIGUIENTE_FRAME", popup
+                    ),
+                    0,
+                )
                 self.estado.text = "Campo %d configurado." % campo.order
 
                 def refrescar_plantilla(_dt):
@@ -1886,9 +1928,62 @@ class ConfiguradorApp(App):
                     pass
                 self._mostrar_error_tecnico("Error al aceptar las propiedades del campo", exc)
 
-        botones.add_widget(Button(text="Cancelar", on_release=lambda _: popup.dismiss()))
-        botones.add_widget(Button(text="Aceptar", on_release=aceptar))
-        popup = Popup(
+        def cancelar_propiedades(_boton):
+            popup.title = "DIAG: Cancelar recibido"
+            self._registrar_diagnostico_popup("CANCELAR_CALLBACK_INICIO", popup)
+            popup.dismiss()
+            self._registrar_diagnostico_popup("CANCELAR_DESPUES_DISMISS", popup)
+            Clock.schedule_once(
+                lambda _dt: self._registrar_diagnostico_popup(
+                    "CANCELAR_ESTADO_SIGUIENTE_FRAME", popup
+                ),
+                0,
+            )
+
+        boton_cancelar = Button(text="Cancelar", on_release=cancelar_propiedades)
+        boton_cancelar.bind(
+            on_press=lambda *_: self._registrar_diagnostico_popup(
+                "CANCELAR_ON_PRESS", popup
+            )
+        )
+        boton_aceptar = Button(text="Aceptar", on_release=aceptar)
+        boton_aceptar.bind(
+            on_press=lambda *_: self._registrar_diagnostico_popup(
+                "ACEPTAR_ON_PRESS", popup
+            )
+        )
+        botones.add_widget(boton_cancelar)
+        botones.add_widget(boton_aceptar)
+
+        class PopupPropiedadesDiagnostico(Popup):
+            def on_touch_down(popup_self, touch):
+                if popup_self.collide_point(*touch.pos):
+                    hits = []
+                    for nombre, boton in (
+                        ("Cancelar", boton_cancelar),
+                        ("Aceptar", boton_aceptar),
+                    ):
+                        if boton.collide_point(*touch.pos):
+                            hits.append(nombre)
+                    self._registrar_diagnostico_popup(
+                        "TOQUE_POPUP_DOWN",
+                        popup_self,
+                        "pos=(%.1f,%.1f) botones=%s" % (
+                            touch.x, touch.y, ",".join(hits) if hits else "ninguno"
+                        ),
+                    )
+                return super(PopupPropiedadesDiagnostico, popup_self).on_touch_down(touch)
+
+            def on_touch_up(popup_self, touch):
+                if popup_self.collide_point(*touch.pos):
+                    self._registrar_diagnostico_popup(
+                        "TOQUE_POPUP_UP",
+                        popup_self,
+                        "pos=(%.1f,%.1f)" % (touch.x, touch.y),
+                    )
+                return super(PopupPropiedadesDiagnostico, popup_self).on_touch_up(touch)
+
+        popup = PopupPropiedadesDiagnostico(
             title="Propiedades del campo",
             content=contenido,
             size_hint=(0.97, 0.96),
@@ -1904,9 +1999,21 @@ class ConfiguradorApp(App):
                 self.editor.constrain_template_position()
                 self.editor.refresh_fields()
 
-        # Restaurar también al cancelar, después de que Android oculte el teclado.
-        popup.bind(on_dismiss=lambda *_: Clock.schedule_once(restaurar_posicion_plantilla, 0.25))
+        # Registrar el evento real de cierre y mantener intacta la restauración visual.
+        def registrar_cierre_popup(_popup, *args):
+            self._registrar_diagnostico_popup("EVENTO_ON_DISMISS", _popup)
+            Clock.schedule_once(
+                lambda _dt: self._registrar_diagnostico_popup(
+                    "ESTADO_250MS_DESPUES_DE_CIERRE", _popup
+                ),
+                0.25,
+            )
+            Clock.schedule_once(restaurar_posicion_plantilla, 0.25)
+
+        popup.bind(on_dismiss=registrar_cierre_popup)
+        self._registrar_diagnostico_popup("ANTES_DE_ABRIR_POPUP", popup)
         popup.open()
+        self._registrar_diagnostico_popup("DESPUES_DE_ABRIR_POPUP", popup)
 
         # El teclado virtual se abre al enfocar el campo de la pregunta.
         def enfocar_pregunta(_dt):
