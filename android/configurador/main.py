@@ -75,10 +75,10 @@ class HamburgerButton(Button):
 
 TOOLS = [
     ("SEL", "select"),
-    ("A", FIELD_TYPE_TEXT),
-    ("1", FIELD_TYPE_NUMBER),
-    ("IMG", FIELD_TYPE_IMAGE),
     ("D", "hand"),
+    ("A", FIELD_TYPE_TEXT),
+    ("#", FIELD_TYPE_NUMBER),
+    ("IMG", FIELD_TYPE_IMAGE),
 ]
 
 
@@ -756,7 +756,7 @@ class ConfiguradorApp(App):
         for simbolo, tool in TOOLS:
             tools.add_widget(Button(text=simbolo, on_release=lambda _, t=tool: self.set_tool(t)))
         tools.add_widget(Button(text="−", on_release=lambda _: self.set_zoom(self.scale * 0.8)))
-        self.zoom_label = Label(text="100 %", size_hint_x=None, width=dp(70))
+        self.zoom_label = Label(text="100%", size_hint_x=None, width=dp(70))
         tools.add_widget(self.zoom_label)
         tools.add_widget(Button(text="+", on_release=lambda _: self.set_zoom(self.scale * 1.25)))
         root.add_widget(tools)
@@ -1402,6 +1402,12 @@ class ConfiguradorApp(App):
 
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         estilo = campo.text_style
+        # Conservar la posición de la plantilla anterior a la apertura del teclado.
+        posicion_plantilla_inicial = (
+            tuple(self.editor.template_widget.pos)
+            if self.editor and self.editor.template_widget is not None
+            else None
+        )
         contenido = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(10))
         # Los botones van justo debajo del título/línea azul del Popup para
         # que sigan accesibles cuando Android despliega el teclado.
@@ -1876,7 +1882,30 @@ class ConfiguradorApp(App):
             content=contenido,
             size_hint=(0.97, 0.96),
         )
+
+        def restaurar_posicion_plantilla(_dt):
+            if (
+                posicion_plantilla_inicial is not None
+                and self.editor is not None
+                and self.editor.template_widget is not None
+            ):
+                self.editor.template_widget.pos = posicion_plantilla_inicial
+                self.editor.constrain_template_position()
+                self.editor.refresh_fields()
+
+        # Restaurar también al cancelar, después de que Android oculte el teclado.
+        popup.bind(on_dismiss=lambda *_: Clock.schedule_once(restaurar_posicion_plantilla, 0.25))
         popup.open()
+
+        # El teclado virtual se abre al enfocar el campo de la pregunta.
+        def enfocar_pregunta(_dt):
+            pregunta.focus = True
+            try:
+                lineas = pregunta.text.split("\\n")
+                pregunta.cursor = (len(lineas[-1]), len(lineas) - 1)
+            except Exception:
+                pass
+        Clock.schedule_once(enfocar_pregunta, 0.25)
 
     def editar_salida(self):
         if not self.formato:
@@ -1989,7 +2018,7 @@ class ConfiguradorApp(App):
 
     def actualizar_zoom(self):
         if self.zoom_label:
-            self.zoom_label.text = "%d %%" % int(round(self.scale * 100))
+            self.zoom_label.text = "%d%%" % int(round(self.scale * 100))
 
     def actualizar_lista_estado(self):
         if self.formato:
