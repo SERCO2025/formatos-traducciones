@@ -1858,9 +1858,20 @@ class ConfiguradorApp(App):
 
                 self.formato.ordenar_campos()
                 self.seleccionado = campo
-                self.editor.cargar_plantilla(self._visual_template_path)
+
+                # Cerrar primero el panel tras aceptar los datos. La reconstrucción
+                # visual de la plantilla no debe impedir que el usuario continúe.
                 popup.dismiss()
                 self.estado.text = "Campo %d configurado." % campo.order
+
+                def refrescar_plantilla(_dt):
+                    try:
+                        self.editor.cargar_plantilla(self._visual_template_path)
+                    except Exception as exc:
+                        self._mostrar_error_tecnico(
+                            "El campo se guardó, pero no se pudo actualizar la vista", exc
+                        )
+                Clock.schedule_once(refrescar_plantilla, 0)
 
             except Exception as exc:
                 self.formato = formato_anterior
