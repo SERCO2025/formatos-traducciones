@@ -315,6 +315,11 @@ class Configurador:
                 "<Shift-%s>" % tecla,
                 lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=25),
             )
+            # Ctrl no es un modificador de precisión: conserva el paso normal de 5 px.
+            self.root.bind_all(
+                "<Control-%s>" % tecla,
+                lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=5),
+            )
         self.root.bind_all("<Delete>", self._eliminar_con_tecla)
 
         status = tk.Frame(self.root, bg="#111111")
@@ -1523,6 +1528,14 @@ class Configurador:
         question = tk.Text(dialog, height=4, bg="#303030", fg="white", insertbackground="white")
         question.pack(fill="x", padx=16)
         question.insert("1.0", campo.question)
+
+        # Al abrir las propiedades, dejar el cursor en la pregunta para escribir
+        # inmediatamente con el teclado físico, sin tener que seleccionar el cuadro.
+        def enfocar_pregunta():
+            question.focus_set()
+            question.mark_set("insert", "end")
+            question.see("insert")
+        dialog.after(100, enfocar_pregunta)
 
         required_var = tk.BooleanVar(value=campo.required)
         tk.Checkbutton(dialog, text="Respuesta obligatoria", variable=required_var,
