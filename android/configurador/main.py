@@ -9,7 +9,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
-from kivy.graphics import Color, Line, Rectangle
+from kivy.graphics import Color, Line, Rectangle, InstructionGroup
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -252,6 +252,7 @@ class CanvasEditor(StencilView):
         self._pinch_start_distance = 0.0
         self._pinch_last_distance = 0.0
         self._pinch_last_midpoint = None
+        self._pinch_start_midpoint = None
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
     @property
@@ -300,6 +301,7 @@ class CanvasEditor(StencilView):
         self._pinch_start_distance = 0.0
         self._pinch_last_distance = 0.0
         self._pinch_last_midpoint = None
+        self._pinch_start_midpoint = None
         self.pan_start = None
         self.pan_template_pos = None
         self.start_touch = None
@@ -319,6 +321,7 @@ class CanvasEditor(StencilView):
         self._pinch_start_distance = max(1.0, hypot(b.x - a.x, b.y - a.y))
         self._pinch_last_distance = self._pinch_start_distance
         self._pinch_last_midpoint = ((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+        self._pinch_start_midpoint = self._pinch_last_midpoint
         self._pinch_active = True
         self._pinch_zoom_activated = False
 
@@ -334,7 +337,7 @@ class CanvasEditor(StencilView):
         self.start_touch = None
         self.start_touch_screen = None
         self.app.clear_drawing_preview()
-        self.app.estado.text = "Zoom táctil"
+        self.app.estado.text = "Dos dedos: desplaza; acerca o separa para cambiar zoom"
         return True
 
     def _update_pinch(self):
@@ -349,9 +352,19 @@ class CanvasEditor(StencilView):
         # el inicio del gesto; una vez identificado el pellizco, el zoom sigue
         # de forma incremental y el punto medio continúa controlando el paneo.
         cambio_desde_inicio = distancia - self._pinch_start_distance
-        umbral_zoom = max(dp(18), self._pinch_start_distance * 0.12)
+        dx_centro = midpoint[0] - self._pinch_start_midpoint[0]
+        dy_centro = midpoint[1] - self._pinch_start_midpoint[1]
+        movimiento_centro = hypot(dx_centro, dy_centro)
+        # El zoom solo se considera intencional cuando la separación cambia
+        # claramente Y ese cambio domina el desplazamiento conjunto de dedos.
+        # Así, un arrastre diagonal de dos dedos no se interpreta como pellizco.
+        umbral_zoom = max(dp(32), self._pinch_start_distance * 0.20)
+        zoom_intencional = (
+            abs(cambio_desde_inicio) >= umbral_zoom
+            and abs(cambio_desde_inicio) >= movimiento_centro * 0.75
+        )
         if not getattr(self, "_pinch_zoom_activated", False):
-            if abs(cambio_desde_inicio) >= umbral_zoom:
+            if zoom_intencional:
                 self._pinch_zoom_activated = True
                 self._pinch_last_distance = distancia
         else:
@@ -492,9 +505,10 @@ class CanvasEditor(StencilView):
                 return self._update_pinch()
             # No continuar aplicando zoom si queda un solo dedo activo.
             self._pinch_active = False
-                self._pinch_start_distance = 0.0
+            self._pinch_zoom_activated = False
+            self._pinch_start_distance = 0.0
             self._pinch_last_distance = 0.0
-                self._pinch_last_midpoint = None
+            self._pinch_last_midpoint = None
 
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             # Arrastre incremental en el mismo sistema local del lienzo.
@@ -526,9 +540,9 @@ class CanvasEditor(StencilView):
             if len(self._touches) < 2:
                 self._pinch_active = False
                 self._pinch_zoom_activated = False
-                        self._pinch_start_distance = 0.0
+                self._pinch_start_distance = 0.0
                 self._pinch_last_distance = 0.0
-                        self._pinch_last_midpoint = None
+                self._pinch_last_midpoint = None
                 self.app.estado.text = "Zoom finalizado."
             return True
 
@@ -1917,20 +1931,21 @@ class ConfiguradorApp(App):
 
         # Usamos Widget simple en lugar de FloatLayout para evitar conflictos de layout
         from kivy.uix.widget import Widget
-        widget = Widget(size_hint=(None, None), size=(w, h), pos=(x, y))
-        with widget.canvas:
-            Color(0, 0, 0, 1)
-            # Las instrucciones del canvas deben usar las coordenadas de
-            # posición del widget dentro del padre, no el origen (0, 0).
-            Line(rectangle=(x, y, w, h), width=3)
-
-        self._drawing_widget = widget
-        # Se agrega directamente al editor, no a una capa intermedia
-        self.editor.add_widget(widget)
+        # Dibujar directamente en canvas.after del editor evita el sistema de
+        # coordenadas ambiguo de un widget auxiliar: x/y ya son coordenadas
+        # del lienzo y no deben trasladarse ni compensarse por otra posición.
+        instrucciones = InstructionGroup()
+        instrucciones.add(Color(0, 0, 0, 1))
+        instrucciones.add(Line(rectangle=(x, y, w, h), width=3))
+        self.editor.canvas.after.add(instrucciones)
+        self._drawing_widget = instrucciones
 
     def clear_drawing_preview(self):
-        if self._drawing_widget and self._drawing_widget.parent:
-            self._drawing_widget.parent.remove_widget(self._drawing_widget)
+        if self._drawing_widget is not None and self.editor is not None:
+            try:
+                self.editor.canvas.after.remove(self._drawing_widget)
+            except Exception:
+                pass
         self._drawing_widget = None
 
     def set_zoom(self, value, anchor=None):
