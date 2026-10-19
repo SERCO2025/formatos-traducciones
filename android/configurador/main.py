@@ -729,7 +729,7 @@ class ConfiguradorApp(App):
             print(linea, flush=True)
             ruta = os.path.join(self.user_data_dir, "diagnostico_popup.log")
             with open(ruta, "a", encoding="utf-8") as archivo:
-                archivo.write(linea + "\\n")
+                archivo.write(linea + "\n")
         except Exception as exc:
             try:
                 print("[FDT_POPUP_DIAG] no_se_pudo_guardar_log: %r" % (exc,), flush=True)
