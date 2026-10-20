@@ -196,6 +196,8 @@ class CapturadorApp(App):
         Clock.schedule_once(lambda _dt: self._limpiar_archivos_vencidos(), 2)
 
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        # Tocar fuera de la respuesta oculta el teclado sin bloquear los controles.
+        root.bind(on_touch_down=self._cerrar_teclado_si_toca_fuera)
         encabezado = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
         encabezado.add_widget(Label(
             text="Formatos Traducidos",
@@ -572,6 +574,19 @@ class CapturadorApp(App):
             )
         return renombrado
 
+    def _cerrar_teclado_si_toca_fuera(self, widget, touch):
+        entrada = getattr(self, "entrada", None)
+        if entrada is not None and entrada.focus and not entrada.collide_point(*touch.pos):
+            entrada.focus = False
+        # No consumir el toque: los botones y demás controles deben funcionar.
+        return False
+
+    def _enfocar_respuesta_siguiente(self, *_):
+        entrada = getattr(self, "entrada", None)
+        if entrada is None or entrada.disabled or not entrada.parent:
+            return
+        entrada.focus = True
+
     def _entrada_cambio(self, *_):
         if self.formato and self.formato.fields and self.formato.fields[self.indice].field_type != FIELD_TYPE_IMAGE:
             Clock.unschedule(self._actualizar_preview)
@@ -634,6 +649,8 @@ class CapturadorApp(App):
         if self.indice < len(self.formato.fields) - 1:
             self.indice += 1
             self._mostrar_campo()
+            # Continuar debe dejar lista la respuesta siguiente para escribir.
+            Clock.schedule_once(self._enfocar_respuesta_siguiente, 0.15)
             return
         errores = validar_todas_las_respuestas(self.formato, self.respuestas)
         if errores:
