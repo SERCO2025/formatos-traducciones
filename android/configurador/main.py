@@ -1859,6 +1859,7 @@ class ConfiguradorApp(App):
         propiedades_aceptadas = {"valor": False}
 
         def aceptar(_):
+            nonlocal campo
             campo_id_original = campo.field_id
             formato_anterior = copy.deepcopy(self.formato)
             longitud_undo = len(self._undo)
@@ -1936,10 +1937,14 @@ class ConfiguradorApp(App):
 
             except Exception as exc:
                 self.formato = formato_anterior
-                self.seleccionado = next(
+                # El rollback reemplaza los objetos del modelo por copias profundas.
+                # Reasociar la referencia evita que el siguiente Aceptar edite un campo
+                # desconectado del formato y que Cancelar no pueda retirar el campo nuevo.
+                campo = next(
                     (c for c in self.formato.fields if c.field_id == campo_id_original),
                     None,
                 )
+                self.seleccionado = campo
                 del self._undo[longitud_undo:]
                 try:
                     self.editor.cargar_plantilla(self._visual_template_path)
