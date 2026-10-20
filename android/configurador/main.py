@@ -587,6 +587,10 @@ class CanvasEditor(StencilView):
             self.app.estado.text = "Área demasiado pequeña."
             return True
 
+        # Guardar el historial anterior para que Cancelar sea una operación sin efectos.
+        undo_antes_creacion = list(self.app._undo)
+        redo_antes_creacion = list(self.app._redo)
+        seleccionado_antes_creacion = self.app.seleccionado
         self.app.push_undo()
         # Los campos de texto y número comparten los últimos atributos tipográficos usados.
         estilo_anterior = next(
@@ -620,7 +624,13 @@ class CanvasEditor(StencilView):
         )
         self.app.formato.agregar_campo(campo)
         self.app.seleccionar(campo)
-        self.app.mostrar_propiedades(campo)
+        self.app.mostrar_propiedades(
+            campo,
+            es_nuevo=True,
+            undo_antes=undo_antes_creacion,
+            redo_antes=redo_antes_creacion,
+            seleccionado_antes=seleccionado_antes_creacion,
+        )
         return True
 
     def begin_field_interaction(self, campo, touch, handle):
@@ -1413,7 +1423,10 @@ class ConfiguradorApp(App):
             fuentes.insert(0, actual)
         return fuentes
 
-    def mostrar_propiedades(self, campo):
+    def mostrar_propiedades(
+        self, campo, es_nuevo=False, undo_antes=None, redo_antes=None,
+        seleccionado_antes=None,
+    ):
         self._popup_propiedades_intentos += 1
         self._registrar_diagnostico_popup(
             "SOLICITUD_APERTURA",
@@ -1843,6 +1856,8 @@ class ConfiguradorApp(App):
             except Exception:
                 return actual
 
+        propiedades_aceptadas = {"valor": False}
+
         def aceptar(_):
             campo_id_original = campo.field_id
             formato_anterior = copy.deepcopy(self.formato)
@@ -1852,7 +1867,10 @@ class ConfiguradorApp(App):
                 if any(c is not campo and c.field_id == nuevo_id for c in self.formato.fields):
                     self._aviso("El identificador del campo ya existe.")
                     return
-                self.push_undo()
+                # La creación ya guardó el estado anterior en el historial.
+                # Solo la edición de un campo existente necesita otro snapshot.
+                if not es_nuevo:
+                    self.push_undo()
                 campo.question = pregunta.text.strip()
                 campo.required = requerido.text.strip().lower() in ("sí", "si", "yes", "1", "true")
                 campo.uppercase = estado_mayusculas["valor"]
@@ -1896,6 +1914,7 @@ class ConfiguradorApp(App):
                 self._registrar_diagnostico_popup("ACEPTAR_CALLBACK_INICIO", popup)
                 # Cerrar primero el panel tras aceptar los datos. La reconstrucción
                 # visual de la plantilla no debe impedir que el usuario continúe.
+                propiedades_aceptadas["valor"] = True
                 popup.dismiss()
                 self._registrar_diagnostico_popup("ACEPTAR_DESPUES_DISMISS", popup)
                 Clock.schedule_once(
@@ -2004,6 +2023,30 @@ class ConfiguradorApp(App):
         # Registrar el evento real de cierre y mantener intacta la restauración visual.
         def registrar_cierre_popup(_popup, *args):
             self._registrar_diagnostico_popup("EVENTO_ON_DISMISS", _popup)
+            # Cualquier cierre sin Aceptar equivale a cancelar la creación.
+            # Al editar un campo existente no se modifica el modelo en este punto.
+            if es_nuevo and not propiedades_aceptadas["valor"]:
+                try:
+                    self.formato.fields = [
+                        item for item in self.formato.fields if item is not campo
+                    ]
+                    self.formato.ordenar_campos()
+                    if undo_antes is not None:
+                        self._undo = list(undo_antes)
+                    if redo_antes is not None:
+                        self._redo = list(redo_antes)
+                    self.seleccionado = (
+                        seleccionado_antes
+                        if any(item is seleccionado_antes for item in self.formato.fields)
+                        else None
+                    )
+                    self.editor.cargar_plantilla(self._visual_template_path)
+                    self.actualizar_lista_estado()
+                    self.estado.text = "Creación de campo cancelada."
+                except Exception as exc:
+                    self._mostrar_error_tecnico(
+                        "No se pudo cancelar la creación del campo", exc
+                    )
             Clock.schedule_once(
                 lambda _dt: self._registrar_diagnostico_popup(
                     "ESTADO_250MS_DESPUES_DE_CIERRE", _popup

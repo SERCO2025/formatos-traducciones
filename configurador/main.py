@@ -1297,6 +1297,11 @@ class Configurador:
         self.drag_start = None
         self._draw_start_canvas = None
 
+        # Guardar el historial anterior para que Cancelar no consuma una acción de deshacer.
+        undo_antes_creacion = list(self._undo_stack)
+        redo_antes_creacion = list(self._redo_stack)
+        seleccionado_antes_creacion = self.selected_field
+        unsaved_antes_creacion = self.unsaved
         self._push_undo()
         import copy
         if self.formato.fields:
@@ -1327,7 +1332,13 @@ class Configurador:
         self.unsaved = True
         self.redraw()
         self._refresh_field_list()
-        self.editar_seleccionado()
+        self.editar_seleccionado(
+            es_nuevo=True,
+            undo_antes=undo_antes_creacion,
+            redo_antes=redo_antes_creacion,
+            seleccionado_antes=seleccionado_antes_creacion,
+            unsaved_antes=unsaved_antes_creacion,
+        )
 
     def on_double_click(self, event):
         if self.tool != TOOL_SELECT or not self.formato:
@@ -1500,7 +1511,10 @@ class Configurador:
             numero += 1
         return base + str(numero)
 
-    def editar_seleccionado(self):
+    def editar_seleccionado(
+        self, es_nuevo=False, undo_antes=None, redo_antes=None,
+        seleccionado_antes=None, unsaved_antes=None,
+    ):
         if not self.selected_field:
             return
 
@@ -1757,9 +1771,33 @@ class Configurador:
             self.redraw()
             self._refresh_field_list()
 
+        def cancelar():
+            if es_nuevo:
+                self.formato.fields = [
+                    item for item in self.formato.fields if item is not campo
+                ]
+                self.formato.ordenar_campos()
+                if undo_antes is not None:
+                    self._undo_stack = list(undo_antes)
+                if redo_antes is not None:
+                    self._redo_stack = list(redo_antes)
+                self.selected_field = (
+                    seleccionado_antes
+                    if any(item is seleccionado_antes for item in self.formato.fields)
+                    else None
+                )
+                if unsaved_antes is not None:
+                    self.unsaved = unsaved_antes
+                self.redraw()
+                self._refresh_field_list()
+                self._set_status("Creación de campo cancelada.")
+            dialog.destroy()
+
+        # Cerrar la ventana con la X tiene el mismo efecto que Cancelar.
+        dialog.protocol("WM_DELETE_WINDOW", cancelar)
         buttons = tk.Frame(dialog, bg="#202020")
         buttons.pack(side="bottom", fill="x", padx=16, pady=16)
-        tk.Button(buttons, text="Cancelar", command=dialog.destroy,
+        tk.Button(buttons, text="Cancelar", command=cancelar,
                   bg="#303030", fg="white", relief="flat").pack(side="right", padx=4)
         tk.Button(buttons, text="OK", command=aceptar,
                   bg="#005f73", fg="white", relief="flat").pack(side="right", padx=4)
