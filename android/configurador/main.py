@@ -88,6 +88,10 @@ class CampoWidget(FloatLayout):
         self.campo = campo
         self.editor = editor
         self.size_hint = (None, None)
+        self._borde_linea = None
+        self._seleccion_linea = None
+        self._manijas_rectangulos = []
+        self._manijas_lineas = []
         self.actualizar()
 
     def actualizar(self):
@@ -103,14 +107,22 @@ class CampoWidget(FloatLayout):
             )
 
         self.canvas.before.clear()
+        self._borde_linea = None
+        self._seleccion_linea = None
         with self.canvas.before:
             Color(0, 0, 0, 1)
-            Line(rectangle=(self.x, self.y, self.width, self.height), width=2.0)
+            self._borde_linea = Line(
+                rectangle=(self.x, self.y, self.width, self.height), width=2.0
+            )
             if self.editor.app.seleccionado is self.campo:
                 Color(0.0, 0.75, 1.0, 1)
-                Line(rectangle=(self.x, self.y, self.width, self.height), width=3.0)
+                self._seleccion_linea = Line(
+                    rectangle=(self.x, self.y, self.width, self.height), width=3.0
+                )
 
         self.canvas.after.clear()
+        self._manijas_rectangulos = []
+        self._manijas_lineas = []
         if self.editor.app.seleccionado is self.campo:
             # Ocho controles blancos con borde oscuro: cuatro esquinas y
             # el centro de cada lado.
@@ -128,9 +140,11 @@ class CampoWidget(FloatLayout):
                 )
                 for x, y in puntos:
                     Color(1, 1, 1, 1)
-                    Rectangle(pos=(x - s / 2, y - s / 2), size=(s, s))
+                    rect = Rectangle(pos=(x - s / 2, y - s / 2), size=(s, s))
+                    self._manijas_rectangulos.append(rect)
                     Color(0, 0, 0, 1)
-                    Line(rectangle=(x - s / 2, y - s / 2, s, s), width=1)
+                    linea = Line(rectangle=(x - s / 2, y - s / 2, s, s), width=1)
+                    self._manijas_lineas.append(linea)
 
         self.clear_widgets()
         if self.campo.field_type == FIELD_TYPE_IMAGE:
@@ -168,6 +182,47 @@ class CampoWidget(FloatLayout):
         if estilo.font_family and os.path.isfile(estilo.font_family):
             etiqueta.font_name = estilo.font_family
         self.add_widget(etiqueta)
+
+    def actualizar_posicion(self):
+        """Mueve la capa visual existente sin reconstruir canvas ni etiquetas."""
+        p = self.campo.position
+        self.size = (p.width * self.editor.scale, p.height * self.editor.scale)
+        tw = self.editor.template_widget
+        if tw is None:
+            return
+        self.pos = (
+            tw.x + p.x * self.editor.scale,
+            tw.y + tw.height - (p.y + p.height) * self.editor.scale,
+        )
+
+        rect = (self.x, self.y, self.width, self.height)
+        if self._borde_linea is not None:
+            self._borde_linea.rectangle = rect
+        if self._seleccion_linea is not None:
+            self._seleccion_linea.rectangle = rect
+
+        if self._manijas_rectangulos:
+            s = min(dp(14), max(dp(10), min(self.width, self.height) / 5.0))
+            puntos = (
+                (self.x, self.y),
+                (self.x + self.width / 2, self.y),
+                (self.x + self.width, self.y),
+                (self.x + self.width, self.y + self.height / 2),
+                (self.x + self.width, self.y + self.height),
+                (self.x + self.width / 2, self.y + self.height),
+                (self.x, self.y + self.height),
+                (self.x, self.y + self.height / 2),
+            )
+            for (x, y), rectangulo, linea in zip(
+                puntos, self._manijas_rectangulos, self._manijas_lineas
+            ):
+                pos = (x - s / 2, y - s / 2)
+                rectangulo.pos = pos
+                rectangulo.size = (s, s)
+                linea.rectangle = (pos[0], pos[1], s, s)
+
+        # FloatLayout recoloca la etiqueta ya existente; no se elimina ni recrea.
+        self.do_layout()
 
     def _handle_at(self, x, y):
         if self.editor.app.seleccionado is not self.campo:
@@ -384,7 +439,7 @@ class CanvasEditor(StencilView):
                 self.template_widget.y + dy,
             )
             self.constrain_template_position()
-            self.refresh_fields()
+            self.refresh_field_positions()
 
         self._pinch_last_midpoint = midpoint
         return True
@@ -427,6 +482,14 @@ class CanvasEditor(StencilView):
         for widget in self.children:
             if isinstance(widget, CampoWidget):
                 widget.actualizar()
+
+    def refresh_field_positions(self):
+        """Sincroniza solo posiciones durante paneo; conserva etiquetas e instrucciones."""
+        if self.template_widget is None:
+            return
+        for widget in self.children:
+            if isinstance(widget, CampoWidget):
+                widget.actualizar_posicion()
 
     def _document_point(self, touch):
         """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
@@ -522,7 +585,7 @@ class CanvasEditor(StencilView):
             )
             self.constrain_template_position()
             self.pan_start = point
-            self.refresh_fields()
+            self.refresh_field_positions()
             return True
 
         if self.start_touch and self.app.tool in (
