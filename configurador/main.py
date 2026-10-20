@@ -1322,6 +1322,7 @@ class Configurador:
         self.unsaved = True
         self.redraw()
         self._refresh_field_list()
+        self._propiedades_campo_nuevo = True
         self.editar_seleccionado()
 
     def on_double_click(self, event):
@@ -1499,6 +1500,10 @@ class Configurador:
         if not self.selected_field:
             return
 
+        propiedades_de_campo_nuevo = bool(
+            getattr(self, "_propiedades_campo_nuevo", False)
+        )
+        self._propiedades_campo_nuevo = False
         campo = self.selected_field
         dialog = tk.Toplevel(self.root)
         dialog.title("Propiedades del campo %d" % campo.order)
@@ -1743,6 +1748,8 @@ class Configurador:
             dialog.destroy()
             self.redraw()
             self._refresh_field_list()
+            if propiedades_de_campo_nuevo:
+                self.set_tool(TOOL_HAND)
 
         buttons = tk.Frame(dialog, bg="#202020")
         buttons.pack(side="bottom", fill="x", padx=16, pady=16)
