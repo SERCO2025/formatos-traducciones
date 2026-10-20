@@ -2122,6 +2122,9 @@ class ConfiguradorApp(App):
                 0.25,
             )
             Clock.schedule_once(restaurar_posicion_plantilla, 0.25)
+            # Al cerrar las propiedades (Aceptar o Cancelar), dejar activa
+            # la herramienta Desplazar para continuar moviéndose por la plantilla.
+            Clock.schedule_once(lambda _dt: self.set_tool("hand"), 0.26)
 
         popup.bind(on_dismiss=registrar_cierre_popup)
         self._registrar_diagnostico_popup("ANTES_DE_ABRIR_POPUP", popup)
