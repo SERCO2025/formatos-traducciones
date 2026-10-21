@@ -1770,6 +1770,8 @@ class Configurador:
             dialog.destroy()
             self.redraw()
             self._refresh_field_list()
+            if es_nuevo:
+                self.set_tool(TOOL_HAND)
 
         def cancelar():
             if es_nuevo:

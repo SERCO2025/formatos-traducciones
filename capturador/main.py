@@ -25,7 +25,7 @@ class CapturadorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Formatos Traducidos - Capturador")
-        self.root.geometry("1100x700")
+        self.root.geometry("1100x660")
         self.root.minsize(850, 560)
 
         self.formato = None
@@ -56,11 +56,6 @@ class CapturadorApp:
         encabezado = tk.Frame(principal, bg="#202020")
         encabezado.pack(fill="x", padx=24, pady=(18, 8))
 
-        self.btn_configuracion = ttk.Button(
-            encabezado, text="Configuración", command=self._mostrar_configuracion
-        )
-        self.btn_configuracion.pack(side="right", padx=(0, 8), anchor="ne")
-
         self.btn_salir = tk.Button(
             encabezado, text="Salir", command=self._confirmar_salida,
             bg="#8b0000", fg="white", activebackground="#b00000",
@@ -68,6 +63,11 @@ class CapturadorApp:
             relief="raised", bd=2, padx=11, pady=2,
         )
         self.btn_salir.pack(side="right", anchor="ne")
+
+        self.btn_configuracion = ttk.Button(
+            encabezado, text="Configuración", command=self._mostrar_configuracion
+        )
+        self.btn_configuracion.pack(side="right", padx=(0, 8), anchor="ne")
 
         self.titulo = tk.Label(
             encabezado,
@@ -164,7 +164,7 @@ class CapturadorApp:
         self.preview_label.bind("<Configure>", lambda event: self._actualizar_preview())
 
         controles = tk.Frame(principal, bg="#202020")
-        controles.pack(fill="x", padx=24, pady=(4, 18))
+        controles.pack(fill="x", padx=24, pady=(4, 30))
 
         self.btn_abrir = ttk.Button(
             controles, text="Abrir formato", command=self.abrir_formato

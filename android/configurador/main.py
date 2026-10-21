@@ -2150,23 +2150,40 @@ class ConfiguradorApp(App):
         nombre = TextInput(text=actual.name_text, hint_text="Texto fijo para el nombre", multiline=False, size_hint_y=None, height=dp(42))
         layout.add_widget(Label(text="Texto fijo del nombre"))
         layout.add_widget(nombre)
+        campos_disponibles = list(self.formato.fields)
+        opciones_campos = ["— Ninguno —"] + [
+            "%02d — %s [%s]" % (
+                campo.order,
+                (campo.question.strip() or "(sin pregunta)"),
+                campo.field_id,
+            )
+            for campo in campos_disponibles
+        ]
+        ids_por_opcion = [""] + [campo.field_id for campo in campos_disponibles]
+        selectores = []
         for i in range(4):
             campo_actual = actual.field_ids[i] if i < len(actual.field_ids) else ""
-            selector = TextInput(text=campo_actual, hint_text="ID de campo (opcional)", multiline=False, size_hint_y=None, height=dp(42))
-            layout.add_widget(Label(text="Campo %d del nombre" % (i + 1)))
+            indice_actual = next(
+                (j for j, field_id in enumerate(ids_por_opcion) if j > 0 and field_id == campo_actual),
+                0,
+            )
+            layout.add_widget(Label(text="Campo %d del nombre (opcional)" % (i + 1)))
+            selector = Spinner(
+                text=opciones_campos[indice_actual],
+                values=tuple(opciones_campos),
+                size_hint_y=None,
+                height=dp(42),
+            )
             layout.add_widget(selector)
-            if i == 0:
-                s1 = selector
-            elif i == 1:
-                s2 = selector
-            elif i == 2:
-                s3 = selector
-            else:
-                s4 = selector
+            selectores.append(selector)
         def aceptar(_):
             self.push_undo()
             actual.name_text = nombre.text.strip()
-            actual.field_ids = [s.text.strip() for s in (s1, s2, s3, s4) if s.text.strip()]
+            actual.field_ids = [
+                ids_por_opcion[opciones_campos.index(selector.text)]
+                if selector.text in opciones_campos else ""
+                for selector in selectores
+            ]
             popup.dismiss()
             self.estado.text = "Reglas de nombre actualizadas."
         botones = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(6))
