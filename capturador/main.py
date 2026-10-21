@@ -164,7 +164,7 @@ class CapturadorApp:
         self.preview_label.bind("<Configure>", lambda event: self._actualizar_preview())
 
         controles = tk.Frame(principal, bg="#202020")
-        controles.pack(fill="x", padx=24, pady=(4, 30))
+        controles.pack(fill="x", padx=24, pady=(4, 45))
 
         self.btn_abrir = ttk.Button(
             controles, text="Abrir formato", command=self.abrir_formato
