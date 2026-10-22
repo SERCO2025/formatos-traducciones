@@ -974,6 +974,9 @@ class ConfiguradorApp(App):
         if control:
             if alt:
                 return False
+            if nombre == "r":
+                # Ctrl+R no está asignado a ninguna acción.
+                return True
             if nombre == "n":
                 self.nuevo()
             elif nombre == "o":
