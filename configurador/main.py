@@ -804,7 +804,9 @@ class Configurador:
             else:
                 return None
             return "break"
-        if shift or alt:
+        if alt:
+            return None
+        if shift and caracter not in ("+", "*") and teclas not in ("plus", "asterisk", "kp_add", "kp_multiply"):
             return None
         herramientas = {"a": TOOL_TEXT, "s": TOOL_SELECT, "d": TOOL_HAND,
                         "z": TOOL_ZOOM, "q": TOOL_NUMBER, "w": TOOL_IMAGE}
