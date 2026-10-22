@@ -147,7 +147,7 @@ class Configurador:
 
         editar = tk.Menu(menubar, tearoff=0)
         editar.add_command(label="Deshacer", command=self.deshacer, accelerator="Ctrl+Z")
-        editar.add_command(label="Rehacer", command=self.rehacer, accelerator="Ctrl+R")
+        editar.add_command(label="Rehacer", command=self.rehacer, accelerator="Ctrl+Y")
         editar.add_separator()
         editar.add_command(label="Eliminar campo", command=self.eliminar_seleccionado)
         editar.add_command(label="Propiedades del campo", command=self.editar_seleccionado)
@@ -299,7 +299,6 @@ class Configurador:
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
         self.canvas.bind("<ButtonPress-3>", self.on_right_down)
         self.root.bind_all("<Control-z>", lambda e: self.deshacer())
-        self.root.bind_all("<Control-r>", lambda e: self.rehacer())
         self.root.bind_all("<Control-y>", lambda e: self.rehacer())
         self.root.bind_all("<Left>", self._mover_seleccionado_tecla)
         self.root.bind_all("<Right>", self._mover_seleccionado_tecla)
