@@ -857,6 +857,8 @@ class ConfiguradorApp(App):
 
         self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left")
         root.add_widget(self.estado)
+        # Recibe teclas de un teclado físico conectado al dispositivo.
+        Window.bind(on_key_down=self._manejar_atajo_teclado)
         return root
 
     def abrir_menu(self):
@@ -944,6 +946,69 @@ class ConfiguradorApp(App):
         contenido.add_widget(Label(text="Formatos Traducidos", size_hint_y=None, height=dp(38), font_size="11sp"))
         panel.add_widget(contenido)
         panel.open()
+
+    def _hay_ventana_secundaria_abierta(self):
+        """Evita ejecutar atajos mientras haya un menú, diálogo o modal abierto."""
+        pendientes = list(getattr(Window, "children", []) or [])
+        visitados = set()
+        while pendientes:
+            widget = pendientes.pop()
+            if id(widget) in visitados:
+                continue
+            visitados.add(id(widget))
+            if isinstance(widget, (Popup, ModalView)) and getattr(widget, "_is_open", False):
+                return True
+            pendientes.extend(list(getattr(widget, "children", []) or []))
+        return False
+
+    def _manejar_atajo_teclado(self, window, keycode, text, modifiers):
+        """Atajos para teclado físico; ignora cualquier ventana/modal secundaria."""
+        if self._hay_ventana_secundaria_abierta():
+            return False
+        nombre = str(keycode[1] if isinstance(keycode, (tuple, list)) and len(keycode) > 1 else keycode).lower()
+        texto = (text or "").lower()
+        mods = {str(mod).lower() for mod in (modifiers or [])}
+        control = "ctrl" in mods or "control" in mods
+        shift = "shift" in mods
+        alt = "alt" in mods
+        if control:
+            if alt:
+                return False
+            if nombre == "n":
+                self.nuevo()
+            elif nombre == "o":
+                self.abrir()
+            elif nombre == "s":
+                self.guardar_como_fdt() if shift else self.guardar()
+            elif nombre == "w":
+                # Ctrl+W cierra el formato actual y deja abierta la aplicación.
+                self.nuevo()
+            else:
+                return False
+            return True
+        if shift or alt:
+            # Shift solo se admite para producir + o * en algunos teclados.
+            if texto not in ("+", "*") and nombre not in ("+", "plus", "asterisk"):
+                return False
+        herramientas = {"a": FIELD_TYPE_TEXT, "s": "select", "d": "hand",
+                        "z": "zoom", "q": FIELD_TYPE_NUMBER, "w": FIELD_TYPE_IMAGE}
+        if nombre in herramientas and not shift and not alt:
+            self.set_tool(herramientas[nombre])
+        elif nombre == "l" and not shift and not alt:
+            self.mostrar_lista_campos()
+        elif nombre == "t" and not shift and not alt:
+            self.editar_salida()
+        elif nombre == "i" and not shift and not alt:
+            self.importar()
+        elif nombre in ("+", "plus", "equal", "kp_add") or texto == "+":
+            self.set_zoom(self.scale * 1.25)
+        elif nombre in ("-", "minus", "kp_subtract") or texto == "-":
+            self.set_zoom(self.scale * 0.8)
+        elif nombre in ("*", "asterisk", "kp_multiply") or texto == "*":
+            self.set_zoom(1.0)
+        else:
+            return False
+        return True
 
     def set_tool(self, tool):
         if self.editor is not None:
