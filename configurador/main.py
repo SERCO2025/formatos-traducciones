@@ -795,7 +795,7 @@ class Configurador:
             if teclas == "n":
                 self.nuevo()
             elif teclas == "o":
-                self.abrir()
+                self.abrir(solo_fdt=True)
             elif teclas == "s":
                 self.guardar_como_fdt() if shift else self.guardar()
             elif teclas == "w":
@@ -905,18 +905,24 @@ class Configurador:
         except Exception as exc:
             messagebox.showerror("Error", "No se pudo importar la plantilla.\n%s" % exc)
 
-    def abrir(self):
-        ruta = filedialog.askopenfilename(
-            title="Abrir formato o plantilla",
-            filetypes=[
+    def abrir(self, solo_fdt=False):
+        tipos_archivo = (
+            [("Formato FDT", "*.fdt")]
+            if solo_fdt else [
                 ("Todos los archivos", "*.*"),
                 ("Formato FDT", "*.fdt"),
                 ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.jfif"),
             ]
         )
+        ruta = filedialog.askopenfilename(
+            title="Abrir formato FDT" if solo_fdt else "Abrir formato o plantilla",
+            filetypes=tipos_archivo,
+        )
         if not ruta:
             return
         if os.path.splitext(ruta)[1].lower() != ".fdt":
+            if solo_fdt:
+                return
             self.importar_plantilla(ruta)
             return
         try:
