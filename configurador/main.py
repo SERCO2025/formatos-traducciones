@@ -321,6 +321,8 @@ class Configurador:
                 lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=5),
             )
         self.root.bind_all("<Delete>", self._eliminar_con_tecla)
+        # Atajos de la ventana principal; se ignoran cuando un diálogo secundario tiene el foco.
+        self.root.bind_all("<KeyPress>", self._manejar_atajo_teclado, add="+")
 
         status = tk.Frame(self.root, bg="#111111")
         status.pack(side="bottom", fill="x")
@@ -771,6 +773,58 @@ class Configurador:
     def _set_status(self, text):
         if hasattr(self, "status_label"):
             self.status_label.config(text=text)
+
+    def _atajos_habilitados_en_ventana_principal(self):
+        try:
+            widget = self.root.focus_get()
+            return widget is None or widget.winfo_toplevel() is self.root
+        except Exception:
+            return False
+
+    def _manejar_atajo_teclado(self, event):
+        if not self._atajos_habilitados_en_ventana_principal():
+            return None
+        teclas = (event.keysym or "").lower()
+        caracter = (getattr(event, "char", "") or "").lower()
+        control = bool(event.state & 0x0004)
+        shift = bool(event.state & 0x0001)
+        alt = bool(event.state & 0x0008)
+        if control:
+            if alt:
+                return None
+            if teclas == "n":
+                self.nuevo()
+            elif teclas == "o":
+                self.abrir()
+            elif teclas == "s":
+                self.guardar_como_fdt() if shift else self.guardar()
+            elif teclas == "w":
+                # Ctrl+W cierra el formato actual, no la aplicación.
+                self.nuevo()
+            else:
+                return None
+            return "break"
+        if shift or alt:
+            return None
+        herramientas = {"a": TOOL_TEXT, "s": TOOL_SELECT, "d": TOOL_HAND,
+                        "z": TOOL_ZOOM, "q": TOOL_NUMBER, "w": TOOL_IMAGE}
+        if teclas in herramientas:
+            self.set_tool(herramientas[teclas])
+        elif teclas == "l":
+            self.toggle_field_panel()
+        elif teclas == "t":
+            self.configurar_archivo_terminado()
+        elif teclas == "i":
+            self.importar_plantilla()
+        elif teclas in ("plus", "kp_add") or caracter == "+":
+            self.cambiar_zoom(1.25)
+        elif teclas in ("minus", "kp_subtract") or caracter == "-":
+            self.cambiar_zoom(0.8)
+        elif teclas in ("asterisk", "kp_multiply") or caracter == "*":
+            self.set_zoom(1.0)
+        else:
+            return None
+        return "break"
 
     def set_tool(self, tool):
         self.tool = tool
