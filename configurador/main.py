@@ -1035,6 +1035,8 @@ class Configurador:
         if self.template_image is None or not hasattr(self, "canvas"):
             return
         self.canvas.delete("template_tile")
+        # Las imágenes de los mosaicos anteriores ya no están en el lienzo.
+        self._template_tile_images.clear()
         canvas_width = max(1, self.canvas.winfo_width())
         canvas_height = max(1, self.canvas.winfo_height())
         left = max(0.0, self.canvas.canvasx(0) - 20)
@@ -1075,11 +1077,6 @@ class Configurador:
                     20 + sx * self.zoom, 20 + sy * self.zoom,
                     image=photo, anchor="nw", tags=("template_tile",),
                 )
-        # Soltar las referencias de mosaicos que ya no se usan.
-        self._template_tile_images = {
-            key: image for key, image in self._template_tile_images.items()
-            if self.canvas.find_withtag("template_tile")
-        }
 
     def _redraw_fields_only(self):
         """Actualiza campos sin volver a escalar ni reconstruir la plantilla."""
