@@ -140,12 +140,12 @@ class Configurador:
     def _build_ui(self):
         menubar = tk.Menu(self.root)
         archivo = tk.Menu(menubar, tearoff=0)
-        archivo.add_command(label="Nuevo", command=self.nuevo)
-        archivo.add_command(label="Abrir...", command=self.abrir)
-        archivo.add_command(label="Guardar", command=self.guardar)
-        archivo.add_command(label="Guardar como FDT...", command=self.guardar_como_fdt)
+        archivo.add_command(label="Nuevo", command=self.nuevo, accelerator="Ctrl+N")
+        archivo.add_command(label="Abrir...", command=self.abrir, accelerator="Ctrl+O")
+        archivo.add_command(label="Guardar", command=self.guardar, accelerator="Ctrl+S")
+        archivo.add_command(label="Guardar como FDT...", command=self.guardar_como_fdt, accelerator="Ctrl+Shift+S")
         archivo.add_separator()
-        archivo.add_command(label="Importar plantilla...", command=self.importar_plantilla)
+        archivo.add_command(label="Importar plantilla...", command=self.importar_plantilla, accelerator="I")
         archivo.add_separator()
         archivo.add_command(label="Salir", command=self.salir)
         menubar.add_cascade(label="Archivo", menu=archivo)
@@ -154,26 +154,26 @@ class Configurador:
         editar.add_command(label="Deshacer", command=self.deshacer, accelerator="Ctrl+Z")
         editar.add_command(label="Rehacer", command=self.rehacer, accelerator="Ctrl+Y")
         editar.add_separator()
-        editar.add_command(label="Eliminar campo", command=self.eliminar_seleccionado)
+        editar.add_command(label="Eliminar campo", command=self.eliminar_seleccionado, accelerator="Delete")
         editar.add_command(label="Propiedades del campo", command=self.editar_seleccionado)
         menubar.add_cascade(label="Editar", menu=editar)
 
         ver = tk.Menu(menubar, tearoff=0)
-        ver.add_command(label="Acercar", command=lambda: self.cambiar_zoom(1.25))
-        ver.add_command(label="Alejar", command=lambda: self.cambiar_zoom(0.8))
-        ver.add_command(label="100 %", command=lambda: self.set_zoom(1.0))
+        ver.add_command(label="Acercar", command=lambda: self.cambiar_zoom(1.25), accelerator="+")
+        ver.add_command(label="Alejar", command=lambda: self.cambiar_zoom(0.8), accelerator="-")
+        ver.add_command(label="100 %", command=lambda: self.set_zoom(1.0), accelerator="*")
         menubar.add_cascade(label="Ver", menu=ver)
 
         herramientas = tk.Menu(menubar, tearoff=0)
-        herramientas.add_command(label="Selección", command=lambda: self.set_tool(TOOL_SELECT))
-        herramientas.add_command(label="Desplazar", command=lambda: self.set_tool(TOOL_HAND))
-        herramientas.add_command(label="Texto (A)", command=lambda: self.set_tool(TOOL_TEXT))
-        herramientas.add_command(label="Número (1)", command=lambda: self.set_tool(TOOL_NUMBER))
-        herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE))
-        herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM))
+        herramientas.add_command(label="Selección", command=lambda: self.set_tool(TOOL_SELECT), accelerator="S")
+        herramientas.add_command(label="Desplazar", command=lambda: self.set_tool(TOOL_HAND), accelerator="D")
+        herramientas.add_command(label="Texto", command=lambda: self.set_tool(TOOL_TEXT), accelerator="A")
+        herramientas.add_command(label="Número", command=lambda: self.set_tool(TOOL_NUMBER), accelerator="Q")
+        herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE), accelerator="W")
+        herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM), accelerator="Z")
         herramientas.add_separator()
-        herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel)
-        herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado)
+        herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel, accelerator="L")
+        herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado, accelerator="T")
         menubar.add_cascade(label="Herramientas", menu=herramientas)
 
         ayuda = tk.Menu(menubar, tearoff=0)
@@ -207,7 +207,19 @@ class Configurador:
             button._icon_ref = self._icon_images.get((icon, 17))
             button.pack(side="left", padx=2, pady=5)
             self._tool_buttons.append(button)
-            ToolTip(button, label)
+            shortcut = {
+                TOOL_SELECT: "S", TOOL_HAND: "D", TOOL_TEXT: "A",
+                TOOL_NUMBER: "Q", TOOL_IMAGE: "W", TOOL_ZOOM: "Z",
+            }.get(tool)
+            descripcion = {
+                TOOL_SELECT: "Seleccionar, mover y cambiar el tamaño de campos",
+                TOOL_HAND: "Desplazar la vista de la plantilla",
+                TOOL_TEXT: "Crear campos de texto",
+                TOOL_NUMBER: "Crear campos numéricos",
+                TOOL_IMAGE: "Crear campos para insertar imágenes",
+                TOOL_ZOOM: "Ampliar la vista haciendo clic en la plantilla",
+            }.get(tool, label)
+            ToolTip(button, "{} ({})".format(descripcion, shortcut))
             button.bind("<Enter>", lambda e, l=label: self._set_status(l))
             button.bind("<Leave>", lambda e: self._set_status(
                 "Herramienta: " + {
@@ -229,9 +241,9 @@ class Configurador:
                           width=16, height=16, padx=4, pady=4)
             b._icon_ref = self._icon_images.get((icon, 14))
             b.pack(side="left", padx=2, pady=4)
-            ToolTip(b, "Alejar" if icon == "minus" else "Acercar")
+            ToolTip(b, "Alejar (-)" if icon == "minus" else "Acercar (+)")
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
-        ToolTip(self.zoom_label, "Nivel de zoom actual")
+        ToolTip(self.zoom_label, "Nivel de zoom actual (usa * para restablecer al 100 %)")
         self.zoom_label.pack(side="left", padx=2)
 
         body = tk.Frame(self.root, bg="black")
