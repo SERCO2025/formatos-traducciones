@@ -814,8 +814,8 @@ class Configurador:
             return "break"
         if alt:
             return None
-        if shift and caracter not in ("+", "*") and teclas not in ("plus", "asterisk", "kp_add", "kp_multiply"):
-            return None
+        # Los atajos de letras no distinguen mayúsculas/minúsculas:
+        # keysym y char se normalizan arriba, incluso con Shift o Caps Lock.
         herramientas = {"a": TOOL_TEXT, "s": TOOL_SELECT, "d": TOOL_HAND,
                         "z": TOOL_ZOOM, "q": TOOL_NUMBER, "w": TOOL_IMAGE}
         if teclas in herramientas:
