@@ -2352,16 +2352,26 @@ El panel puede moverse arrastrando su encabezado y cambiar de tamaño desde el b
             "output_naming": (
                 "Archivo terminado (T)",
                 """PARA QUÉ SIRVE
-Abre las opciones relacionadas con el nombre y la configuración del archivo final que se genera al completar la captura.
+Configura cómo se construirá el nombre del archivo final cuando el capturador guarde un documento completado. Puedes combinar un texto fijo con valores obtenidos de las respuestas capturadas.
 
 CÓMO ABRIRLO
-Pulsa T o ve a Herramientas > Archivo terminado. La opción requiere que haya una plantilla/formato cargado; si no lo hay, el programa te pedirá importar una plantilla.
+Pulsa T o ve a Herramientas > Archivo terminado. Debe haber una plantilla/formato cargado; si no lo hay, el programa mostrará un aviso.
 
-QUÉ REVISAR
-Utiliza esta ventana para configurar las opciones de nombre de archivo terminado que estén disponibles para el formato. Revisa los campos y opciones mostrados antes de aceptar los cambios y guarda el FDT para conservar la configuración.
+NOMBRE BASE DEL ARCHIVO
+En “Nombre base del archivo” escribe el texto fijo que quieras incluir en el nombre. Puede servir, por ejemplo, para identificar el tipo de documento o el trámite. El texto se conserva como parte de la configuración del formato.
 
-NOTA
-La configuración exacta que se muestre depende de las opciones implementadas en esta versión del configurador."""
+INCORPORAR RESPUESTAS AL NOMBRE
+Hay cuatro partes opcionales que pueden añadirse al nombre:
+1. En cada selector, elige <nada> si no quieres añadir nada en esa posición.
+2. O elige uno de los campos de la lista. Se muestran su orden, ID y pregunta para ayudarte a identificarlo.
+3. Puedes combinar hasta cuatro campos en el orden deseado. Los valores seleccionados se usarán para formar el nombre final junto al texto base.
+4. Si no necesitas una parte, déjala en <nada>. No es obligatorio utilizar las cuatro.
+
+GUARDAR LOS CAMBIOS
+Pulsa el botón de aceptación de la ventana para aplicar la configuración al formato. La operación marca el FDT como modificado; después guarda el formato con Ctrl+S o desde Archivo > Guardar para conservarla.
+
+IMPORTANTE
+Esta ventana configura el nombre del archivo resultante; no modifica el nombre del archivo FDT que estás editando ni cambia las dimensiones de la plantilla."""
             ),
         }
         if herramienta not in guias:
