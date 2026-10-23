@@ -974,6 +974,26 @@ class Configurador:
             self._refresh_field_list()
             self.unsaved = False
             self._set_status("Formato abierto: " + os.path.basename(ruta))
+            # Reproducir un clic de Selección en el píxel (1, 1) de la plantilla,
+            # en la esquina superior izquierda, y después activar Desplazar.
+            # Se agenda tras abrir para que Tkinter termine de actualizar el lienzo.
+            self.root.after_idle(self._activar_desplazar_al_abrir)
+
+    def _activar_desplazar_al_abrir(self):
+        if self.template_image is None or not self.formato:
+            return
+        # La plantilla se dibuja con un margen de 20 px y escala según el zoom.
+        # Llevar la vista al origen garantiza que el punto (1, 1) esté visible.
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+        self.canvas.update_idletasks()
+        x = int(round(20 + self.zoom))
+        y = int(round(20 + self.zoom))
+        # Usar los mismos eventos del lienzo que un clic real con Selección.
+        self.set_tool(TOOL_SELECT)
+        self.canvas.event_generate("<ButtonPress-1>", x=x, y=y)
+        self.canvas.event_generate("<ButtonRelease-1>", x=x, y=y)
+        self.set_tool(TOOL_HAND)
         except Exception as exc:
             messagebox.showerror("Error al abrir", str(exc))
 
