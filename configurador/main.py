@@ -831,8 +831,8 @@ class Configurador:
             elif teclas == "s":
                 self.guardar_como_fdt() if shift else self.guardar()
             elif teclas == "w":
-                # Ctrl+W cierra el formato actual, no la aplicación.
-                self.nuevo()
+                # Ctrl+W cierra la aplicación y confirma cambios sin guardar.
+                self.salir()
             else:
                 return None
             return "break"
@@ -2114,7 +2114,7 @@ Ctrl+N        Nuevo formato. Inicia un formato nuevo; si hay cambios sin guardar
 Ctrl+O        Abrir un archivo FDT existente.
 Ctrl+S        Guardar el FDT actual. Si todavía no tiene ruta, abre Guardar como.
 Ctrl+Shift+S  Guardar como FDT con otro nombre o ubicación.
-Ctrl+W        Nuevo formato. Es el atajo alternativo que cierra el formato actual y comienza uno nuevo; no cierra la aplicación.
+Ctrl+W        Cerrar la aplicación. Si hay cambios sin guardar, pregunta si desea guardarlos.
 I             Importar una plantilla de imagen.
 
 EDICIÓN
