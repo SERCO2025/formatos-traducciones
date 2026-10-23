@@ -1369,7 +1369,7 @@ class Configurador:
                 x0, y0, x1, y1 = map(float, region)
             else:
                 x0 = y0 = 0.0
-                x1 = y2 = 0.0
+                x1 = y1 = 0.0
             self._pan_last = (
                 event.x, event.y,
                 max(0.0, self.canvas.canvasx(0) - x0),
