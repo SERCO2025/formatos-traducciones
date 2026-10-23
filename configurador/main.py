@@ -177,6 +177,18 @@ class Configurador:
         menubar.add_cascade(label="Herramientas", menu=herramientas)
 
         ayuda = tk.Menu(menubar, tearoff=0)
+        ayuda.add_command(label="Mapa de atajos", command=self.mostrar_mapa_atajos)
+        guia = tk.Menu(ayuda, tearoff=0)
+        guia.add_command(label="Selección (S)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_SELECT))
+        guia.add_command(label="Desplazar (D)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_HAND))
+        guia.add_command(label="Texto (A)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_TEXT))
+        guia.add_command(label="Número (Q)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_NUMBER))
+        guia.add_command(label="Imagen (W)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_IMAGE))
+        guia.add_command(label="Lupa (Z)", command=lambda: self.mostrar_ayuda_herramienta(TOOL_ZOOM))
+        guia.add_separator()
+        guia.add_command(label="Lista de campos (L)", command=lambda: self.mostrar_ayuda_herramienta("field_list"))
+        guia.add_command(label="Archivo terminado (T)", command=lambda: self.mostrar_ayuda_herramienta("output_naming"))
+        ayuda.add_cascade(label="Guía de herramientas", menu=guia)
         ayuda.add_command(label="Acerca de", command=lambda: messagebox.showinfo(
             "Acerca de", "Formatos Traducidos - Configurador"
         ))
@@ -2090,6 +2102,305 @@ class Configurador:
     def on_right_down(self, event):
         if self.tool == TOOL_ZOOM and self.formato and self.template_image is not None:
             self.cambiar_zoom(0.87)
+
+    def mostrar_mapa_atajos(self):
+        titulo = "Mapa de atajos del configurador"
+        contenido = """MAPA DE ATAJOS — CONFIGURADOR.EXE
+
+Los atajos de letras funcionan con mayúsculas o minúsculas, y con Bloq Mayús activado o desactivado. Los atajos globales de esta lista actúan cuando la ventana principal está activa; no deben interferir con la escritura dentro de los cuadros de propiedades o de otros diálogos.
+
+ARCHIVO
+Ctrl+N        Nuevo formato. Inicia un formato nuevo; si hay cambios sin guardar, pregunta qué hacer.
+Ctrl+O        Abrir un archivo FDT existente.
+Ctrl+S        Guardar el FDT actual. Si todavía no tiene ruta, abre Guardar como.
+Ctrl+Shift+S  Guardar como FDT con otro nombre o ubicación.
+Ctrl+W        Nuevo formato. Es el atajo alternativo que cierra el formato actual y comienza uno nuevo; no cierra la aplicación.
+I             Importar una plantilla de imagen.
+
+EDICIÓN
+Ctrl+Z        Deshacer la última operación registrada.
+Ctrl+Y        Rehacer una operación que se deshizo.
+Delete        Eliminar el campo seleccionado. Para evitar borrar texto por accidente, funciona cuando el lienzo o la ventana principal tiene el foco.
+Flechas       Mover el campo seleccionado: izquierda, derecha, arriba o abajo.
+Alt+Flechas   Mover el campo seleccionado 1 píxel por pulsación.
+Flechas       Sin Alt ni Shift: mover 5 píxeles por pulsación.
+Shift+Flechas Mover el campo seleccionado 25 píxeles por pulsación.
+Nota: para mover un campo con las flechas, selecciona primero el campo y asegúrate de que el lienzo tenga el foco. En el teclado, Alt tiene prioridad para el movimiento de 1 píxel.
+
+HERRAMIENTAS
+S             Activar Selección.
+D             Activar Desplazar.
+A             Activar Texto.
+Q             Activar Número.
+W             Activar Imagen.
+Z             Activar Lupa.
+L             Mostrar u ocultar la Lista de campos.
+T             Abrir la configuración de Archivo terminado.
+
+ZOOM
++             Acercar la vista (multiplica el zoom actual por 1,25).
+-             Alejar la vista (multiplica el zoom actual por 0,8).
+*             Restablecer el zoom al 100 %.
+Rueda del ratón con la herramienta Lupa activa: acercar o alejar según la dirección de la rueda.
+Ctrl+rueda    Acercar o alejar la vista.
+Rueda normal  Desplazar verticalmente la vista.
+Shift+rueda   Desplazar horizontalmente la vista.
+Los botones − y + de la barra superior también alejan y acercan. La lupa admite clic izquierdo para acercar y clic derecho para alejar.
+
+GESTOS DEL RATÓN
+Clic en un campo con Selección: seleccionar ese campo.
+Arrastrar un campo seleccionado: moverlo sobre la plantilla.
+Arrastrar los controles de sus bordes o esquinas: cambiar su ancho y/o alto.
+Doble clic en un campo con Selección: abrir sus propiedades.
+Arrastrar sobre la plantilla con Texto, Número o Imagen: crear un campo nuevo con el tamaño dibujado.
+Clic sin arrastrar con Texto, Número o Imagen: crear un campo con el tamaño del último campo, si existe; después se abren sus propiedades.
+Arrastrar con Desplazar: mover la vista de la plantilla sin mover los campos.
+Clic con Lupa: acercar un nivel. Clic derecho con Lupa: alejar un nivel.
+
+CONSEJOS
+• La vista previa de los campos es orientativa; no es el texto final que producirá el capturador.
+• Las posiciones y dimensiones de los campos se expresan en píxeles de la plantilla, no en píxeles de pantalla.
+• Guarda el formato en FDT después de hacer cambios.
+• Para conocer una herramienta en detalle, abre Ayuda > Guía de herramientas y selecciona su nombre.
+"""
+        self._mostrar_ventana_ayuda(titulo, contenido, geometry="760x650")
+
+    def mostrar_ayuda_herramienta(self, herramienta):
+        guias = {
+            TOOL_SELECT: (
+                "Herramienta Selección (S)",
+                """PARA QUÉ SIRVE
+Selecciona campos ya creados para poder moverlos, cambiarles el tamaño, revisar sus propiedades o eliminarlos. Es la herramienta que debes usar para editar la distribución de los campos después de crearlos.
+
+SELECCIONAR UN CAMPO
+1. Activa Selección haciendo clic en su botón, desde Herramientas o pulsando S.
+2. Haz clic dentro del rectángulo de un campo. El campo queda seleccionado y sus controles de ajuste aparecen en pantalla.
+3. Si haces clic en una zona vacía de la plantilla, se quita la selección actual.
+
+MOVER UN CAMPO CON EL RATÓN
+1. Selecciona el campo.
+2. Mantén presionado el botón izquierdo dentro del campo y arrástralo a la nueva posición.
+3. Suelta el botón. El campo permanece dentro de los límites de la plantilla; no se desplaza fuera de ella.
+El movimiento cambia las coordenadas del campo, no las dimensiones de la imagen plantilla.
+
+MOVER UN CAMPO CON EL TECLADO
+Selecciona el campo y asegúrate de que el lienzo tenga el foco:
+• Flechas: 5 píxeles por pulsación.
+• Alt+Flechas: 1 píxel por pulsación, para ajustes finos.
+• Shift+Flechas: 25 píxeles por pulsación, para desplazamientos rápidos.
+Las distancias se miden en píxeles de la plantilla, no en píxeles de pantalla. El movimiento queda limitado a los bordes de la plantilla.
+
+CAMBIAR EL TAMAÑO
+1. Selecciona el campo.
+2. Localiza los pequeños controles de ajuste que aparecen en sus bordes o esquinas.
+3. Arrastra el control correspondiente para modificar el ancho, el alto o ambos, según el control utilizado.
+4. Suelta el ratón cuando el campo tenga el tamaño deseado.
+El redimensionamiento cambia el área donde se captura o muestra la respuesta; no cambia el tamaño de la plantilla original. También puedes introducir X, Y, Ancho y Alto numéricamente en Propiedades del campo.
+
+ABRIR LAS PROPIEDADES
+Haz doble clic sobre el campo mientras Selección está activa, o selecciónalo y usa Editar > Propiedades del campo. En esa ventana puedes modificar:
+• ID del campo, que debe ser único y no puede quedar vacío.
+• Pregunta que verá el usuario en el capturador.
+• Si la respuesta es obligatoria.
+• Si la captura se convierte a MAYÚSCULAS.
+• Tipografía, tamaño en píxeles, negrita, cursiva, alineación, orientación y color.
+• Coordenadas X/Y y ancho/alto del campo.
+• En campos de tipo Número, se aplica la validación numérica correspondiente.
+Pulsa OK para aplicar los cambios. Pulsa Cancelar para descartar los cambios de esa ventana. Si estás creando un campo nuevo, cancelar elimina ese campo recién creado; si editas uno existente, cancelar conserva sus propiedades anteriores.
+
+ORDEN DE LAS PREGUNTAS
+La numeración de los campos determina el orden en que el capturador solicitará las respuestas. Usa la Lista de campos para revisar el orden y arrastra una fila hacia arriba o abajo para cambiarlo.
+
+ELIMINAR
+Selecciona el campo y pulsa Delete, o utiliza Editar > Eliminar campo. La eliminación modifica el formato y puede deshacerse con Ctrl+Z.
+
+DESHACER Y REHACER
+Ctrl+Z deshace una operación registrada; Ctrl+Y la vuelve a aplicar. El historial conserva hasta 50 estados. Guarda el FDT para conservar permanentemente los cambios."""
+            ),
+            TOOL_HAND: (
+                "Herramienta Desplazar (D)",
+                """PARA QUÉ SIRVE
+Mueve la vista que estás viendo de la plantilla, sin mover ni redimensionar los campos del documento. Es útil cuando la plantilla es grande o está ampliada y quieres inspeccionar otra zona.
+
+CÓMO SE UTILIZA
+1. Activa Desplazar con el botón de la mano, desde Herramientas o pulsando D.
+2. Coloca el puntero sobre la plantilla.
+3. Mantén presionado el botón izquierdo y arrastra la vista en la dirección que necesites.
+4. Suelta el botón para detener el desplazamiento.
+
+DIFERENCIA CON SELECCIÓN
+Desplazar cambia qué zona de la plantilla aparece en pantalla. No cambia las coordenadas de ningún campo. Para mover un campo real, activa Selección (S).
+
+OTRAS FORMAS DE DESPLAZARSE
+• La rueda del ratón desplaza verticalmente la vista.
+• Shift+rueda desplaza horizontalmente la vista en los dispositivos compatibles.
+• En touchpads, el gesto de dos dedos puede desplazar la vista.
+• Ctrl+rueda cambia el zoom en lugar de desplazar verticalmente.
+
+CUÁNDO USARLA
+Úsala después de acercarte con la Lupa, cuando necesites revisar una esquina o zona de la plantilla que queda fuera de la pantalla. Tras aceptar o cancelar las propiedades de un campo recién creado, la herramienta Desplazar queda activada."""
+            ),
+            TOOL_TEXT: (
+                "Herramienta Texto (A)",
+                """PARA QUÉ SIRVE
+Crea un campo destinado a una respuesta de texto. El usuario del capturador escribirá en ese campo la respuesta que corresponda al documento.
+
+CREAR UN CAMPO
+1. Activa Texto desde la barra, el menú Herramientas o pulsando A.
+2. Coloca el puntero donde debe comenzar el área de respuesta.
+3. Mantén presionado el botón izquierdo y arrastra para dibujar el rectángulo.
+4. Suelta el botón. Se crea el campo y se abre automáticamente la ventana Propiedades del campo.
+
+TAMAÑO DEL CAMPO
+Al arrastrar, el rectángulo define el área en la plantilla y se convierte a coordenadas del documento. Si haces un clic sin arrastrar, el programa reutiliza el ancho y alto del último campo existente, cuando lo hay; puedes ajustar después esos valores en Propiedades.
+
+CONFIGURAR LA PREGUNTA Y LA RESPUESTA
+En Propiedades, escribe la pregunta que verá el usuario, configura si la respuesta es obligatoria y ajusta tipografía, tamaño, estilo, alineación, orientación, color y posición. El botón A/a permite decidir si el capturador convierte la respuesta a mayúsculas. El tipo Texto admite texto, números y símbolos; no está limitado a letras.
+
+PREVIEW Y RESULTADO FINAL
+El texto visible dentro del campo en el configurador es una muestra orientativa para identificar el área. No representa la respuesta real ni determina la calidad del texto final. El capturador utilizará las propiedades del campo y la respuesta escrita por el usuario.
+
+CANCELAR
+Si cancelas las propiedades de un campo recién creado, el campo se elimina. Si editas un campo existente y cancelas, se conservan los valores que tenía antes."""
+            ),
+            TOOL_NUMBER: (
+                "Herramienta Número (Q)",
+                """PARA QUÉ SIRVE
+Crea un campo pensado para capturar un dato numérico, como una edad, cantidad, folio o número de identificación.
+
+CÓMO CREARLO
+1. Activa Número desde la barra, el menú Herramientas o pulsando Q.
+2. Haz clic y arrastra sobre la zona de la plantilla donde debe aparecer el dato.
+3. Suelta el botón para crear el rectángulo y abrir Propiedades.
+4. Escribe una pregunta clara y configura el área, la tipografía y las demás propiedades necesarias.
+
+TAMAÑO
+Arrastrar define el ancho y el alto del campo. Un clic sin arrastrar reutiliza el tamaño del último campo existente cuando hay uno; luego puedes corregirlo en Propiedades.
+
+VALIDACIÓN
+Este tipo de campo aplica la validación numérica del formato. Si necesitas texto libre, letras o símbolos como contenido general, utiliza Texto (A) en lugar de Número.
+
+PROPIEDADES COMUNES
+Puedes establecer ID único, pregunta, obligatoriedad, conversión a mayúsculas cuando sea aplicable, tipografía, tamaño en píxeles, negrita, cursiva, alineación, orientación, color y coordenadas X/Y con ancho/alto.
+
+EDICIÓN POSTERIOR
+Activa Selección (S) para mover o redimensionar el campo. Haz doble clic sobre él para abrir sus propiedades. El preview del configurador es orientativo; la salida final la genera el capturador."""
+            ),
+            TOOL_IMAGE: (
+                "Herramienta Imagen (W)",
+                """PARA QUÉ SIRVE
+Crea un rectángulo reservado para una imagen que el usuario seleccionará al capturar el formato. No inserta la fotografía definitiva en el FDT: define el lugar y el tamaño del área de imagen.
+
+CÓMO CREAR EL ÁREA
+1. Activa Imagen desde la barra, el menú Herramientas o pulsando W.
+2. Haz clic y arrastra para dibujar el rectángulo donde debe quedar la imagen.
+3. Suelta el botón. Se crea el campo y se abre Propiedades para asignarle su ID y pregunta, y ajustar su geometría.
+4. Si haces clic sin arrastrar, se reutiliza el tamaño del último campo existente cuando lo hay.
+
+QUÉ OCURRE EN EL CAPTURADOR
+El capturador solicitará o permitirá seleccionar una imagen para ese campo y la ajustará al área definida, de acuerdo con el comportamiento de colocación de imágenes de la aplicación. El rectángulo no debe salirse del documento. El campo de imagen no necesita una muestra de texto como los campos de texto o número.
+
+AJUSTAR O MOVER
+Usa Selección (S), arrastra el campo para cambiar su posición o arrastra sus controles para cambiar ancho y alto. También puedes escribir X, Y, Ancho y Alto en Propiedades.
+
+IMPORTANTE
+La herramienta Imagen define el área de destino; no cambia las dimensiones ni la resolución de la plantilla original."""
+            ),
+            TOOL_ZOOM: (
+                "Herramienta Lupa (Z)",
+                """PARA QUÉ SIRVE
+Acerca o aleja la visualización de la plantilla para inspeccionar detalles y colocar campos con mayor precisión. El zoom solo cambia la vista en pantalla: no modifica las dimensiones ni los metadatos de la imagen plantilla.
+
+ACERCAR
+1. Activa Lupa desde la barra, el menú Herramientas o pulsando Z.
+2. Haz clic con el botón izquierdo sobre la plantilla para acercar la vista.
+3. También puedes usar la rueda del ratón mientras Lupa está activa.
+
+ALEJAR
+Haz clic con el botón derecho sobre la plantilla mientras Lupa está activa, o utiliza la rueda en sentido contrario. Los botones − y + de la barra superior también permiten alejar y acercar.
+
+ATAJOS
+• + aumenta el zoom multiplicándolo por 1,25.
+• - lo reduce multiplicándolo por 0,8.
+• * devuelve el zoom al 100 %.
+• Ctrl+rueda también acerca o aleja.
+El zoom se limita al intervalo del 5 % al 500 %.
+
+MOVERSE CON LA VISTA AMPLIADA
+Después de acercar, activa Desplazar (D) y arrastra para inspeccionar otras partes de la plantilla. No uses Selección para arrastrar si tu intención es mover el campo en sí.
+
+CALIDAD Y ARCHIVO
+La vista ampliada puede verse pixelada intencionalmente. La operación de zoom no cambia la imagen fuente guardada dentro del FDT ni la calidad de la salida final del capturador."""
+            ),
+            "field_list": (
+                "Lista de campos (L)",
+                """PARA QUÉ SIRVE
+Muestra los campos del formato en el orden en que se han registrado. Cada fila identifica el orden, el ID y la pregunta del campo.
+
+MOSTRAR U OCULTAR
+Pulsa L o abre Herramientas > Lista de campos. La lista puede cerrarse con el botón de cierre de su encabezado.
+
+SELECCIONAR Y EDITAR
+Haz clic en una fila para seleccionar el campo correspondiente en la plantilla. Haz doble clic en una fila para abrir sus propiedades.
+
+REORDENAR PREGUNTAS
+Mantén presionado el botón izquierdo sobre una fila, arrástrala hacia la posición deseada y suelta. La lista cambia el orden de los campos y, por tanto, el orden en que el capturador solicita las respuestas.
+
+TAMAÑO Y POSICIÓN DEL PANEL
+El panel puede moverse arrastrando su encabezado y cambiar de tamaño desde el borde de ajuste. Si necesitas más espacio para revisar la plantilla, puedes ocultarlo y volverlo a abrir cuando lo necesites."""
+            ),
+            "output_naming": (
+                "Archivo terminado (T)",
+                """PARA QUÉ SIRVE
+Abre las opciones relacionadas con el nombre y la configuración del archivo final que se genera al completar la captura.
+
+CÓMO ABRIRLO
+Pulsa T o ve a Herramientas > Archivo terminado. La opción requiere que haya una plantilla/formato cargado; si no lo hay, el programa te pedirá importar una plantilla.
+
+QUÉ REVISAR
+Utiliza esta ventana para configurar las opciones de nombre de archivo terminado que estén disponibles para el formato. Revisa los campos y opciones mostrados antes de aceptar los cambios y guarda el FDT para conservar la configuración.
+
+NOTA
+La configuración exacta que se muestre depende de las opciones implementadas en esta versión del configurador."""
+            ),
+        }
+        if herramienta not in guias:
+            return
+        titulo, contenido = guias[herramienta]
+        self._mostrar_ventana_ayuda(titulo, contenido, geometry="760x600")
+
+    def _mostrar_ventana_ayuda(self, titulo, contenido, geometry="760x600"):
+        ventana = tk.Toplevel(self.root)
+        ventana.title(titulo)
+        ventana.configure(bg="#202020")
+        ventana.transient(self.root)
+        ventana.geometry(geometry)
+        ventana.minsize(560, 400)
+
+        contenedor = tk.Frame(ventana, bg="#202020")
+        contenedor.pack(fill="both", expand=True, padx=12, pady=12)
+        barra = tk.Scrollbar(contenedor)
+        barra.pack(side="right", fill="y")
+        texto = tk.Text(
+            contenedor, wrap="word", yscrollcommand=barra.set,
+            bg="#181818", fg="#eeeeee", insertbackground="white",
+            font=("Segoe UI", 10), padx=12, pady=10, spacing1=2,
+            spacing3=5, relief="flat", borderwidth=0,
+        )
+        texto.pack(side="left", fill="both", expand=True)
+        barra.config(command=texto.yview)
+        texto.insert("1.0", contenido)
+        texto.config(state="disabled")
+        boton = tk.Button(
+            ventana, text="Cerrar", command=ventana.destroy,
+            bg="#005f73", fg="white", activebackground="#087f8c",
+            relief="flat", padx=18, pady=5,
+        )
+        boton.pack(side="bottom", pady=(0, 12))
+        ventana.bind("<Escape>", lambda event: ventana.destroy())
+        ventana.bind("<Control-w>", lambda event: ventana.destroy())
+        ventana.bind("<Control-W>", lambda event: ventana.destroy())
+        ventana.focus_set()
 
     def _confirm_unsaved(self):
         if not self.unsaved:
