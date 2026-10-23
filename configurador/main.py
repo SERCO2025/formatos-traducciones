@@ -856,6 +856,9 @@ class Configurador:
         return "break"
 
     def set_tool(self, tool):
+        # Evitar que un gesto de desplazamiento anterior quede activo al
+        # cambiar de herramienta mientras el ratón aún está presionado.
+        self._pan_last = None
         self.tool = tool
         if tool != TOOL_ZOOM:
             self._ocultar_lupa()
@@ -1358,8 +1361,20 @@ class Configurador:
             self.cambiar_zoom(1.25, event=event)
             return
         if self.tool == TOOL_HAND:
-            self.canvas.scan_mark(event.x, event.y)
-            self._pan_last = (event.x, event.y)
+            # Guardar la posición de la vista y del puntero al iniciar el gesto.
+            # El desplazamiento manual no depende del estado interno de scan_mark,
+            # que puede quedar desincronizado tras cambios programáticos de zoom.
+            region = self.canvas.cget("scrollregion").split()
+            if len(region) == 4:
+                x0, y0, x1, y1 = map(float, region)
+            else:
+                x0 = y0 = 0.0
+                x1 = y2 = 0.0
+            self._pan_last = (
+                event.x, event.y,
+                max(0.0, self.canvas.canvasx(0) - x0),
+                max(0.0, self.canvas.canvasy(0) - y0),
+            )
             return
         if self.tool == TOOL_SELECT:
             # Primero comprobar los controles del campo seleccionado. Esto permite
@@ -1418,9 +1433,18 @@ class Configurador:
             return
 
         if self.tool == TOOL_HAND and self._pan_last is not None:
-            # El escaneo del Canvas desplaza la vista a la misma velocidad del puntero.
-            self.canvas.scan_dragto(event.x, event.y, gain=1)
-            self._pan_last = (event.x, event.y)
+            start_x, start_y, view_x, view_y = self._pan_last
+            region = self.canvas.cget("scrollregion").split()
+            if len(region) == 4:
+                x0, y0, x1, y1 = map(float, region)
+                region_w = max(1.0, x1 - x0)
+                region_h = max(1.0, y1 - y0)
+                max_x = max(0.0, region_w - self.canvas.winfo_width())
+                max_y = max(0.0, region_h - self.canvas.winfo_height())
+                target_x = max(0.0, min(max_x, view_x - (event.x - start_x)))
+                target_y = max(0.0, min(max_y, view_y - (event.y - start_y)))
+                self.canvas.xview_moveto(target_x / region_w)
+                self.canvas.yview_moveto(target_y / region_h)
             return
 
         if self.tool == TOOL_SELECT and self.selected_field and self._move_start is not None:
