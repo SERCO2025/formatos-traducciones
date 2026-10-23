@@ -1147,6 +1147,12 @@ class Configurador:
         else:
             xy, anchor = (0, y_muestra), "lt"
         capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
+        # Contorno negro rasterizado a la misma resolución reducida que el texto.
+        capa_draw.rectangle(
+            (0, 0, max(0, ancho - 1), max(0, alto - 1)),
+            outline=(0, 0, 0, 255),
+            width=1,
+        )
         return capa
 
     def _draw_field(self, campo):
@@ -1157,9 +1163,11 @@ class Configurador:
         y2 = y1 + p.height * self.zoom
 
         color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
+        # El contorno visible se rasteriza junto con la muestra a media
+        # resolución; este rectángulo sin trazo conserva la zona interactiva.
         rect = self.canvas.create_rectangle(
             x1, y1, x2, y2,
-            outline="black", width=3,
+            outline="", width=0,
             tags=("field", campo.field_id)
         )
 
