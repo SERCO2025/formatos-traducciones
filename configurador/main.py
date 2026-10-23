@@ -1355,7 +1355,7 @@ class Configurador:
         self._move_changed = False
 
         if self.tool == TOOL_ZOOM:
-            self.cambiar_zoom(1.25)
+            self.cambiar_zoom(1.25, event=event)
             return
         if self.tool == TOOL_HAND:
             self.canvas.scan_mark(event.x, event.y)
@@ -2061,14 +2061,41 @@ class Configurador:
         self._refresh_field_list()
         self._set_status("Rehacer.")
 
-    def cambiar_zoom(self, factor):
-        self.set_zoom(self.zoom * factor)
+    def cambiar_zoom(self, factor, event=None):
+        self.set_zoom(self.zoom * factor, event=event)
 
-    def set_zoom(self, value):
+    def set_zoom(self, value, event=None):
         if not self.template_image:
             return
+
+        # Si el zoom viene del mouse, conservar bajo el cursor el mismo punto
+        # de la imagen. Los controles de la barra usan el centro de la vista.
+        if event is not None:
+            anchor_x = self.canvas.canvasx(event.x)
+            anchor_y = self.canvas.canvasy(event.y)
+            screen_x, screen_y = event.x, event.y
+        else:
+            screen_x = max(1, self.canvas.winfo_width()) / 2
+            screen_y = max(1, self.canvas.winfo_height()) / 2
+            anchor_x = self.canvas.canvasx(screen_x)
+            anchor_y = self.canvas.canvasy(screen_y)
+
+        doc_x = (anchor_x - 20) / max(self.zoom, 0.01)
+        doc_y = (anchor_y - 20) / max(self.zoom, 0.01)
         self.zoom = max(0.05, min(5.0, float(value)))
         self.redraw()
+        self.canvas.update_idletasks()
+
+        # Reubicar la vista para que ese punto de la plantilla permanezca
+        # en las mismas coordenadas de pantalla tras el cambio de escala.
+        target_x = max(0.0, 20 + doc_x * self.zoom - screen_x)
+        target_y = max(0.0, 20 + doc_y * self.zoom - screen_y)
+        region = self.canvas.cget("scrollregion").split()
+        if len(region) == 4:
+            region_w = max(1.0, float(region[2]) - float(region[0]))
+            region_h = max(1.0, float(region[3]) - float(region[1]))
+            self.canvas.xview_moveto(min(1.0, target_x / max(1.0, region_w)))
+            self.canvas.yview_moveto(min(1.0, target_y / max(1.0, region_h)))
 
     def _update_zoom_label(self):
         if hasattr(self, "zoom_label"):
@@ -2078,7 +2105,7 @@ class Configurador:
         # En touchpads de precisión, el pellizco suele llegar como rueda
         # con Ctrl; el desplazamiento con dos dedos llega como rueda normal.
         if self.tool == TOOL_ZOOM or (event.state & 0x0004):
-            self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
+            self.cambiar_zoom(1.15 if event.delta > 0 else 0.87, event=event)
             return
 
         # El desplazamiento horizontal de dos dedos suele exponerse como
@@ -2094,11 +2121,11 @@ class Configurador:
         self.canvas.yview_scroll(-unidades if event.delta > 0 else unidades, "units")
 
     def on_ctrl_wheel(self, event):
-        self.cambiar_zoom(1.15 if event.delta > 0 else 0.87)
+        self.cambiar_zoom(1.15 if event.delta > 0 else 0.87, event=event)
 
     def on_right_down(self, event):
         if self.tool == TOOL_ZOOM and self.formato and self.template_image is not None:
-            self.cambiar_zoom(0.87)
+            self.cambiar_zoom(0.87, event=event)
 
     def mostrar_mapa_atajos(self):
         titulo = "Mapa de atajos del configurador"
