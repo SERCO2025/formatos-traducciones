@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import io
 import os
 import re
 import tkinter as tk
@@ -1102,25 +1103,25 @@ class Configurador:
             s.orientation, c.r, c.g, c.b, p.width, p.height,
         )
 
-    def _crear_preview_reducido(self, campo):
-        """Crea una muestra a media resolución para uso exclusivo del configurador."""
+    def _crear_preview_comprimido(self, campo):
+        """Devuelve JPEG al 50 % más una máscara alpha, sin reducir dimensiones."""
         p = campo.position
-        ancho = max(1, int(round(p.width * 0.5)))
-        alto = max(1, int(round(p.height * 0.5)))
+        ancho = max(1, int(round(p.width)))
+        alto = max(1, int(round(p.height)))
         capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
         capa_draw = ImageDraw.Draw(capa)
 
         if campo.text_style.font_family:
             fuente = _cargar_fuente(
                 campo.text_style.font_family,
-                max(1, int(round(campo.text_style.font_size_px * 0.5))),
+                max(1, int(round(campo.text_style.font_size_px))),
                 campo.text_style.bold,
                 campo.text_style.italic,
             )
         else:
             try:
                 fuente = ImageFont.load_default(
-                    size=max(1, int(round(campo.text_style.font_size_px * 0.5)))
+                    size=max(1, int(round(campo.text_style.font_size_px)))
                 )
             except TypeError:
                 fuente = ImageFont.load_default()
@@ -1147,13 +1148,22 @@ class Configurador:
         else:
             xy, anchor = (0, y_muestra), "lt"
         capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
-        # Contorno negro rasterizado a la misma resolución reducida que el texto.
         capa_draw.rectangle(
             (0, 0, max(0, ancho - 1), max(0, alto - 1)),
             outline=(0, 0, 0, 255),
-            width=1,
+            width=min(3, ancho, alto),
         )
-        return capa
+
+        # JPEG no admite transparencia: se conserva el canal alpha por separado.
+        jpeg_buffer = io.BytesIO()
+        capa.convert("RGB").save(
+            jpeg_buffer, format="JPEG", quality=50, optimize=True
+        )
+        alpha_buffer = io.BytesIO()
+        capa.getchannel("A").save(
+            alpha_buffer, format="PNG", optimize=True
+        )
+        return jpeg_buffer.getvalue(), alpha_buffer.getvalue()
 
     def _draw_field(self, campo):
         p = campo.position
@@ -1173,10 +1183,9 @@ class Configurador:
 
         objetos = [rect]
 
-        # La muestra es solo orientativa: se rasteriza al 50 % de resolución
-        # y se guarda en caché. Al cambiar el zoom se amplía con NEAREST para
-        # conservar el aspecto pixelado y evitar volver a componer el texto.
-        # La imagen de respuesta final del capturador no usa esta caché.
+        # La muestra orientativa conserva las dimensiones del campo. Se cachea
+        # como JPEG quality=50 más máscara alpha; el zoom usa NEAREST. Esta caché
+        # solo pertenece al configurador y no afecta la salida del capturador.
         if campo.field_type in (
             FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER
         ):
@@ -1184,16 +1193,23 @@ class Configurador:
                 firma = self._field_preview_signature(campo)
                 entrada = self._field_preview_cache.get(campo.field_id)
                 if entrada is None or entrada[0] != firma:
-                    base = self._crear_preview_reducido(campo)
-                    self._field_preview_cache[campo.field_id] = (firma, base)
+                    comprimido = self._crear_preview_comprimido(campo)
+                    self._field_preview_cache[campo.field_id] = (firma, comprimido)
                 else:
-                    base = entrada[1]
+                    comprimido = entrada[1]
 
-                # Se genera una imagen de visualización por campo, nunca una
-                # copia ampliada de toda la plantilla.
+                # Reconstruir la capa solo para dibujarla; los bytes comprimidos
+                # permanecen en caché para reducir el consumo de memoria.
+                jpeg_buffer = io.BytesIO(comprimido[0])
+                alpha_buffer = io.BytesIO(comprimido[1])
+                with Image.open(jpeg_buffer) as imagen_rgb:
+                    base_rgb = imagen_rgb.convert("RGB")
+                with Image.open(alpha_buffer) as imagen_alpha:
+                    mascara_alpha = imagen_alpha.convert("L")
+                base_rgb.putalpha(mascara_alpha)
                 ancho_vista = max(1, int(round(p.width * self.zoom)))
                 alto_vista = max(1, int(round(p.height * self.zoom)))
-                visible_capa = base.resize(
+                visible_capa = base_rgb.resize(
                     (ancho_vista, alto_vista),
                     Image.Resampling.NEAREST,
                 )
@@ -1928,11 +1944,11 @@ class Configurador:
             campo.text_style.italic = italic_var.get()
             campo.text_style.color = color["value"]
             campo.position = Position(x, y, width, height)
-            # Las propiedades cambiaron: reconstruir ahora la caché reducida.
+            # Las propiedades cambiaron: regenerar ahora la caché comprimida.
             self._field_preview_cache.pop(campo.field_id, None)
             self._field_preview_cache[campo.field_id] = (
                 self._field_preview_signature(campo),
-                self._crear_preview_reducido(campo),
+                self._crear_preview_comprimido(campo),
             )
 
             if campo.field_type == FIELD_TYPE_NUMBER:
