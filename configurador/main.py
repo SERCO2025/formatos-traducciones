@@ -337,17 +337,12 @@ class Configurador:
         self.root.bind_all("<Right>", self._mover_seleccionado_tecla)
         self.root.bind_all("<Up>", self._mover_seleccionado_tecla)
         self.root.bind_all("<Down>", self._mover_seleccionado_tecla)
-        # Atajos explícitos para evitar depender exclusivamente de event.state en Windows.
+        # Modificadores de movimiento: flechas=1 px, Ctrl=5 px y Shift=25 px.
         for tecla in ("Left", "Right", "Up", "Down"):
-            self.root.bind_all(
-                "<Alt-%s>" % tecla,
-                lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=1),
-            )
             self.root.bind_all(
                 "<Shift-%s>" % tecla,
                 lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=25),
             )
-            # Ctrl no es un modificador de precisión: conserva el paso normal de 5 px.
             self.root.bind_all(
                 "<Control-%s>" % tecla,
                 lambda event: self._mover_seleccionado_tecla(event, pasos_forzados=5),
@@ -1566,10 +1561,8 @@ class Configurador:
         if not self.formato or not self.selected_field:
             return
         estado = int(getattr(event, "state", 0) or 0)
-        # Tkinter/Windows: Shift=0x0001 y Alt=Mod1Mask (0x0008).
-        alt = bool(estado & 0x0008)
         shift = bool(estado & 0x0001)
-        pasos = pasos_forzados if pasos_forzados is not None else (1 if alt else (25 if shift else 5))
+        pasos = pasos_forzados if pasos_forzados is not None else (25 if shift else 1)
         dx = -pasos if event.keysym == "Left" else pasos if event.keysym == "Right" else 0
         dy = pasos if event.keysym == "Down" else -pasos if event.keysym == "Up" else 0
         campo = self.selected_field
@@ -2121,11 +2114,10 @@ EDICIÓN
 Ctrl+Z        Deshacer la última operación registrada.
 Ctrl+Y        Rehacer una operación que se deshizo.
 Delete        Eliminar el campo seleccionado. Para evitar borrar texto por accidente, funciona cuando el lienzo o la ventana principal tiene el foco.
-Flechas       Mover el campo seleccionado: izquierda, derecha, arriba o abajo.
-Alt+Flechas   Mover el campo seleccionado 1 píxel por pulsación.
-Flechas       Sin Alt ni Shift: mover 5 píxeles por pulsación.
+Flechas       Mover el campo seleccionado 1 píxel por pulsación.
+Ctrl+Flechas  Mover el campo seleccionado 5 píxeles por pulsación.
 Shift+Flechas Mover el campo seleccionado 25 píxeles por pulsación.
-Nota: para mover un campo con las flechas, selecciona primero el campo y asegúrate de que el lienzo tenga el foco. En el teclado, Alt tiene prioridad para el movimiento de 1 píxel.
+Nota: selecciona primero el campo y asegúrate de que el lienzo tenga el foco. Ya no se necesita Alt para el ajuste fino.
 
 HERRAMIENTAS
 S             Activar Selección.
@@ -2185,8 +2177,8 @@ El movimiento cambia las coordenadas del campo, no las dimensiones de la imagen 
 
 MOVER UN CAMPO CON EL TECLADO
 Selecciona el campo y asegúrate de que el lienzo tenga el foco:
-• Flechas: 5 píxeles por pulsación.
-• Alt+Flechas: 1 píxel por pulsación, para ajustes finos.
+• Flechas sin modificadores: 1 píxel por pulsación, para ajustes finos.
+• Ctrl+Flechas: 5 píxeles por pulsación.
 • Shift+Flechas: 25 píxeles por pulsación, para desplazamientos rápidos.
 Las distancias se miden en píxeles de la plantilla, no en píxeles de pantalla. El movimiento queda limitado a los bordes de la plantilla.
 
