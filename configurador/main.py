@@ -122,6 +122,7 @@ class Configurador:
         # Caché rasterizada de baja resolución para las muestras de campos.
         # Se mantiene solo en memoria y no forma parte del FDT.
         self._field_preview_cache = {}
+        self._template_tile_images = {}
         self._field_drag_index = None
         self._field_drop_index = None
         self._field_drop_indicator = None
@@ -282,7 +283,10 @@ class Configurador:
         self.field_panel_visible = False
         self.vbar = ttk.Scrollbar(body, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(body, orient="horizontal", command=self.canvas.xview)
-        self.canvas.configure(yscrollcommand=self.vbar.set, xscrollcommand=self.hbar.set)
+        self.canvas.configure(
+            yscrollcommand=self._on_canvas_yscroll,
+            xscrollcommand=self._on_canvas_xscroll,
+        )
 
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.vbar.grid(row=0, column=1, sticky="ns")
@@ -293,6 +297,7 @@ class Configurador:
         body.columnconfigure(2, weight=0)
         body.rowconfigure(0, weight=1)
 
+        self.canvas.bind("<Configure>", self._on_canvas_configure, add="+")
         self.canvas.bind("<ButtonPress-1>", self.on_mouse_down)
         self.canvas.bind("<B1-Motion>", self.on_mouse_move)
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
@@ -989,21 +994,19 @@ class Configurador:
     def redraw(self):
         self.canvas.delete("all")
         self.field_items.clear()
-        # Las referencias PhotoImage de la vista actual se liberan al redibujar;
-        # la caché rasterizada de baja resolución se conserva entre niveles de zoom.
         self._field_preview_images.clear()
+        self.template_tk = None
         if self.template_image is None:
+            self.canvas.configure(scrollregion=(0, 0, 0, 0))
             return
 
+        # El área lógica conserva el tamaño completo según el zoom, pero solo
+        # se rasterizan mosaicos de la zona visible. Así no se crea una copia
+        # de cientos de megapíxeles al ampliar una plantilla completa.
         w = max(1, int(round(self.template_image.width * self.zoom)))
         h = max(1, int(round(self.template_image.height * self.zoom)))
-        # La plantilla se escala para visualizarla; el objeto original no se modifica.
-        # NEAREST conserva los píxeles visibles al ampliar, sin suavizado.
-        visible = self.template_image.resize((w, h), Image.Resampling.NEAREST)
-        self.template_tk = ImageTk.PhotoImage(visible)
-
-        self.canvas_image_id = self.canvas.create_image(20, 20, image=self.template_tk, anchor="nw")
         self.canvas.configure(scrollregion=(0, 0, w + 40, h + 40))
+        self._refresh_visible_template_tiles()
 
         if self.formato:
             ids_validos = {campo.field_id for campo in self.formato.fields}
@@ -1015,6 +1018,68 @@ class Configurador:
                 self._draw_field(campo)
 
         self._update_zoom_label()
+
+    def _on_canvas_xscroll(self, first, last):
+        self.hbar.set(first, last)
+        self.root.after_idle(self._refresh_visible_template_tiles)
+
+    def _on_canvas_yscroll(self, first, last):
+        self.vbar.set(first, last)
+        self.root.after_idle(self._refresh_visible_template_tiles)
+
+    def _on_canvas_configure(self, event=None):
+        self.root.after_idle(self._refresh_visible_template_tiles)
+
+    def _refresh_visible_template_tiles(self):
+        """Dibuja únicamente mosaicos de la plantilla que intersectan la vista."""
+        if self.template_image is None or not hasattr(self, "canvas"):
+            return
+        self.canvas.delete("template_tile")
+        canvas_width = max(1, self.canvas.winfo_width())
+        canvas_height = max(1, self.canvas.winfo_height())
+        left = max(0.0, self.canvas.canvasx(0) - 20)
+        top = max(0.0, self.canvas.canvasy(0) - 20)
+        right = min(
+            self.template_image.width * self.zoom,
+            self.canvas.canvasx(canvas_width) - 20,
+        )
+        bottom = min(
+            self.template_image.height * self.zoom,
+            self.canvas.canvasy(canvas_height) - 20,
+        )
+        if right <= left or bottom <= top:
+            return
+
+        # Cada mosaico queda limitado aproximadamente a 512x512 píxeles
+        # en pantalla, incluso cuando el zoom es elevado.
+        tile_source = max(1, int(512 / self.zoom))
+        sx0 = max(0, int(left // self.zoom))
+        sy0 = max(0, int(top // self.zoom))
+        sx1 = min(self.template_image.width, int(right / self.zoom) + 1)
+        sy1 = min(self.template_image.height, int(bottom / self.zoom) + 1)
+        start_x = (sx0 // tile_source) * tile_source
+        start_y = (sy0 // tile_source) * tile_source
+        for sy in range(start_y, sy1, tile_source):
+            for sx in range(start_x, sx1, tile_source):
+                crop = self.template_image.crop((
+                    sx, sy,
+                    min(self.template_image.width, sx + tile_source),
+                    min(self.template_image.height, sy + tile_source),
+                ))
+                out_w = max(1, int(round(crop.width * self.zoom)))
+                out_h = max(1, int(round(crop.height * self.zoom)))
+                tile = crop.resize((out_w, out_h), Image.Resampling.NEAREST)
+                photo = ImageTk.PhotoImage(tile)
+                self._template_tile_images[(sx, sy)] = photo
+                self.canvas.create_image(
+                    20 + sx * self.zoom, 20 + sy * self.zoom,
+                    image=photo, anchor="nw", tags=("template_tile",),
+                )
+        # Soltar las referencias de mosaicos que ya no se usan.
+        self._template_tile_images = {
+            key: image for key, image in self._template_tile_images.items()
+            if self.canvas.find_withtag("template_tile")
+        }
 
     def _redraw_fields_only(self):
         """Actualiza campos sin volver a escalar ni reconstruir la plantilla."""
