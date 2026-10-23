@@ -1098,6 +1098,10 @@ class Configurador:
                     image=photo, anchor="nw", tags=("template_tile",),
                 )
 
+        # Los mosaicos se reconstruyen al desplazarse; deben quedar siempre
+        # detrás de los campos para que Desplazar no los oculte visualmente.
+        self.canvas.tag_lower("template_tile")
+
     def _redraw_fields_only(self):
         """Actualiza campos sin volver a escalar ni reconstruir la plantilla."""
         if self.template_image is None:
