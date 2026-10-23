@@ -1173,8 +1173,8 @@ class Configurador:
         y2 = y1 + p.height * self.zoom
 
         color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
-        # El contorno visible se rasteriza junto con la muestra a media
-        # resolución; este rectángulo sin trazo conserva la zona interactiva.
+        # El contorno visible se rasteriza junto con la muestra; este
+        # rectángulo sin trazo conserva la zona interactiva.
         rect = self.canvas.create_rectangle(
             x1, y1, x2, y2,
             outline="", width=0,
