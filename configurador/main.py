@@ -978,6 +978,8 @@ class Configurador:
             # en la esquina superior izquierda, y después activar Desplazar.
             # Se agenda tras abrir para que Tkinter termine de actualizar el lienzo.
             self.root.after_idle(self._activar_desplazar_al_abrir)
+        except Exception as exc:
+            messagebox.showerror("Error al abrir", str(exc))
 
     def _activar_desplazar_al_abrir(self):
         if self.template_image is None or not self.formato:
@@ -994,8 +996,6 @@ class Configurador:
         self.canvas.event_generate("<ButtonPress-1>", x=x, y=y)
         self.canvas.event_generate("<ButtonRelease-1>", x=x, y=y)
         self.set_tool(TOOL_HAND)
-        except Exception as exc:
-            messagebox.showerror("Error al abrir", str(exc))
 
     def guardar(self):
         if not self.formato:
