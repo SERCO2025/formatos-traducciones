@@ -119,6 +119,9 @@ class Configurador:
         self._magnifier_label = None
         self._icon_images = {}
         self._field_preview_images = {}
+        # Caché rasterizada de baja resolución para las muestras de campos.
+        # Se mantiene solo en memoria y no forma parte del FDT.
+        self._field_preview_cache = {}
         self._field_drag_index = None
         self._field_drop_index = None
         self._field_drop_indicator = None
@@ -986,19 +989,28 @@ class Configurador:
     def redraw(self):
         self.canvas.delete("all")
         self.field_items.clear()
+        # Las referencias PhotoImage de la vista actual se liberan al redibujar;
+        # la caché rasterizada de baja resolución se conserva entre niveles de zoom.
         self._field_preview_images.clear()
         if self.template_image is None:
             return
 
         w = max(1, int(round(self.template_image.width * self.zoom)))
         h = max(1, int(round(self.template_image.height * self.zoom)))
-        visible = self.template_image.resize((w, h), Image.Resampling.LANCZOS)
+        # La plantilla se escala para visualizarla; el objeto original no se modifica.
+        # NEAREST conserva los píxeles visibles al ampliar, sin suavizado.
+        visible = self.template_image.resize((w, h), Image.Resampling.NEAREST)
         self.template_tk = ImageTk.PhotoImage(visible)
 
         self.canvas_image_id = self.canvas.create_image(20, 20, image=self.template_tk, anchor="nw")
         self.canvas.configure(scrollregion=(0, 0, w + 40, h + 40))
 
         if self.formato:
+            ids_validos = {campo.field_id for campo in self.formato.fields}
+            self._field_preview_cache = {
+                field_id: entry for field_id, entry in self._field_preview_cache.items()
+                if field_id in ids_validos
+            }
             for campo in self.formato.fields:
                 self._draw_field(campo)
 
@@ -1017,6 +1029,64 @@ class Configurador:
             for campo in self.formato.fields:
                 self._draw_field(campo)
 
+    def _field_preview_signature(self, campo):
+        """Propiedades que cambian el contenido de la muestra rasterizada."""
+        p = campo.position
+        s = campo.text_style
+        c = s.color
+        return (
+            campo.field_type, campo.question, bool(getattr(campo, "uppercase", False)),
+            s.font_family, s.font_size_px, s.bold, s.italic, s.alignment,
+            s.orientation, c.r, c.g, c.b, p.width, p.height,
+        )
+
+    def _crear_preview_reducido(self, campo):
+        """Crea una muestra a media resolución para uso exclusivo del configurador."""
+        p = campo.position
+        ancho = max(1, int(round(p.width * 0.5)))
+        alto = max(1, int(round(p.height * 0.5)))
+        capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
+        capa_draw = ImageDraw.Draw(capa)
+
+        if campo.text_style.font_family:
+            fuente = _cargar_fuente(
+                campo.text_style.font_family,
+                max(1, int(round(campo.text_style.font_size_px * 0.5))),
+                campo.text_style.bold,
+                campo.text_style.italic,
+            )
+        else:
+            try:
+                fuente = ImageFont.load_default(
+                    size=max(1, int(round(campo.text_style.font_size_px * 0.5)))
+                )
+            except TypeError:
+                fuente = ImageFont.load_default()
+
+        muestra = {
+            FIELD_TYPE_IMAGE: "IMAGEN",
+            FIELD_TYPE_NUMBER: "123456",
+        }.get(campo.field_type, "Texto")
+        if getattr(campo, "uppercase", False):
+            muestra = muestra.upper()
+
+        color_rgb = (
+            campo.text_style.color.r,
+            campo.text_style.color.g,
+            campo.text_style.color.b,
+            255,
+        )
+        alineacion = campo.text_style.alignment
+        y_muestra = min(5, max(0, alto - 1))
+        if alineacion == "center":
+            xy, anchor = (ancho // 2, y_muestra), "mt"
+        elif alineacion == "right":
+            xy, anchor = (ancho, y_muestra), "rt"
+        else:
+            xy, anchor = (0, y_muestra), "lt"
+        capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
+        return capa
+
     def _draw_field(self, campo):
         p = campo.position
         x1 = 20 + p.x * self.zoom
@@ -1033,62 +1103,29 @@ class Configurador:
 
         objetos = [rect]
 
-        # Al seleccionar un campo de texto se muestra una muestra real con
-        # la misma fuente y el mismo cálculo de tamaño que usará el renderer.
-        # Así el configurador deja de mostrar una referencia tipográfica
-        # diferente a la del documento final.
+        # La muestra es solo orientativa: se rasteriza al 50 % de resolución
+        # y se guarda en caché. Al cambiar el zoom se amplía con NEAREST para
+        # conservar el aspecto pixelado y evitar volver a componer el texto.
+        # La imagen de respuesta final del capturador no usa esta caché.
         if campo.field_type in (
             FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER
         ):
             try:
-                if campo.text_style.font_family:
-                    fuente = _cargar_fuente(
-                        campo.text_style.font_family,
-                        campo.text_style.font_size_px,
-                        campo.text_style.bold,
-                        campo.text_style.italic,
-                    )
+                firma = self._field_preview_signature(campo)
+                entrada = self._field_preview_cache.get(campo.field_id)
+                if entrada is None or entrada[0] != firma:
+                    base = self._crear_preview_reducido(campo)
+                    self._field_preview_cache[campo.field_id] = (firma, base)
                 else:
-                    try:
-                        fuente = ImageFont.load_default(
-                            size=max(1, int(campo.text_style.font_size_px))
-                        )
-                    except TypeError:
-                        fuente = ImageFont.load_default()
-                muestra = {
-                    FIELD_TYPE_IMAGE: "IMAGEN",
-                    FIELD_TYPE_NUMBER: "123456",
-                }.get(campo.field_type, "Texto")
-                if getattr(campo, "uppercase", False):
-                    muestra = muestra.upper()
-                color_rgb = (
-                    campo.text_style.color.r,
-                    campo.text_style.color.g,
-                    campo.text_style.color.b,
-                    255,
-                )
-                ancho = max(1, int(round(p.width)))
-                alto = max(1, int(round(p.height)))
-                capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
-                capa_draw = ImageDraw.Draw(capa)
-                alineacion = campo.text_style.alignment
-                y_muestra = min(10, max(0, alto - 1))
-                if alineacion == "center":
-                    xy = (ancho // 2, y_muestra)
-                    anchor = "mt"
-                elif alineacion == "right":
-                    xy = (ancho, y_muestra)
-                    anchor = "rt"
-                else:
-                    xy = (0, y_muestra)
-                    anchor = "lt"
-                capa_draw.text(xy, muestra, fill=color_rgb, font=fuente, anchor=anchor)
-                visible_capa = capa.resize(
-                    (
-                        max(1, int(round(ancho * self.zoom))),
-                        max(1, int(round(alto * self.zoom))),
-                    ),
-                    Image.Resampling.LANCZOS,
+                    base = entrada[1]
+
+                # Se genera una imagen de visualización por campo, nunca una
+                # copia ampliada de toda la plantilla.
+                ancho_vista = max(1, int(round(p.width * self.zoom)))
+                alto_vista = max(1, int(round(p.height * self.zoom)))
+                visible_capa = base.resize(
+                    (ancho_vista, alto_vista),
+                    Image.Resampling.NEAREST,
                 )
                 preview = ImageTk.PhotoImage(visible_capa)
                 self._field_preview_images[campo.field_id] = preview
@@ -1821,6 +1858,12 @@ class Configurador:
             campo.text_style.italic = italic_var.get()
             campo.text_style.color = color["value"]
             campo.position = Position(x, y, width, height)
+            # Las propiedades cambiaron: reconstruir ahora la caché reducida.
+            self._field_preview_cache.pop(campo.field_id, None)
+            self._field_preview_cache[campo.field_id] = (
+                self._field_preview_signature(campo),
+                self._crear_preview_reducido(campo),
+            )
 
             if campo.field_type == FIELD_TYPE_NUMBER:
                 campo.validation.numeric_only = True
