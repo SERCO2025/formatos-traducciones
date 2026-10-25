@@ -247,7 +247,7 @@ class Configurador:
                 }.get(self.tool, self.tool)
             ))
 
-        zoom_frame = tk.Frame(self.toolbar_host, bg="#171717")
+        zoom_frame = tk.Frame(self.toolbar_host, bg="#000000")
         zoom_frame.pack(side="right", padx=6)
         for icon, command in (
             ("minus", lambda: self.cambiar_zoom(0.8)),
@@ -258,7 +258,7 @@ class Configurador:
             b._icon_ref = self._icon_images.get((icon, 14))
             b.pack(side="left", padx=2, pady=4)
             ToolTip(b, "Alejar (-)" if icon == "minus" else "Acercar (+)")
-        self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
+        self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#000000", fg="white", width=6)
         ToolTip(self.zoom_label, "Nivel de zoom actual (usa * para restablecer al 100 %)")
         self.zoom_label.pack(side="left", padx=2)
         b = tk.Button(zoom_frame, text="+", command=lambda: self.cambiar_zoom(1.25),
@@ -1169,7 +1169,7 @@ class Configurador:
         img = Image.new("RGB", (w, h))
         draw = ImageDraw.Draw(img)
         for x in range(w):
-            v = round(255 * (1 - abs(2 * x / max(1, w - 1) - 1)))
+            v = round(128 * (1 - abs(2 * x / max(1, w - 1) - 1)))
             draw.line((x, 0, x, h), fill=(v, v, v))
         self._workspace_gradient_image = ImageTk.PhotoImage(img)
         self.canvas.itemconfigure(self._workspace_gradient_item, image=self._workspace_gradient_image)
