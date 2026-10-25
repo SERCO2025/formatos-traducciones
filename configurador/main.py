@@ -1158,7 +1158,7 @@ class Configurador:
         img = Image.new("RGB", (w, h))
         draw = ImageDraw.Draw(img)
         for y in range(h):
-            v = round(128 * y / max(1, h - 1))
+            v = round(64 * y / max(1, h - 1))
             draw.line((0, y, w, y), fill=(v, v, v))
         self._toolbar_gradient_image = ImageTk.PhotoImage(img)
         self._toolbar_gradient_label.configure(image=self._toolbar_gradient_image)
@@ -1169,7 +1169,7 @@ class Configurador:
         img = Image.new("RGB", (w, h))
         draw = ImageDraw.Draw(img)
         for x in range(w):
-            v = round(128 * (1 - abs(2 * x / max(1, w - 1) - 1)))
+            v = round(64 * (1 - abs(2 * x / max(1, w - 1) - 1))
             draw.line((x, 0, x, h), fill=(v, v, v))
         self._workspace_gradient_image = ImageTk.PhotoImage(img)
         self.canvas.itemconfigure(self._workspace_gradient_item, image=self._workspace_gradient_image)
