@@ -981,10 +981,16 @@ class ConfiguradorApp(App):
         nombre = str(keycode[1] if isinstance(keycode, (tuple, list)) and len(keycode) > 1 else keycode).lower()
         texto = (text or "").lower()
         # Normalizar operadores y teclas de navegación del teclado numérico.
-        nombre = {
-            "kp_left": "left", "kp_right": "right", "kp_up": "up", "kp_down": "down",
+        # En distintos teclados Kivy reporta nombres distintos según Num Lock.
+        mapa_teclado_numerico = {
+            "kp_left": "left", "kp_4": "left", "kp4": "left", "numpad4": "left",
+            "kp_right": "right", "kp_6": "right", "kp6": "right", "numpad6": "right",
+            "kp_up": "up", "kp_8": "up", "kp8": "up", "numpad8": "up",
+            "kp_down": "down", "kp_2": "down", "kp2": "down", "numpad2": "down",
             "kp_add": "plus", "kp_subtract": "minus", "kp_multiply": "asterisk",
-        }.get(nombre, nombre)
+        }
+        nombre = mapa_teclado_numerico.get(nombre, nombre)
+        texto = mapa_teclado_numerico.get(texto, texto)
         mods = {str(mod).lower() for mod in (modifiers or [])}
         control = "ctrl" in mods or "control" in mods
         shift = "shift" in mods
