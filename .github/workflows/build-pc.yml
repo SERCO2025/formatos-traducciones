@@ -2,7 +2,7 @@ name: Compilar EXE - Formatos Traducidos
 on:
   workflow_dispatch:
   push:
-    branches: [desarrollo, 'fix/**']
+    branches: [desarrollo, 'fix/**', diagnostico-atajos-numlock]
 permissions:
   contents: read
 jobs:
