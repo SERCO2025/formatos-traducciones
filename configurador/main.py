@@ -827,22 +827,29 @@ class Configurador:
         if hasattr(self, "status_label"):
             self.status_label.config(text=text)
 
-    def _diag_atajo(self, event, etapa):
-        try:
-            k = (getattr(event, "keysym", "") or "").lower()
-            ch = (getattr(event, "char", "") or "").lower()
-            if k not in ("i", "a", "s", "d", "q", "w", "z", "num_lock") and ch not in ("i", "a", "s", "d", "q", "w", "z"):
-                return
-            import tempfile
-            foco = self.root.focus_get()
-            with open(os.path.join(tempfile.gettempdir(), "formatos_traducciones_atajos.log"), "a", encoding="utf-8") as f:
-                f.write("{} keysym={!r} char={!r} keycode={!r} state={!r} widget={!r} foco={!r}\n".format(
-                    etapa, getattr(event, "keysym", None), getattr(event, "char", None),
-                    getattr(event, "keycode", None), getattr(event, "state", None),
-                    getattr(event, "widget", None), foco))
-        except Exception:
-            pass
-
+    # DIAGNÓSTICO DE ATAJOS (DESACTIVADO EN USO NORMAL):
+    # Este bloque registra únicamente eventos de teclado relacionados con los atajos
+    # I/A/S/D/Q/W/Z y Num Lock, incluyendo tecla, estado, widget y foco, en
+    # %TEMP%/formatos_traducciones_atajos.log. No registra clics de ratón ni todo
+    # lo que se escribe. Si en el futuro reaparece un problema de atajos o de foco,
+    # descomentar este método y las llamadas marcadas dentro de
+    # _manejar_atajo_teclado() para recopilar datos de diagnóstico; volver a comentarlos
+    # al terminar. Se deja apagado para evitar escrituras de log en cada evento.
+    # def _diag_atajo(self, event, etapa):
+    #     try:
+    #         k = (getattr(event, "keysym", "") or "").lower()
+    #         ch = (getattr(event, "char", "") or "").lower()
+    #         if k not in ("i", "a", "s", "d", "q", "w", "z", "num_lock") and ch not in ("i", "a", "s", "d", "q", "w", "z"):
+    #             return
+    #         import tempfile
+    #         foco = self.root.focus_get()
+    #         with open(os.path.join(tempfile.gettempdir(), "formatos_traducciones_atajos.log"), "a", encoding="utf-8") as f:
+    #             f.write("{} keysym={!r} char={!r} keycode={!r} state={!r} widget={!r} foco={!r}\n".format(
+    #                 etapa, getattr(event, "keysym", None), getattr(event, "char", None),
+    #                 getattr(event, "keycode", None), getattr(event, "state", None),
+    #                 getattr(event, "widget", None), foco))
+    #     except Exception:
+    #         pass
     def _atajos_habilitados_en_ventana_principal(self):
         try:
             widget = self.root.focus_get()
@@ -864,9 +871,11 @@ class Configurador:
         return bool(getattr(event, "state", 0) & 0x0008)
 
     def _manejar_atajo_teclado(self, event):
-        self._diag_atajo(event, 'entrada')
+        # Para reactivar el diagnóstico temporal, descomentar las llamadas siguientes
+        # y el método _diag_atajo() comentado más arriba.
+        # self._diag_atajo(event, 'entrada')
         if not self._atajos_habilitados_en_ventana_principal():
-            self._diag_atajo(event, 'descartado_por_foco')
+            # self._diag_atajo(event, 'descartado_por_foco')
             return None
         teclas = (event.keysym or "").lower()
         caracter = (getattr(event, "char", "") or "").lower()
