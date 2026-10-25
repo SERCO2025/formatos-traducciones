@@ -74,11 +74,11 @@ class HamburgerButton(Button):
 
 
 TOOLS = [
-    ("SEL", "select"),
-    ("D", "hand"),
-    ("A", FIELD_TYPE_TEXT),
-    ("#", FIELD_TYPE_NUMBER),
-    ("IMG", FIELD_TYPE_IMAGE),
+    ("seleccionar.png", "select"),
+    ("desplazar.png", "hand"),
+    ("campo_texto.png", FIELD_TYPE_TEXT),
+    ("campo_numerico.png", FIELD_TYPE_NUMBER),
+    ("campo_imagen.png", FIELD_TYPE_IMAGE),
 ]
 
 
@@ -844,12 +844,33 @@ class ConfiguradorApp(App):
         root.add_widget(barra)
 
         tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3))
-        for simbolo, tool in TOOLS:
-            tools.add_widget(Button(text=simbolo, on_release=lambda _, t=tool: self.set_tool(t)))
-        tools.add_widget(Button(text="−", on_release=lambda _: self.set_zoom(self.scale * 0.8)))
-        self.zoom_label = Label(text="100%", size_hint_x=None, width=dp(70))
+        icon_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "iconos", "configurador")
+        for icon_file, tool in TOOLS:
+            icon_path = os.path.join(icon_root, icon_file)
+            tools.add_widget(Button(
+                text="",
+                size_hint_x=None,
+                width=dp(44),
+                background_normal=icon_path,
+                background_down=icon_path,
+                background_disabled_normal=icon_path,
+                border=(0, 0, 0, 0),
+                on_release=lambda _, t=tool: self.set_tool(t),
+            ))
+        tools.add_widget(Button(text="−", size_hint_x=None, width=dp(38), on_release=lambda _: self.set_zoom(self.scale * 0.8)))
+        self.zoom_label = Label(text="100%", size_hint_x=None, width=dp(54))
         tools.add_widget(self.zoom_label)
-        tools.add_widget(Button(text="+", on_release=lambda _: self.set_zoom(self.scale * 1.25)))
+        zoom_icon = os.path.join(icon_root, "zoom_mas.png")
+        tools.add_widget(Button(
+            text="",
+            size_hint_x=None,
+            width=dp(44),
+            background_normal=zoom_icon,
+            background_down=zoom_icon,
+            background_disabled_normal=zoom_icon,
+            border=(0, 0, 0, 0),
+            on_release=lambda _: self.set_zoom(self.scale * 1.25),
+        ))
         root.add_widget(tools)
 
         self.editor = CanvasEditor(self)
