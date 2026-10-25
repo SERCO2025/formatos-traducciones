@@ -832,9 +832,42 @@ class ConfiguradorApp(App):
                 RuntimeError(mensaje),
             )
 
+    def _aplicar_gradiente(self, widget, orientacion):
+        # El fondo se compone de franjas de color; no intercepta toques ni
+        # modifica la jerarquía de widgets o los gestos del editor.
+        franjas = 64
+        instrucciones = []
+        with widget.canvas.before:
+            for i in range(franjas):
+                t = i / max(1, franjas - 1)
+                if orientacion == "vertical":
+                    v = 0.5 * t
+                else:
+                    v = 1.0 - abs(2.0 * t - 1.0)
+                instrucciones.append((Color(v, v, v, 1), Rectangle()))
+        def actualizar(*_args):
+            x, y = widget.pos
+            w, h = widget.size
+            for i, (color, rect) in enumerate(instrucciones):
+                t = i / franjas
+                if orientacion == "vertical":
+                    rect.pos = (x, y + h * t)
+                    rect.size = (w, h / franjas + 1)
+                    valor = 0.5 * ((i + 0.5) / franjas)
+                else:
+                    rect.pos = (x + w * t, y)
+                    rect.size = (w / franjas + 1, h)
+                    valor = 1.0 - abs(2.0 * ((i + 0.5) / franjas) - 1.0)
+                color.r = valor
+                color.g = valor
+                color.b = valor
+        widget.bind(pos=actualizar, size=actualizar)
+        actualizar()
+
     def build(self):
         root = BoxLayout(orientation="vertical")
         barra = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(6), padding=(dp(6), dp(5)))
+        self._aplicar_gradiente(barra, "vertical")
         barra.add_widget(HamburgerButton(on_release=lambda _: self.abrir_menu()))
         titulo = Label(text="Configurador de Formatos", halign="left", valign="middle", font_size="17sp")
         titulo.bind(size=lambda inst, val: setattr(inst, "text_size", val))
@@ -845,6 +878,7 @@ class ConfiguradorApp(App):
         root.add_widget(barra)
 
         tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3))
+        self._aplicar_gradiente(tools, "vertical")
         icon_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "iconos", "configurador")
         for icon_file, tool in TOOLS:
             icon_path = os.path.join(icon_root, icon_file)
@@ -866,6 +900,7 @@ class ConfiguradorApp(App):
         root.add_widget(tools)
 
         self.editor = CanvasEditor(self)
+        self._aplicar_gradiente(self.editor, "horizontal")
         root.add_widget(self.editor)
 
         self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left")
