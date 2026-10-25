@@ -205,6 +205,7 @@ class Configurador:
             ("campo_texto.png", "Texto", TOOL_TEXT),
             ("campo_numerico.png", "Número", TOOL_NUMBER),
             ("campo_imagen.png", "Imagen", TOOL_IMAGE),
+            ("zoom_mas.png", "Lupa", TOOL_ZOOM),
         ]
         for icon, label, tool in tools:
             button = tk.Button(
@@ -252,16 +253,14 @@ class Configurador:
             b._icon_ref = self._icon_images.get((icon, 14))
             b.pack(side="left", padx=2, pady=4)
             ToolTip(b, "Alejar (-)" if icon == "minus" else "Acercar (+)")
-        b = tk.Button(zoom_frame, image=self._toolbar_png_image("zoom_mas.png", 24),
-                      command=lambda: self.cambiar_zoom(1.25),
-                      bg="#262626", fg="white", relief="flat", bd=0,
-                      width=28, height=28, padx=4, pady=4)
-        b._icon_ref = self._icon_images.get(("png", "zoom_mas.png", 24))
-        b.pack(side="left", padx=2, pady=4)
-        ToolTip(b, "Acercar (+)")
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
         ToolTip(self.zoom_label, "Nivel de zoom actual (usa * para restablecer al 100 %)")
         self.zoom_label.pack(side="left", padx=2)
+        b = tk.Button(zoom_frame, text="+", command=lambda: self.cambiar_zoom(1.25),
+                      bg="#262626", fg="white", relief="flat", bd=0,
+                      width=2, padx=4, pady=4)
+        b.pack(side="left", padx=2, pady=4)
+        ToolTip(b, "Acercar (+)")
 
         body = tk.Frame(self.root, bg="black")
         body.pack(fill="both", expand=True)
@@ -840,6 +839,13 @@ class Configurador:
             return None
         teclas = (event.keysym or "").lower()
         caracter = (getattr(event, "char", "") or "").lower()
+        # Normalizar operadores y navegación del teclado numérico, independiente de Num Lock.
+        teclas = {
+            "kp_left": "left", "kp_right": "right",
+            "kp_up": "up", "kp_down": "down",
+            "kp_add": "plus", "kp_subtract": "minus",
+            "kp_multiply": "asterisk", "kp_divide": "slash",
+        }.get(teclas, teclas)
         control = bool(event.state & 0x0004)
         shift = bool(event.state & 0x0001)
         alt = bool(event.state & 0x0008)
@@ -864,8 +870,9 @@ class Configurador:
         # keysym y char se normalizan arriba, incluso con Shift o Caps Lock.
         herramientas = {"a": TOOL_TEXT, "s": TOOL_SELECT, "d": TOOL_HAND,
                         "z": TOOL_ZOOM, "q": TOOL_NUMBER, "w": TOOL_IMAGE}
-        if teclas in herramientas:
-            self.set_tool(herramientas[teclas])
+        tecla_atajo = teclas if teclas in herramientas else caracter
+        if tecla_atajo in herramientas:
+            self.set_tool(herramientas[tecla_atajo])
         elif teclas == "l":
             self.toggle_field_panel()
         elif teclas == "t":
@@ -1620,8 +1627,13 @@ class Configurador:
         estado = int(getattr(event, "state", 0) or 0)
         shift = bool(estado & 0x0001)
         pasos = pasos_forzados if pasos_forzados is not None else (25 if shift else 1)
-        dx = -pasos if event.keysym == "Left" else pasos if event.keysym == "Right" else 0
-        dy = pasos if event.keysym == "Down" else -pasos if event.keysym == "Up" else 0
+        tecla = (event.keysym or "").lower()
+        tecla = {"kp_left": "left", "kp_right": "right",
+                 "kp_up": "up", "kp_down": "down",
+                 "kp_4": "left", "kp_6": "right",
+                 "kp_8": "up", "kp_2": "down"}.get(tecla, tecla)
+        dx = -pasos if tecla == "left" else pasos if tecla == "right" else 0
+        dy = pasos if tecla == "down" else -pasos if tecla == "up" else 0
         campo = self.selected_field
         max_x = max(0, self.template_image.width - campo.position.width)
         max_y = max(0, self.template_image.height - campo.position.height)
