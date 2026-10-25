@@ -200,23 +200,22 @@ class Configurador:
 
         self._tool_buttons = []
         tools = [
-            ("mouse-pointer", "Selección", TOOL_SELECT),
-            ("hand-paper", "Desplazar", TOOL_HAND),
-            ("font", "Texto", TOOL_TEXT),
-            ("hashtag", "Número", TOOL_NUMBER),
-            ("image", "Imagen", TOOL_IMAGE),
-            ("search-plus", "Lupa", TOOL_ZOOM),
+            ("seleccionar.png", "Selección", TOOL_SELECT),
+            ("desplazar.png", "Desplazar", TOOL_HAND),
+            ("campo_texto.png", "Texto", TOOL_TEXT),
+            ("campo_numerico.png", "Número", TOOL_NUMBER),
+            ("campo_imagen.png", "Imagen", TOOL_IMAGE),
         ]
         for icon, label, tool in tools:
             button = tk.Button(
                 self.toolbar_host,
-                image=self._icon_image(icon, 17),
+                image=self._toolbar_png_image(icon, 24),
                 command=lambda t=tool: self.set_tool(t),
                 bg="#262626", fg="white",
                 activebackground="#444444", activeforeground="white",
                 relief="flat", width=20, height=20, padx=4, pady=4, bd=0,
             )
-            button._icon_ref = self._icon_images.get((icon, 17))
+            button._icon_ref = self._icon_images.get(("png", icon, 24))
             button.pack(side="left", padx=2, pady=5)
             self._tool_buttons.append(button)
             shortcut = {
@@ -246,7 +245,6 @@ class Configurador:
         zoom_frame.pack(side="right", padx=6)
         for icon, command in (
             ("minus", lambda: self.cambiar_zoom(0.8)),
-            ("plus", lambda: self.cambiar_zoom(1.25)),
         ):
             b = tk.Button(zoom_frame, image=self._icon_image(icon, 14), command=command,
                           bg="#262626", fg="white", relief="flat", bd=0,
@@ -254,6 +252,13 @@ class Configurador:
             b._icon_ref = self._icon_images.get((icon, 14))
             b.pack(side="left", padx=2, pady=4)
             ToolTip(b, "Alejar (-)" if icon == "minus" else "Acercar (+)")
+        b = tk.Button(zoom_frame, image=self._toolbar_png_image("zoom_mas.png", 24),
+                      command=lambda: self.cambiar_zoom(1.25),
+                      bg="#262626", fg="white", relief="flat", bd=0,
+                      width=28, height=28, padx=4, pady=4)
+        b._icon_ref = self._icon_images.get(("png", "zoom_mas.png", 24))
+        b.pack(side="left", padx=2, pady=4)
+        ToolTip(b, "Acercar (+)")
         self.zoom_label = tk.Label(zoom_frame, text="100 %", bg="#171717", fg="white", width=6)
         ToolTip(self.zoom_label, "Nivel de zoom actual (usa * para restablecer al 100 %)")
         self.zoom_label.pack(side="left", padx=2)
@@ -406,6 +411,28 @@ class Configurador:
                 return ruta
 
         return None
+
+    def _toolbar_png_image(self, filename, size=24):
+        """Carga los PNG locales del configurador sin conexión."""
+        clave = ("png", filename, size)
+        if clave in self._icon_images:
+            return self._icon_images[clave]
+        import sys
+        candidatos = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "iconos", "configurador", filename),
+        ]
+        raiz = getattr(sys, "_MEIPASS", None)
+        if raiz:
+            candidatos.insert(0, os.path.join(raiz, "assets", "iconos", "configurador", filename))
+        for ruta in candidatos:
+            if os.path.isfile(ruta):
+                with Image.open(ruta) as original:
+                    imagen = original.convert("RGBA")
+                    imagen.thumbnail((size, size), Image.LANCZOS)
+                    resultado = ImageTk.PhotoImage(imagen)
+                self._icon_images[clave] = resultado
+                return resultado
+        raise RuntimeError("No se encontró el icono PNG local: " + filename)
 
     def _icon_image(self, nombre, size=15):
         clave = (nombre, size)
