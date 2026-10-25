@@ -129,7 +129,7 @@ class PinchZoomScrollView(ScrollView):
                 distancia = self._distancia_pellizco()
                 if self._pinch_start_distance > 0:
                     factor = distancia / self._pinch_start_distance
-                    self._zoom = max(0.25, min(5.0, self._pinch_start_zoom * factor))
+                    self._zoom = max(0.25, min(100.0, self._pinch_start_zoom * factor))
                     self._aplicar_zoom()
                 return True
         return super().on_touch_move(touch)
@@ -734,10 +734,18 @@ class CapturadorApp(App):
         popup = Popup(title="Revisar documento terminado", content=contenido, size_hint=(0.96, 0.92))
         cerrar.bind(on_release=popup.dismiss)
         guardar.bind(on_release=lambda *_: (popup.dismiss(), self._guardar_resultado()))
+        # Aplicar NEAREST también cuando Kivy termine de cargar o cambie la textura.
+        vista.bind(texture=lambda _widget, textura: self._fijar_filtro_preview(textura))
         popup.bind(on_open=lambda *_: Clock.schedule_once(
             lambda _dt: self._ajustar_zoom_preview(scroll, vista, imagen.width, imagen.height), 0
         ))
         popup.open()
+
+    @staticmethod
+    def _fijar_filtro_preview(textura):
+        if textura is not None:
+            textura.mag_filter = "nearest"
+            textura.min_filter = "nearest"
 
     def _ajustar_zoom_preview(self, scroll, vista, ancho_imagen, alto_imagen):
         ancho_disponible = max(dp(100), scroll.width - dp(12))
@@ -745,9 +753,7 @@ class CapturadorApp(App):
         factor = min(ancho_disponible / float(ancho_imagen), alto_disponible / float(alto_imagen), 1.0)
         vista.allow_stretch = True
         # Mantener bordes de píxel: no interpolar al ajustar ni al ampliar.
-        if vista.texture is not None:
-            vista.texture.mag_filter = "nearest"
-            vista.texture.min_filter = "nearest"
+        self._fijar_filtro_preview(vista.texture)
         scroll.configurar_imagen_zoom(
             vista, (max(1, ancho_imagen * factor), max(1, alto_imagen * factor))
         )
