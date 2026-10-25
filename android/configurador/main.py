@@ -79,6 +79,7 @@ TOOLS = [
     ("campo_texto.png", FIELD_TYPE_TEXT),
     ("campo_numerico.png", FIELD_TYPE_NUMBER),
     ("campo_imagen.png", FIELD_TYPE_IMAGE),
+    ("zoom_mas.png", "zoom"),
 ]
 
 
@@ -860,17 +861,8 @@ class ConfiguradorApp(App):
         tools.add_widget(Button(text="−", size_hint_x=None, width=dp(38), on_release=lambda _: self.set_zoom(self.scale * 0.8)))
         self.zoom_label = Label(text="100%", size_hint_x=None, width=dp(54))
         tools.add_widget(self.zoom_label)
-        zoom_icon = os.path.join(icon_root, "zoom_mas.png")
-        tools.add_widget(Button(
-            text="",
-            size_hint_x=None,
-            width=dp(44),
-            background_normal=zoom_icon,
-            background_down=zoom_icon,
-            background_disabled_normal=zoom_icon,
-            border=(0, 0, 0, 0),
-            on_release=lambda _: self.set_zoom(self.scale * 1.25),
-        ))
+        tools.add_widget(Button(text="+", size_hint_x=None, width=dp(38),
+                                on_release=lambda _: self.set_zoom(self.scale * 1.25)))
         root.add_widget(tools)
 
         self.editor = CanvasEditor(self)
@@ -988,6 +980,11 @@ class ConfiguradorApp(App):
             return False
         nombre = str(keycode[1] if isinstance(keycode, (tuple, list)) and len(keycode) > 1 else keycode).lower()
         texto = (text or "").lower()
+        # Normalizar operadores y teclas de navegación del teclado numérico.
+        nombre = {
+            "kp_left": "left", "kp_right": "right", "kp_up": "up", "kp_down": "down",
+            "kp_add": "plus", "kp_subtract": "minus", "kp_multiply": "asterisk",
+        }.get(nombre, nombre)
         mods = {str(mod).lower() for mod in (modifiers or [])}
         control = "ctrl" in mods or "control" in mods
         shift = "shift" in mods
@@ -1016,8 +1013,9 @@ class ConfiguradorApp(App):
                 return False
         herramientas = {"a": FIELD_TYPE_TEXT, "s": "select", "d": "hand",
                         "z": "zoom", "q": FIELD_TYPE_NUMBER, "w": FIELD_TYPE_IMAGE}
-        if nombre in herramientas and not shift and not alt:
-            self.set_tool(herramientas[nombre])
+        tecla_atajo = nombre if nombre in herramientas else texto
+        if tecla_atajo in herramientas and not shift and not alt:
+            self.set_tool(herramientas[tecla_atajo])
         elif nombre == "l" and not shift and not alt:
             self.mostrar_lista_campos()
         elif nombre == "t" and not shift and not alt:
