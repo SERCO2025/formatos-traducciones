@@ -712,9 +712,8 @@ class CapturadorApp(App):
         contenido = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
         scroll = PinchZoomScrollView(do_scroll_x=True, do_scroll_y=True, bar_width=dp(5))
         ruta_preview = os.path.join(tempfile.gettempdir(), "formatos_traducidos_final_preview.png")
-        copia = imagen.copy()
-        copia.thumbnail((1200, 1600), PILImage.Resampling.LANCZOS)
-        copia.save(ruta_preview, format="PNG")
+        # La vista previa conserva las dimensiones completas; no crear miniatura.
+        imagen.save(ruta_preview, format="PNG")
         vista = Image(
             source=ruta_preview, allow_stretch=True, keep_ratio=True,
             size_hint=(None, None), size=(dp(320), dp(420)),
@@ -736,7 +735,7 @@ class CapturadorApp(App):
         cerrar.bind(on_release=popup.dismiss)
         guardar.bind(on_release=lambda *_: (popup.dismiss(), self._guardar_resultado()))
         popup.bind(on_open=lambda *_: Clock.schedule_once(
-            lambda _dt: self._ajustar_zoom_preview(scroll, vista, copia.width, copia.height), 0
+            lambda _dt: self._ajustar_zoom_preview(scroll, vista, imagen.width, imagen.height), 0
         ))
         popup.open()
 
@@ -745,6 +744,10 @@ class CapturadorApp(App):
         alto_disponible = max(dp(100), scroll.height - dp(12))
         factor = min(ancho_disponible / float(ancho_imagen), alto_disponible / float(alto_imagen), 1.0)
         vista.allow_stretch = True
+        # Mantener bordes de píxel: no interpolar al ajustar ni al ampliar.
+        if vista.texture is not None:
+            vista.texture.mag_filter = "nearest"
+            vista.texture.min_filter = "nearest"
         scroll.configurar_imagen_zoom(
             vista, (max(1, ancho_imagen * factor), max(1, alto_imagen * factor))
         )
