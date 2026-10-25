@@ -816,7 +816,8 @@ class CapturadorApp:
 
             nuevo_ancho = max(1, int(round(imagen.width * zoom["valor"])))
             nuevo_alto = max(1, int(round(imagen.height * zoom["valor"])))
-            copia = imagen.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
+            # Escalado por vecino más cercano: amplía píxeles sin suavizado/interpolación.
+            copia = imagen.resize((nuevo_ancho, nuevo_alto), Image.Resampling.NEAREST)
             foto = ImageTk.PhotoImage(copia)
             self._final_preview_photo = foto
 
