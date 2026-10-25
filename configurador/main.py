@@ -841,8 +841,17 @@ class Configurador:
         caracter = (getattr(event, "char", "") or "").lower()
         # Normalizar operadores y navegación del teclado numérico, independiente de Num Lock.
         teclas = {
-            "kp_left": "left", "kp_right": "right",
-            "kp_up": "up", "kp_down": "down",
+            # Las teclas del pad numérico cambian de nombre con Num Lock.
+            "kp_left": "left", "kp_4": "left", "kp4": "left", "numpad4": "left",
+            "kp_right": "right", "kp_6": "right", "kp6": "right", "numpad6": "right",
+            "kp_up": "up", "kp_8": "up", "kp8": "up", "numpad8": "up",
+            "kp_down": "down", "kp_2": "down", "kp2": "down", "numpad2": "down",
+            "kp_home": "home", "kp_7": "home", "kp7": "home", "numpad7": "home",
+            "kp_end": "end", "kp_1": "end", "kp1": "end", "numpad1": "end",
+            "kp_prior": "prior", "kp_9": "prior", "kp9": "prior", "numpad9": "prior",
+            "kp_next": "next", "kp_3": "next", "kp3": "next", "numpad3": "next",
+            "kp_insert": "insert", "kp_0": "insert", "kp0": "insert", "numpad0": "insert",
+            "kp_delete": "delete", "kp_decimal": "delete", "numpaddecimal": "delete",
             "kp_add": "plus", "kp_subtract": "minus",
             "kp_multiply": "asterisk", "kp_divide": "slash",
         }.get(teclas, teclas)
@@ -1628,10 +1637,12 @@ class Configurador:
         shift = bool(estado & 0x0001)
         pasos = pasos_forzados if pasos_forzados is not None else (25 if shift else 1)
         tecla = (event.keysym or "").lower()
-        tecla = {"kp_left": "left", "kp_right": "right",
-                 "kp_up": "up", "kp_down": "down",
-                 "kp_4": "left", "kp_6": "right",
-                 "kp_8": "up", "kp_2": "down"}.get(tecla, tecla)
+        tecla = {
+            "kp_left": "left", "kp_4": "left", "kp4": "left", "numpad4": "left",
+            "kp_right": "right", "kp_6": "right", "kp6": "right", "numpad6": "right",
+            "kp_up": "up", "kp_8": "up", "kp8": "up", "numpad8": "up",
+            "kp_down": "down", "kp_2": "down", "kp2": "down", "numpad2": "down",
+        }.get(tecla, tecla)
         dx = -pasos if tecla == "left" else pasos if tecla == "right" else 0
         dy = pasos if tecla == "down" else -pasos if tecla == "up" else 0
         campo = self.selected_field
