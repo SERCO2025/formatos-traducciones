@@ -841,9 +841,9 @@ class ConfiguradorApp(App):
             for i in range(franjas):
                 t = i / max(1, franjas - 1)
                 if orientacion == "vertical":
-                    v = 0.5 * (1.0 - t)
+                    v = 0.25 * (1.0 - t)
                 else:
-                    v = 0.5 * (1.0 - abs(2.0 * t - 1.0))
+                    v = 0.25 * (1.0 - abs(2.0 * t - 1.0))
                 instrucciones.append((Color(v, v, v, 1), Rectangle()))
         def actualizar(*_args):
             x, y = widget.pos
