@@ -195,8 +195,13 @@ class Configurador:
         menubar.add_cascade(label="Ayuda", menu=ayuda)
         self.root.config(menu=menubar)
 
-        self.toolbar_host = tk.Frame(self.root, bg="#171717", height=42)
+        self.toolbar_host = tk.Frame(self.root, bg="#000000", height=42)
         self.toolbar_host.pack(side="top", fill="x")
+        self._toolbar_gradient_image = None
+        self._toolbar_gradient_label = tk.Label(self.toolbar_host, bd=0, highlightthickness=0)
+        self._toolbar_gradient_label.place(x=0, y=0, relwidth=1, relheight=1)
+        self._toolbar_gradient_label.lower()
+        self.toolbar_host.bind("<Configure>", self._actualizar_gradiente_barra, add="+")
 
         self._tool_buttons = []
         tools = [
@@ -269,6 +274,8 @@ class Configurador:
             body, bg="black", highlightthickness=0,
             scrollregion=(0, 0, 0, 0)
         )
+        self._workspace_gradient_image = None
+        self._workspace_gradient_item = self.canvas.create_image(0, 0, anchor="nw", tags=("workspace_gradient",))
 
         self.field_dock = tk.Frame(body, bg="#181818", width=270)
         self.field_dock.grid(row=0, column=2, sticky="nsew", padx=(2, 0))
@@ -1145,15 +1152,42 @@ class Configurador:
 
         self._update_zoom_label()
 
+    def _actualizar_gradiente_barra(self, event=None):
+        if not hasattr(self, "toolbar_host") or not hasattr(self, "_toolbar_gradient_label"): return
+        w, h = max(1, self.toolbar_host.winfo_width()), max(1, self.toolbar_host.winfo_height())
+        img = Image.new("RGB", (w, h))
+        draw = ImageDraw.Draw(img)
+        for y in range(h):
+            v = round(128 * y / max(1, h - 1))
+            draw.line((0, y, w, y), fill=(v, v, v))
+        self._toolbar_gradient_image = ImageTk.PhotoImage(img)
+        self._toolbar_gradient_label.configure(image=self._toolbar_gradient_image)
+
+    def _actualizar_gradiente_area(self):
+        if not hasattr(self, "canvas") or not self.canvas.winfo_exists(): return
+        w, h = max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height())
+        img = Image.new("RGB", (w, h))
+        draw = ImageDraw.Draw(img)
+        for x in range(w):
+            v = round(255 * (1 - abs(2 * x / max(1, w - 1) - 1)))
+            draw.line((x, 0, x, h), fill=(v, v, v))
+        self._workspace_gradient_image = ImageTk.PhotoImage(img)
+        self.canvas.itemconfigure(self._workspace_gradient_item, image=self._workspace_gradient_image)
+        self.canvas.coords(self._workspace_gradient_item, self.canvas.canvasx(0), self.canvas.canvasy(0))
+        self.canvas.tag_lower(self._workspace_gradient_item)
+
     def _on_canvas_xscroll(self, first, last):
         self.hbar.set(first, last)
+        self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
 
     def _on_canvas_yscroll(self, first, last):
         self.vbar.set(first, last)
+        self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
 
     def _on_canvas_configure(self, event=None):
+        self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
 
     def _refresh_visible_template_tiles(self):
