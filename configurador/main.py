@@ -827,6 +827,22 @@ class Configurador:
         if hasattr(self, "status_label"):
             self.status_label.config(text=text)
 
+    def _diag_atajo(self, event, etapa):
+        try:
+            k = (getattr(event, "keysym", "") or "").lower()
+            ch = (getattr(event, "char", "") or "").lower()
+            if k not in ("i", "a", "s", "d", "q", "w", "z", "num_lock") and ch not in ("i", "a", "s", "d", "q", "w", "z"):
+                return
+            import tempfile
+            foco = self.root.focus_get()
+            with open(os.path.join(tempfile.gettempdir(), "formatos_traducciones_atajos.log"), "a", encoding="utf-8") as f:
+                f.write("{} keysym={!r} char={!r} keycode={!r} state={!r} widget={!r} foco={!r}\n".format(
+                    etapa, getattr(event, "keysym", None), getattr(event, "char", None),
+                    getattr(event, "keycode", None), getattr(event, "state", None),
+                    getattr(event, "widget", None), foco))
+        except Exception:
+            pass
+
     def _atajos_habilitados_en_ventana_principal(self):
         try:
             widget = self.root.focus_get()
@@ -835,7 +851,9 @@ class Configurador:
             return False
 
     def _manejar_atajo_teclado(self, event):
+        self._diag_atajo(event, 'entrada')
         if not self._atajos_habilitados_en_ventana_principal():
+            self._diag_atajo(event, 'descartado_por_foco')
             return None
         teclas = (event.keysym or "").lower()
         caracter = (getattr(event, "char", "") or "").lower()
