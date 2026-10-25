@@ -850,6 +850,19 @@ class Configurador:
         except Exception:
             return False
 
+    def _alt_presionado(self, event):
+        # En Windows, Tk puede incluir el estado de Num Lock en el mismo
+        # bit que este código interpretaba como Alt. Consultar el estado
+        # físico de Alt evita descartar los atajos cuando Num Lock está activo.
+        try:
+            import sys
+            if sys.platform.startswith("win"):
+                import ctypes
+                return bool(ctypes.windll.user32.GetKeyState(0x12) & 0x8000)
+        except Exception:
+            pass
+        return bool(getattr(event, "state", 0) & 0x0008)
+
     def _manejar_atajo_teclado(self, event):
         self._diag_atajo(event, 'entrada')
         if not self._atajos_habilitados_en_ventana_principal():
@@ -875,7 +888,7 @@ class Configurador:
         }.get(teclas, teclas)
         control = bool(event.state & 0x0004)
         shift = bool(event.state & 0x0001)
-        alt = bool(event.state & 0x0008)
+        alt = self._alt_presionado(event)
         if control:
             if alt:
                 return None
