@@ -811,7 +811,7 @@ class CapturadorApp:
                 zoom["valor"] = min(1.0, ancho / float(imagen.width), alto / float(imagen.height))
                 zoom["inicializado"] = True
             elif factor is not None:
-                zoom["valor"] = max(0.02, min(2.0, zoom["valor"] * factor))
+                zoom["valor"] = max(0.02, min(32.0, zoom["valor"] * factor))
                 zoom["manual"] = True
 
             nuevo_ancho = max(1, int(round(imagen.width * zoom["valor"])))
