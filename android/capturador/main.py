@@ -697,13 +697,11 @@ class CapturadorApp(App):
 
     def _mostrar_previsualizacion_final(self):
         try:
-            self._imagen_final = os.path.join(tempfile.gettempdir(), "formatos_traducidos_resultado.jpg")
-            imagen = renderizar_imagen(self.formato, self.respuestas)
-            imagen.save(
-                self._imagen_final, format="JPEG", quality=100, subsampling=0,
-                dpi=(self.formato.template.dpi, self.formato.template.dpi),
-            )
             self._nombre_final = construir_nombre_archivo(self.formato, self.respuestas)
+            extension = os.path.splitext(self._nombre_final)[1].lower() or ".jpg"
+            self._imagen_final = os.path.join(tempfile.gettempdir(), "formatos_traducidos_resultado" + extension)
+            imagen = renderizar_imagen(self.formato, self.respuestas)
+            imagen.save(self._imagen_final, format={".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP", ".tif": "TIFF", ".tiff": "TIFF"}.get(extension, "JPEG"), dpi=(self.formato.template.dpi, self.formato.template.dpi), **({"quality": 100, "subsampling": 0} if extension in (".jpg", ".jpeg") else {}))
             self._popup_final(imagen)
         except Exception as exc:
             self._mensaje("No se pudo generar el documento", "%s\n\n%s" % (exc, traceback.format_exc()))
@@ -722,12 +720,12 @@ class CapturadorApp(App):
         contenido.add_widget(scroll)
         contenido.add_widget(Label(
             text="Archivo: %s\nTamaño original: %d × %d px | RGB | JPEG calidad 100" %
-                 (self._nombre_final, imagen.width, imagen.height),
+                 (self._nombre_final, imagen.width, imagen.height, os.path.splitext(self._nombre_final)[1].upper().lstrip(".")),
             size_hint_y=None, height=dp(58), font_size="12sp",
         ))
         botones = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
         cerrar = Button(text="Cerrar")
-        guardar = Button(text="Guardar JPEG")
+        guardar = Button(text="Guardar archivo")
         botones.add_widget(cerrar)
         botones.add_widget(guardar)
         contenido.add_widget(botones)
@@ -1114,13 +1112,15 @@ class CapturadorApp(App):
                     pass
 
     def _guardar_jpeg_en_carpeta(self, tree_uri):
-        destino = self._crear_documento_en_carpeta(tree_uri, "image/jpeg", self._nombre_final)
+        extension = os.path.splitext(self._nombre_final)[1].lower()
+        mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".bmp": "image/bmp", ".webp": "image/webp", ".tif": "image/tiff", ".tiff": "image/tiff"}.get(extension, "image/jpeg")
+        destino = self._crear_documento_en_carpeta(tree_uri, mime, self._nombre_final)
         self._copiar_archivo_a_uri(self._imagen_final, destino)
         self._registrar_jpeg_generado(destino)
         self._limpiar_archivos_vencidos()
         nombre_guardado = self._nombre_documento_uri(destino) or self._nombre_final
         if nombre_guardado == self._nombre_final:
-            self._mensaje("Archivo guardado", "JPEG guardado en la carpeta configurada:\n%s" % nombre_guardado)
+            self._mensaje("Archivo guardado", "Archivo guardado en la carpeta configurada:\n%s" % nombre_guardado)
         else:
             self._mensaje("Nombre asignado por Android", "Nombre solicitado:\n%s\n\nNombre creado por el proveedor de archivos:\n%s" % (self._nombre_final, nombre_guardado))
 
@@ -1128,7 +1128,7 @@ class CapturadorApp(App):
         if not self._save_jpeg_folder_uri or not ANDROID_NATIVE:
             self._mensaje(
                 "Configura la carpeta de destino",
-                "Antes de guardar el JPEG, abre Configuración y elige la carpeta de documentos terminados.",
+                "Antes de guardar el documento, abre Configuración y elige la carpeta de documentos terminados.",
             )
             self._mostrar_configuracion()
             return
@@ -1138,7 +1138,7 @@ class CapturadorApp(App):
             self._guardar_jpeg_en_carpeta(tree_uri)
         except Exception as exc:
             self._mensaje(
-                "No se pudo guardar el JPEG",
+                "No se pudo guardar el documento",
                 "%s\n\nRevisa la carpeta configurada desde Configuración y vuelve a intentarlo." % exc,
             )
 
