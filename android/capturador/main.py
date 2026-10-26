@@ -472,7 +472,7 @@ class CapturadorApp(App):
                     else:
                         self._mensaje(
                             "Archivo guardado",
-                            "Se guardó el JPEG como:\n%s" % self._nombre_final,
+                            "Se guardó el archivo como:\n%s" % self._nombre_final,
                         )
         except Exception as exc:
             self._mensaje("Error al procesar el archivo", "%s\n\n%s" % (exc, traceback.format_exc()))
