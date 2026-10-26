@@ -1026,6 +1026,11 @@ class Configurador:
             for evento in ("<Enter>", "<Motion>", "<B1-Motion>", "<ButtonPress-1>", "<ButtonPress-3>"):
                 self.canvas.bind(evento, self._aplicar_cursor_nativo, add="+")
 
+            # Algunos manejadores de Tk/Windows vuelven a imponer la flecha
+            # aunque el ratón no se mueva. Reaplicar el cursor mientras el
+            # puntero permanezca sobre el lienzo evita que se quede la flecha.
+            self.root.after(15, self._mantener_cursor_nativo)
+
             # Intentar mantenerlo también en reposo mediante WM_SETCURSOR.
             # Si esta parte falla, los cursores siguen disponibles para el respaldo.
             try:
@@ -1078,6 +1083,23 @@ class Configurador:
                 self._cursor_user32.SetCursor(handle)
             except Exception:
                 pass
+
+    def _mantener_cursor_nativo(self):
+        """Reafirma el cursor activo si el puntero sigue sobre el lienzo."""
+        if os.name != "nt":
+            return
+        try:
+            x, y = self.root.winfo_pointerxy()
+            widget = self.root.winfo_containing(x, y)
+            if widget == self.canvas:
+                self._aplicar_cursor_nativo()
+        except Exception:
+            pass
+        try:
+            if self.root.winfo_exists():
+                self.root.after(15, self._mantener_cursor_nativo)
+        except Exception:
+            pass
 
     def _actualizar_cursor_si_lienzo_activo(self):
         if os.name != "nt":
