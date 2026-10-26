@@ -213,7 +213,7 @@ def renderizar_imagen(formato, respuestas):
     if not plantilla_path.exists():
         raise FileNotFoundError("No se encontró la plantilla: %s" % plantilla_path)
 
-    imagen = Image.open(plantilla_path).convert("RGB")
+    imagen = Image.open(plantilla_path).copy()
     if imagen.size != (formato.template.width, formato.template.height):
         raise ValueError(
             "Las dimensiones reales de la plantilla no coinciden con el FDT."
@@ -305,20 +305,34 @@ def renderizar_formato(formato, respuestas, salida):
     imagen = renderizar_imagen(formato, respuestas)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
-    imagen.save(
-        salida,
-        format="JPEG",
-        quality=100,
-        subsampling=0,
-        dpi=(formato.template.dpi, formato.template.dpi),
-    )
+    extension = salida.suffix.lower()
+    formatos = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP", ".tif": "TIFF", ".tiff": "TIFF"}
+    formato_salida = formatos.get(extension)
+    if formato_salida is None:
+        raise ValueError("La extensión de salida no corresponde a un formato de imagen admitido.")
+    opciones = {"dpi": (formato.template.dpi, formato.template.dpi)}
+    if formato_salida == "JPEG":
+        if imagen.mode not in ("RGB", "L"):
+            fondo = Image.new("RGB", imagen.size, "white")
+            if "A" in imagen.getbands():
+                fondo.paste(imagen, mask=imagen.getchannel("A"))
+            else:
+                fondo.paste(imagen.convert("RGB"))
+            imagen = fondo
+        opciones.update(quality=100, subsampling=0)
+    imagen.save(salida, format=formato_salida, **opciones)
     return salida
+
+
+def _extension_plantilla(formato):
+    extension = Path(str(formato.template.path or "")).suffix.lower()
+    return extension if extension in {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"} else ".jpg"
 
 
 def construir_nombre_archivo(formato, respuestas):
     configuracion = getattr(formato, "output_naming", None)
     if configuracion is None:
-        return "resultado.jpg"
+        return "resultado" + _extension_plantilla(formato)
 
     partes = []
     texto = str(getattr(configuracion, "name_text", "") or "").strip()
@@ -341,4 +355,4 @@ def construir_nombre_archivo(formato, respuestas):
 
     nombre = re.sub(r'[\\/:*?"<>|]+', "_", nombre)
     nombre = re.sub(r"\s+", " ", nombre).strip()
-    return nombre + ".jpg"
+    return nombre + _extension_plantilla(formato)
