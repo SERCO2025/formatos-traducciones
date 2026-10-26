@@ -808,7 +808,7 @@ class CapturadorApp(App):
                 imagen_path = str(valor)
                 if os.path.isfile(imagen_path):
                     extension = os.path.splitext(imagen_path)[1].lower()
-                    if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+                    if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
                         extension = ".jpg"
                     seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
                     interno = "imagenes/%s%s" % (seguro, extension)
