@@ -718,9 +718,11 @@ class CapturadorApp(App):
         )
         scroll.add_widget(vista)
         contenido.add_widget(scroll)
+        extension_visible = os.path.splitext(self._nombre_final)[1].upper().lstrip(".")
+        modo_visible = imagen.mode
         contenido.add_widget(Label(
-            text="Archivo: %s\nTamaño original: %d × %d px | RGB | JPEG calidad 100" %
-                 (self._nombre_final, imagen.width, imagen.height, os.path.splitext(self._nombre_final)[1].upper().lstrip(".")),
+            text="Archivo: %s\nTamaño original: %d × %d px | Formato: %s | Modo: %s" %
+                 (self._nombre_final, imagen.width, imagen.height, extension_visible, modo_visible),
             size_hint_y=None, height=dp(58), font_size="12sp",
         ))
         botones = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
