@@ -1035,7 +1035,16 @@ class Configurador:
             return
 
         try:
-            imagen = Image.open(ruta).convert("RGB")
+            # Leer metadatos de la imagen original antes de crear la copia de vista.
+            with Image.open(ruta) as original:
+                ancho, alto = original.size
+                dpi_info = original.info.get("dpi", (300, 300))
+                try:
+                    dpi = max(1, int(round(float(dpi_info[0] or 300))))
+                except (TypeError, ValueError, IndexError):
+                    dpi = 300
+                modo = original.mode
+                imagen = original.convert("RGB")
             self.template_image = imagen.copy()
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
