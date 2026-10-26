@@ -911,17 +911,30 @@ class ConfiguradorApp(App):
                 border=(0, 0, 0, 0),
                 on_release=lambda _, t=tool: self.set_tool(t),
             )
-            icon = KivyImage(
-                source=icon_path,
-                size_hint=(None, None),
-                size=(dp(44), dp(44)),
-                allow_stretch=True,
-                keep_ratio=True,
-            )
-            def centrar_icono(inst, *_args, boton=button):
-                inst.center = boton.center
-            button.add_widget(icon)
-            button.bind(pos=centrar_icono, size=centrar_icono)
+            # Dibujar el PNG directamente en el canvas del botón evita que
+            # un widget Image hijo quede mal posicionado o fuera de la barra.
+            if not os.path.isfile(icon_path):
+                print("ERROR: No existe el icono de herramienta: " + icon_path)
+            else:
+                try:
+                    textura_icono = CoreImage(icon_path).texture
+                    with button.canvas.after:
+                        Color(1, 1, 1, 1)
+                        rect_icono = Rectangle(texture=textura_icono)
+
+                    def actualizar_icono(_inst=None, *_args, boton=button, rect=rect_icono):
+                        lado = dp(32)
+                        rect.pos = (
+                            boton.x + (boton.width - lado) / 2.0,
+                            boton.y + (boton.height - lado) / 2.0,
+                        )
+                        rect.size = (lado, lado)
+
+                    button.bind(pos=actualizar_icono, size=actualizar_icono)
+                    actualizar_icono()
+                except Exception:
+                    print("ERROR: No se pudo cargar el icono de herramienta: " + icon_path)
+                    traceback.print_exc()
             self.tool_buttons[tool] = button
             tools.add_widget(button)
         tools.add_widget(Button(text="−", size_hint_x=None, width=dp(38), on_release=lambda _: self.set_zoom(self.scale * 0.8)))
