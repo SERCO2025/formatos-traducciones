@@ -140,6 +140,7 @@ class Configurador:
 
         self._build_ui()
         self._install_native_cursor_hook()
+        self.set_tool(self.tool)
         self._set_status("Listo. Importe una plantilla para comenzar.")
 
     def _build_ui(self):
@@ -227,6 +228,7 @@ class Configurador:
                 relief="flat", width=20, height=20, padx=4, pady=4, bd=0,
             )
             button._icon_ref = self._icon_images.get(("png", icon, 24))
+            button._tool_id = tool
             button.pack(side="left", padx=2, pady=5)
             self._tool_buttons.append(button)
             shortcut = {
@@ -992,125 +994,11 @@ class Configurador:
             archivo.close()
 
     def _install_native_cursor_hook(self):
-        """Carga cursores personalizados y los mantiene activos en Windows."""
-        if os.name != "nt":
-            return
-        self._cursor_handles = {}
-        self._cursor_temp_paths = []
+        """Usa el cursor estándar de Windows; los indicadores de herramienta son gráficos."""
+        # No cargar ni aplicar archivos .cur personalizados: Windows conserva su flecha
+        # estándar y los indicadores A, #, cuadro y lupa se muestran junto a ella.
         try:
-            self._cursor_user32 = ctypes.windll.user32
-            self._cursor_user32.LoadCursorFromFileW.restype = ctypes.c_void_p
-            self._cursor_user32.LoadCursorFromFileW.argtypes = [ctypes.c_wchar_p]
-            self._cursor_user32.SetCursor.argtypes = [ctypes.c_void_p]
-            self._cursor_user32.SetCursor.restype = ctypes.c_void_p
-            archivos = {
-                TOOL_SELECT: ("assets", "iconos", "configurador", "seleccionar.png"),
-                TOOL_HAND: ("assets", "iconos", "configurador", "desplazar.png"),
-                TOOL_TEXT: ("assets", "cursores", "cursor_texto.png"),
-                TOOL_NUMBER: ("assets", "cursores", "cursor_numerico.png"),
-                TOOL_IMAGE: ("assets", "cursores", "cursor_imagen.png"),
-                TOOL_ZOOM: ("assets", "iconos", "configurador", "zoom_mas.png"),
-            }
-            for herramienta, partes in archivos.items():
-                ruta_png = self._cursor_asset_path(*partes)
-                if not os.path.isfile(ruta_png):
-                    continue
-                ruta_cur = self._crear_archivo_cur(ruta_png)
-                self._cursor_temp_paths.append(ruta_cur)
-                handle = self._cursor_user32.LoadCursorFromFileW(ruta_cur)
-                if handle:
-                    self._cursor_handles[herramienta] = handle
-
-            # Respaldo inmediato: aplicar el cursor después de los eventos de Tk.
-            self.canvas.configure(cursor="")
-            for evento in ("<Enter>", "<Motion>", "<B1-Motion>", "<ButtonPress-1>", "<ButtonPress-3>"):
-                self.canvas.bind(evento, self._aplicar_cursor_nativo, add="+")
-
-            # Intentar mantenerlo en reposo mediante WM_SETCURSOR.
-            # Si esta parte falla, los cursores siguen disponibles para el respaldo.
-            try:
-                self._cursor_comctl32 = ctypes.windll.comctl32
-                self._cursor_subclass_callback_type = ctypes.WINFUNCTYPE(
-                    ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint,
-                    ctypes.c_size_t, ctypes.c_ssize_t, ctypes.c_size_t, ctypes.c_size_t
-                )
-                self._cursor_subclass_callback = self._cursor_subclass_callback_type(
-                    self._native_cursor_subclass_proc
-                )
-                self._cursor_subclass_id = ctypes.c_size_t(id(self)).value or 1
-                self._cursor_comctl32.SetWindowSubclass.restype = ctypes.c_int
-                self._cursor_comctl32.SetWindowSubclass.argtypes = [
-                    ctypes.c_void_p, self._cursor_subclass_callback_type,
-                    ctypes.c_size_t, ctypes.c_size_t
-                ]
-                self._cursor_comctl32.DefSubclassProc.restype = ctypes.c_ssize_t
-                self._cursor_comctl32.DefSubclassProc.argtypes = [
-                    ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t
-                ]
-                self._cursor_subclass_installed = bool(self._cursor_comctl32.SetWindowSubclass(
-                    ctypes.c_void_p(self.canvas.winfo_id()),
-                    self._cursor_subclass_callback,
-                    self._cursor_subclass_id,
-                    0,
-                ))
-            except Exception:
-                self._cursor_subclass_installed = False
-
-            # El temporizador solo es un respaldo si Windows no permitió
-            # instalar el manejador nativo. Ejecutar SetCursor repetidamente
-            # junto con WM_SETCURSOR provoca parpadeo al competir ambos.
-            if not self._cursor_subclass_installed:
-                self.root.after(100, self._mantener_cursor_nativo)
-        except Exception as exc:
-            try:
-                self._set_status("Error al cargar cursores personalizados: %s" % exc)
-            except Exception:
-                pass
-
-    def _native_cursor_subclass_proc(self, hwnd, message, wparam, lparam, subclass_id, ref_data):
-        if message == 0x0020 and (lparam & 0xFFFF) == 1:  # WM_SETCURSOR / HTCLIENT
-            handle = getattr(self, "_cursor_handles", {}).get(self.tool)
-            if handle:
-                self._cursor_user32.SetCursor(handle)
-                return 1
-        return self._cursor_comctl32.DefSubclassProc(hwnd, message, wparam, lparam)
-
-    def _aplicar_cursor_nativo(self, _event=None):
-        if os.name != "nt":
-            return
-        handle = getattr(self, "_cursor_handles", {}).get(self.tool)
-        if handle:
-            try:
-                self._cursor_user32.SetCursor(handle)
-            except Exception:
-                pass
-
-    def _mantener_cursor_nativo(self):
-        """Reafirma el cursor activo si el puntero sigue sobre el lienzo."""
-        if os.name != "nt":
-            return
-        try:
-            x, y = self.root.winfo_pointerxy()
-            widget = self.root.winfo_containing(x, y)
-            if widget == self.canvas:
-                self._aplicar_cursor_nativo()
-        except Exception:
-            pass
-        try:
-            if self.root.winfo_exists():
-                if not getattr(self, "_cursor_subclass_installed", False):
-                    self.root.after(100, self._mantener_cursor_nativo)
-        except Exception:
-            pass
-
-    def _actualizar_cursor_si_lienzo_activo(self):
-        if os.name != "nt":
-            return
-        try:
-            x, y = self.root.winfo_pointerxy()
-            widget = self.root.winfo_containing(x, y)
-            if widget == self.canvas:
-                self._aplicar_cursor_nativo()
+            self.canvas.configure(cursor="arrow")
         except Exception:
             pass
 
@@ -1119,18 +1007,37 @@ class Configurador:
         # cambiar de herramienta mientras el ratón aún está presionado.
         self._pan_last = None
         self.tool = tool
-        if tool != TOOL_ZOOM:
-            self._ocultar_lupa()
-        if os.name == "nt":
-            self._actualizar_cursor_si_lienzo_activo()
-        else:
-            self.canvas.config(cursor="hand2" if tool == TOOL_HAND else "crosshair" if tool == TOOL_ZOOM else "arrow")
+        # Todas las herramientas conservan la flecha estándar de Windows.
+        try:
+            self.canvas.configure(cursor="arrow")
+        except Exception:
+            pass
+
+        # Resaltar únicamente el botón de la herramienta activa.
+        for button in getattr(self, "_tool_buttons", []):
+            activa = getattr(button, "_tool_id", None) == tool
+            color = "#707070" if activa else "#262626"
+            button.configure(bg=color, activebackground=color)
+
         nombres = {
             TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
             TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
             TOOL_IMAGE: "Imagen",
             TOOL_ZOOM: "Lupa",
         }
+        if tool != TOOL_ZOOM:
+            self._ocultar_lupa()
+        # Si se cambia de herramienta con el puntero quieto sobre el lienzo,
+        # actualiza el indicador gráfico sin exigir otro movimiento.
+        try:
+            x, y = self.root.winfo_pointerxy()
+            if self.canvas.winfo_containing(x, y) == self.canvas:
+                class _CursorEvent:
+                    x_root = x
+                    y_root = y
+                self.on_canvas_motion(_CursorEvent())
+        except Exception:
+            pass
         self._set_status("Herramienta: " + nombres.get(tool, tool))
 
     def nuevo(self):
@@ -1913,21 +1820,33 @@ class Configurador:
             return "break"
 
     def on_canvas_motion(self, event):
-        if self.tool == TOOL_ZOOM:
-            self._mostrar_lupa(event)
-        elif self._magnifier_label is not None:
+        indicadores = {
+            TOOL_TEXT: ("A", ("Segoe UI", 10, "bold")),
+            TOOL_NUMBER: ("#", ("Segoe UI", 10, "bold")),
+            TOOL_IMAGE: ("□", ("Segoe UI Symbol", 13, "bold")),
+            TOOL_ZOOM: ("🔍", ("Segoe UI Symbol", 18)),
+        }
+        indicador = indicadores.get(self.tool)
+        if indicador is None:
             self._ocultar_lupa()
-
-    def _mostrar_lupa(self, event):
+            return
+        texto, fuente = indicador
         if self._magnifier_label is None:
             self._magnifier_label = tk.Label(
-                self.root, text="🔍", bg="black", fg="white",
-                font=("Segoe UI Symbol", 18), bd=0, padx=1, pady=0
+                self.root, text=texto, bg="black", fg="white",
+                font=fuente, bd=0, padx=1, pady=0
             )
+        else:
+            self._magnifier_label.configure(text=texto, font=fuente)
         x = event.x_root - self.root.winfo_rootx() + 8
         y = event.y_root - self.root.winfo_rooty() + 8
         self._magnifier_label.place(x=x, y=y)
         self._magnifier_label.lift()
+
+    def _mostrar_lupa(self, event):
+        # Compatibilidad con llamadas anteriores: la lupa ahora forma parte
+        # del indicador gráfico compartido de herramientas.
+        self.on_canvas_motion(event)
 
     def _ocultar_lupa(self):
         if self._magnifier_label is not None:
