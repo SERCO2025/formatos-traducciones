@@ -213,7 +213,22 @@ def renderizar_imagen(formato, respuestas):
     if not plantilla_path.exists():
         raise FileNotFoundError("No se encontró la plantilla: %s" % plantilla_path)
 
-    imagen = Image.open(plantilla_path).copy()
+    with Image.open(plantilla_path) as origen:
+        imagen = origen.copy()
+        tiene_transparencia = (
+            "A" in origen.getbands()
+            or "transparency" in origen.info
+        )
+
+    # Pillow no permite dibujar de forma consistente sobre todos los modos
+    # indexados, CMYK o de alta profundidad. Normalizar solo la copia de trabajo
+    # y conservar alfa cuando la plantilla lo tenga; el archivo fuente del FDT
+    # permanece intacto y la salida mantiene la extensión original.
+    if imagen.mode not in ("RGB", "RGBA", "L"):
+        imagen = imagen.convert("RGBA" if tiene_transparencia else "RGB")
+    elif imagen.mode == "L" and tiene_transparencia:
+        imagen = imagen.convert("RGBA")
+
     if imagen.size != (formato.template.width, formato.template.height):
         raise ValueError(
             "Las dimensiones reales de la plantilla no coinciden con el FDT."
