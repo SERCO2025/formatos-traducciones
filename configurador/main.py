@@ -992,11 +992,12 @@ class Configurador:
             archivo.close()
 
     def _install_native_cursor_hook(self):
-        """Carga cursores CUR y los aplica después de los eventos de Tk en el lienzo."""
+        """Instala un manejador nativo persistente para WM_SETCURSOR en el lienzo."""
         if os.name != "nt":
             return
         try:
             self._cursor_user32 = ctypes.windll.user32
+            self._cursor_comctl32 = ctypes.windll.comctl32
             self._cursor_handles = {}
             self._cursor_temp_paths = []
             self._cursor_user32.LoadCursorFromFileW.restype = ctypes.c_void_p
@@ -1020,16 +1021,50 @@ class Configurador:
                 handle = self._cursor_user32.LoadCursorFromFileW(ruta_cur)
                 if handle:
                     self._cursor_handles[herramienta] = handle
-            # Tk puede volver a aplicar su cursor estándar después de WM_SETCURSOR.
-            # Se aplica el cursor nativo al final de eventos del lienzo sin reemplazar
-            # el procedimiento de ventana de Tk.
+
+            # SetWindowSubclass atiende WM_SETCURSOR también cuando el ratón
+            # permanece quieto, evitando que Tk restaure la flecha estándar.
+            self._cursor_subclass_callback_type = ctypes.WINFUNCTYPE(
+                ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint,
+                ctypes.c_size_t, ctypes.c_ssize_t, ctypes.c_size_t, ctypes.c_size_t
+            )
+            self._cursor_subclass_callback = self._cursor_subclass_callback_type(
+                self._native_cursor_subclass_proc
+            )
+            self._cursor_subclass_id = ctypes.c_size_t(id(self)).value or 1
+            self._cursor_comctl32.SetWindowSubclass.restype = ctypes.c_int
+            self._cursor_comctl32.SetWindowSubclass.argtypes = [
+                ctypes.c_void_p, self._cursor_subclass_callback_type,
+                ctypes.c_size_t, ctypes.c_size_t
+            ]
+            self._cursor_comctl32.DefSubclassProc.restype = ctypes.c_ssize_t
+            self._cursor_comctl32.DefSubclassProc.argtypes = [
+                ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t
+            ]
+            self._cursor_subclass_installed = bool(self._cursor_comctl32.SetWindowSubclass(
+                ctypes.c_void_p(self.canvas.winfo_id()),
+                self._cursor_subclass_callback,
+                self._cursor_subclass_id,
+                0,
+            ))
+            if not self._cursor_subclass_installed:
+                raise OSError("Windows no pudo instalar el manejador persistente del cursor")
             self.canvas.configure(cursor="")
-            eventos = ("<Enter>", "<Motion>", "<B1-Motion>", "<ButtonPress-1>", "<ButtonPress-3>")
-            for evento in eventos:
-                self.canvas.bind(evento, self._aplicar_cursor_nativo, add="+")
-        except Exception:
-            # Si Windows no permite cargar los cursores, no se altera el funcionamiento normal.
+        except Exception as exc:
+            self._cursor_subclass_installed = False
             self._cursor_handles = {}
+            try:
+                self._set_status("No se pudieron activar los cursores personalizados: %s" % exc)
+            except Exception:
+                pass
+
+    def _native_cursor_subclass_proc(self, hwnd, message, wparam, lparam, subclass_id, ref_data):
+        if message == 0x0020 and (lparam & 0xFFFF) == 1:  # WM_SETCURSOR / HTCLIENT
+            handle = getattr(self, "_cursor_handles", {}).get(self.tool)
+            if handle:
+                self._cursor_user32.SetCursor(handle)
+                return 1
+        return self._cursor_comctl32.DefSubclassProc(hwnd, message, wparam, lparam)
 
     def _aplicar_cursor_nativo(self, _event=None):
         if os.name != "nt":
@@ -1051,7 +1086,6 @@ class Configurador:
                 self._aplicar_cursor_nativo()
         except Exception:
             pass
-
 
     def set_tool(self, tool):
         # Evitar que un gesto de desplazamiento anterior quede activo al
