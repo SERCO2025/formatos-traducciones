@@ -953,46 +953,6 @@ class Configurador:
         return "break"
 
 
-    def _cursor_asset_path(self, *parts):
-        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        return os.path.join(base, *parts)
-
-    def _crear_archivo_cur(self, png_path):
-        """Convierte un PNG RGBA a CUR de Windows con punto activo arriba a la izquierda."""
-        imagen = Image.open(png_path).convert("RGBA")
-        resampling = getattr(Image, "Resampling", Image)
-        imagen.thumbnail((32, 32), resampling.NEAREST)
-        ancho, alto = imagen.size
-        pixeles = imagen.load()
-        xor = bytearray()
-        for y in range(alto - 1, -1, -1):
-            for x in range(ancho):
-                r, g, b, a = pixeles[x, y]
-                xor.extend((b, g, r, a))
-        stride_mascara = ((ancho + 31) // 32) * 4
-        mascara = bytearray()
-        for y in range(alto - 1, -1, -1):
-            fila = bytearray(stride_mascara)
-            for x in range(ancho):
-                if pixeles[x, y][3] == 0:
-                    fila[x // 8] |= 1 << (7 - (x % 8))
-            mascara.extend(fila)
-        dib = struct.pack(
-            "<IiiHHIIiiII", 40, ancho, alto * 2, 1, 32, 0,
-            len(xor), 0, 0, 0, 0
-        ) + bytes(xor) + bytes(mascara)
-        cabecera = struct.pack("<HHH", 0, 2, 1)
-        entrada = struct.pack(
-            "<BBBBHHII", ancho if ancho < 256 else 0,
-            alto if alto < 256 else 0, 0, 0, 0, 0, len(dib), 22
-        )
-        archivo = tempfile.NamedTemporaryFile(prefix="fdt_cursor_", suffix=".cur", delete=False)
-        try:
-            archivo.write(cabecera + entrada + dib)
-            return archivo.name
-        finally:
-            archivo.close()
-
     def _install_native_cursor_hook(self):
         """Usa el cursor estándar de Windows; los indicadores de herramienta son gráficos."""
         # No cargar ni aplicar archivos .cur personalizados: Windows conserva su flecha
