@@ -935,14 +935,14 @@ class CapturadorApp(App):
         )
         fila_limpieza.add_widget(limpieza)
         texto_limpieza = Label(
-            text="Activar limpieza automática de JPEG antiguos",
+            text="Activar limpieza automática de archivos de imagen antiguos",
             font_size="11sp", halign="left", valign="middle",
         )
         texto_limpieza.bind(size=lambda obj, size: setattr(obj, "text_size", (max(1, size[0] - dp(4)), None)))
         fila_limpieza.add_widget(texto_limpieza)
         contenido.add_widget(fila_limpieza)
         texto_dias = Label(
-            text="Días que se conservará cada JPEG en esa carpeta",
+            text="Días que se conservará cada archivo de imagen en esa carpeta",
             size_hint_y=None, height=dp(38), font_size="12sp",
             halign="left", valign="middle",
         )
@@ -957,7 +957,7 @@ class CapturadorApp(App):
         dias.disabled = not limpieza.active
         limpieza.bind(active=lambda _obj, activo: setattr(dias, "disabled", not activo))
         aviso_limpieza = Label(
-            text="Solo se eliminarán JPEG creados por esta aplicación que sigan en la carpeta. "
+            text="Solo se eliminarán archivos de imagen creados por esta aplicación que sigan en la carpeta. "
                  "Si un archivo se mueve fuera, dejará de estar sujeto a la limpieza.",
             size_hint_y=None, height=dp(62), font_size="10sp",
             halign="left", valign="middle",
@@ -1014,7 +1014,7 @@ class CapturadorApp(App):
 
     def _texto_carpeta_destino(self):
         if not self._save_jpeg_folder_uri:
-            return "No configurada. Elige la carpeta donde se guardarán los JPEG finales."
+            return "No configurada. Elige la carpeta donde se guardarán los documentos terminados."
         try:
             Uri = autoclass("android.net.Uri")
             nombre = self._nombre_documento_uri(Uri.parse(self._save_jpeg_folder_uri))
@@ -1046,7 +1046,7 @@ class CapturadorApp(App):
         self._guardar_configuracion_salida()
 
     def _limpiar_archivos_vencidos(self):
-        """Elimina solo JPEG registrados que sigan directamente en la carpeta configurada."""
+        """Elimina solo imágenes registradas que sigan directamente en la carpeta configurada."""
         if not self._cleanup_enabled or not ANDROID_NATIVE or not self._save_jpeg_folder_uri:
             return
         cursor = None
@@ -1088,7 +1088,7 @@ class CapturadorApp(App):
                     cambios = True
                     continue
                 elemento = presentes[doc_id]
-                if not elemento["mime"].startswith("image/") or not elemento["name"].lower().endswith((".jpg", ".jpeg")):
+                if not elemento["mime"].startswith("image/") or not elemento["name"].lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")):
                     continue
                 try:
                     creado = float(registro.get("created_at", ahora))
