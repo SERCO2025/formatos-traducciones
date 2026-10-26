@@ -151,7 +151,7 @@ from PIL import Image as PILImage
 
 from shared.fdt import cargar_fdt
 from shared.models import FIELD_TYPE_IMAGE
-from shared.renderer import construir_nombre_archivo, renderizar_imagen
+from shared.renderer import construir_nombre_archivo, renderizar_formato, renderizar_imagen
 from shared.validators import validar_respuesta, validar_todas_las_respuestas
 
 try:
@@ -701,7 +701,7 @@ class CapturadorApp(App):
             extension = os.path.splitext(self._nombre_final)[1].lower() or ".jpg"
             self._imagen_final = os.path.join(tempfile.gettempdir(), "formatos_traducidos_resultado" + extension)
             imagen = renderizar_imagen(self.formato, self.respuestas)
-            imagen.save(self._imagen_final, format={".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP", ".tif": "TIFF", ".tiff": "TIFF"}.get(extension, "JPEG"), dpi=(self.formato.template.dpi, self.formato.template.dpi), **({"quality": 100, "subsampling": 0} if extension in (".jpg", ".jpeg") else {}))
+            renderizar_formato(self.formato, self.respuestas, self._imagen_final)
             self._popup_final(imagen)
         except Exception as exc:
             self._mensaje("No se pudo generar el documento", "%s\n\n%s" % (exc, traceback.format_exc()))
