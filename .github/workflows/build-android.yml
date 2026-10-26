@@ -2,7 +2,7 @@ name: Compilar APK - Formatos Traducidos
 on:
   workflow_dispatch:
   push:
-    branches: [desarrollo, 'fix/**']
+    branches: [desarrollo, 'fix/**', conservar-formato-plantilla]
 permissions:
   contents: read
 jobs:
