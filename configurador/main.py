@@ -992,7 +992,7 @@ class Configurador:
             archivo.close()
 
     def _install_native_cursor_hook(self):
-        """Instala cursores PNG personalizados en el lienzo de Windows, no en otras ventanas."""
+        """Carga cursores CUR y los aplica después de los eventos de Tk en el lienzo."""
         if os.name != "nt":
             return
         try:
@@ -1020,42 +1020,38 @@ class Configurador:
                 handle = self._cursor_user32.LoadCursorFromFileW(ruta_cur)
                 if handle:
                     self._cursor_handles[herramienta] = handle
-            self._cursor_original_proc = None
-            self._cursor_hook_callback = ctypes.WINFUNCTYPE(
-                ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint,
-                ctypes.c_size_t, ctypes.c_ssize_t
-            )(self._native_cursor_wndproc)
-            hwnd = ctypes.c_void_p(self.canvas.winfo_id())
-            set_proc = getattr(
-                self._cursor_user32, "SetWindowLongPtrW",
-                self._cursor_user32.SetWindowLongW
-            )
-            set_proc.restype = ctypes.c_void_p
-            set_proc.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
-            self._cursor_user32.CallWindowProcW.restype = ctypes.c_ssize_t
-            self._cursor_user32.CallWindowProcW.argtypes = [
-                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint,
-                ctypes.c_size_t, ctypes.c_ssize_t
-            ]
-            self._cursor_original_proc = set_proc(
-                hwnd, -4, ctypes.cast(self._cursor_hook_callback, ctypes.c_void_p)
-            )
+            # Tk puede volver a aplicar su cursor estándar después de WM_SETCURSOR.
+            # Se aplica el cursor nativo al final de eventos del lienzo sin reemplazar
+            # el procedimiento de ventana de Tk.
+            self.canvas.configure(cursor="")
+            eventos = ("<Enter>", "<Motion>", "<B1-Motion>", "<ButtonPress-1>", "<ButtonPress-3>")
+            for evento in eventos:
+                self.canvas.bind(evento, self._aplicar_cursor_nativo, add="+")
         except Exception:
-            # Si Windows no permite instalar el procedimiento, se conservan los cursores estándar.
-            self._cursor_original_proc = None
+            # Si Windows no permite cargar los cursores, no se altera el funcionamiento normal.
+            self._cursor_handles = {}
 
-    def _native_cursor_wndproc(self, hwnd, message, wparam, lparam):
-        if message == 0x0020 and (lparam & 0xFFFF) == 1:  # WM_SETCURSOR / HTCLIENT
-            handle = getattr(self, "_cursor_handles", {}).get(self.tool)
-            if handle:
+    def _aplicar_cursor_nativo(self, _event=None):
+        if os.name != "nt":
+            return
+        handle = getattr(self, "_cursor_handles", {}).get(self.tool)
+        if handle:
+            try:
                 self._cursor_user32.SetCursor(handle)
-                return 1
-        original = getattr(self, "_cursor_original_proc", None)
-        if original:
-            return self._cursor_user32.CallWindowProcW(
-                original, hwnd, message, wparam, lparam
-            )
-        return 0
+            except Exception:
+                pass
+
+    def _actualizar_cursor_si_lienzo_activo(self):
+        if os.name != "nt":
+            return
+        try:
+            x, y = self.root.winfo_pointerxy()
+            widget = self.root.winfo_containing(x, y)
+            if widget == self.canvas:
+                self._aplicar_cursor_nativo()
+        except Exception:
+            pass
+
 
     def set_tool(self, tool):
         # Evitar que un gesto de desplazamiento anterior quede activo al
@@ -1064,8 +1060,9 @@ class Configurador:
         self.tool = tool
         if tool != TOOL_ZOOM:
             self._ocultar_lupa()
-        # En Windows el cursor nativo toma la imagen de la herramienta activa.
-        if os.name != "nt":
+        if os.name == "nt":
+            self._actualizar_cursor_si_lienzo_activo()
+        else:
             self.canvas.config(cursor="hand2" if tool == TOOL_HAND else "crosshair" if tool == TOOL_ZOOM else "arrow")
         nombres = {
             TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
