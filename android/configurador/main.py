@@ -83,6 +83,18 @@ TOOLS = [
 ]
 
 
+class ToolButton(Button):
+    """Botón de herramienta que detecta un ratón físico sin alterar los toques."""
+    def __init__(self, app, **kwargs):
+        self.app = app
+        super().__init__(**kwargs)
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos) and self.app._es_evento_raton(touch):
+            self.app._activar_cursor_raton(touch.pos)
+        return super().on_touch_down(touch)
+
+
 class CampoWidget(FloatLayout):
     def __init__(self, campo, editor, **kwargs):
         super().__init__(**kwargs)
@@ -776,6 +788,11 @@ class ConfiguradorApp(App):
         super().__init__(**kwargs)
         self.formato = None
         self.tool = "select"
+        self.tool_buttons = {}
+        self._mouse_cursor_active = False
+        self._mouse_cursor_texture_cache = {}
+        self._mouse_cursor_color = None
+        self._mouse_cursor_rect = None
         self.scale = 1.0
         self.editor = None
         self.seleccionado = None
@@ -877,21 +894,36 @@ class ConfiguradorApp(App):
         barra.add_widget(self.estado_menu)
         root.add_widget(barra)
 
-        tools = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3), padding=dp(3))
+        tools = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(3), padding=(dp(3), dp(2)))
         self._aplicar_gradiente(tools, "vertical")
         icon_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "iconos", "configurador")
+        self.tool_buttons = {}
         for icon_file, tool in TOOLS:
             icon_path = os.path.join(icon_root, icon_file)
-            tools.add_widget(Button(
+            button = ToolButton(
+                self,
                 text="",
-                size_hint_x=None,
+                size_hint=(None, 1),
                 width=dp(44),
-                background_normal=icon_path,
-                background_down=icon_path,
-                background_disabled_normal=icon_path,
+                background_normal="",
+                background_down="",
+                background_color=(0.30, 0.30, 0.30, 1) if tool == self.tool else (0, 0, 0, 0),
                 border=(0, 0, 0, 0),
                 on_release=lambda _, t=tool: self.set_tool(t),
-            ))
+            )
+            icon = KivyImage(
+                source=icon_path,
+                size_hint=(None, None),
+                size=(dp(44), dp(44)),
+                allow_stretch=True,
+                keep_ratio=True,
+            )
+            def centrar_icono(inst, *_args, boton=button):
+                inst.center = boton.center
+            button.add_widget(icon)
+            button.bind(pos=centrar_icono, size=centrar_icono)
+            self.tool_buttons[tool] = button
+            tools.add_widget(button)
         tools.add_widget(Button(text="−", size_hint_x=None, width=dp(38), on_release=lambda _: self.set_zoom(self.scale * 0.8)))
         self.zoom_label = Label(text="100%", size_hint_x=None, width=dp(54))
         tools.add_widget(self.zoom_label)
@@ -905,8 +937,10 @@ class ConfiguradorApp(App):
 
         self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left")
         root.add_widget(self.estado)
+        self._inicializar_cursor_raton()
         # Recibe teclas de un teclado físico conectado al dispositivo.
         Window.bind(on_key_down=self._manejar_atajo_teclado)
+        Window.bind(mouse_pos=self._mover_cursor_raton)
         return root
 
     def abrir_menu(self):
@@ -1073,10 +1107,68 @@ class ConfiguradorApp(App):
             return False
         return True
 
+
+    def _es_evento_raton(self, touch):
+        dispositivo = str(getattr(touch, "device", "") or "").lower()
+        boton = str(getattr(touch, "button", "") or "").lower()
+        return dispositivo == "mouse" or boton in ("left", "right", "middle") or bool(getattr(touch, "is_mouse_scrolling", False))
+
+    def _inicializar_cursor_raton(self):
+        # La capa queda invisible hasta detectar una entrada de ratón físico.
+        try:
+            with Window.canvas.after:
+                self._mouse_cursor_color = Color(1, 1, 1, 0)
+                self._mouse_cursor_rect = Rectangle(pos=(-1000, -1000), size=(dp(44), dp(44)))
+        except Exception:
+            self._mouse_cursor_color = None
+            self._mouse_cursor_rect = None
+
+    def _ruta_cursor_herramienta(self):
+        iconos = {
+            "select": ("assets", "iconos", "configurador", "seleccionar.png"),
+            "hand": ("assets", "iconos", "configurador", "desplazar.png"),
+            FIELD_TYPE_TEXT: ("assets", "cursores", "cursor_texto.png"),
+            FIELD_TYPE_NUMBER: ("assets", "cursores", "cursor_numerico.png"),
+            FIELD_TYPE_IMAGE: ("assets", "cursores", "cursor_imagen.png"),
+            "zoom": ("assets", "iconos", "configurador", "zoom_mas.png"),
+        }
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), *iconos.get(self.tool, iconos["select"]))
+
+    def _activar_cursor_raton(self, posicion=None):
+        if self._mouse_cursor_rect is None or self._mouse_cursor_color is None:
+            return
+        self._mouse_cursor_active = True
+        try:
+            Window.show_cursor = False
+        except Exception:
+            pass
+        ruta = self._ruta_cursor_herramienta()
+        try:
+            if ruta not in self._mouse_cursor_texture_cache:
+                self._mouse_cursor_texture_cache[ruta] = CoreImage(ruta).texture
+            self._mouse_cursor_rect.texture = self._mouse_cursor_texture_cache[ruta]
+            self._mouse_cursor_color.a = 1
+            if posicion is None:
+                posicion = Window.mouse_pos
+            self._mover_cursor_raton(Window, posicion)
+        except Exception:
+            self._mouse_cursor_color.a = 0
+
+    def _mover_cursor_raton(self, _window, posicion):
+        if not self._mouse_cursor_active or self._mouse_cursor_rect is None:
+            return
+        ancho, alto = self._mouse_cursor_rect.size
+        # El punto activo está en la esquina superior izquierda de la imagen.
+        self._mouse_cursor_rect.pos = (posicion[0], posicion[1] - alto)
+
     def set_tool(self, tool):
         if self.editor is not None:
             self.editor.cancel_active_gestures()
         self.tool = tool
+        for herramienta, boton in getattr(self, "tool_buttons", {}).items():
+            boton.background_color = (0.30, 0.30, 0.30, 1) if herramienta == tool else (0, 0, 0, 0)
+        if self._mouse_cursor_active:
+            self._activar_cursor_raton()
         nombres = {
             "select": "Seleccionar",
             "hand": "Desplazar",

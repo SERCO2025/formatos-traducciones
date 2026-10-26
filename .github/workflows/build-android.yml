@@ -115,9 +115,10 @@ jobs:
           rm -rf "android/${{ matrix.app }}/shared"
           cp -R shared "android/${{ matrix.app }}/shared"
           if [ "${{ matrix.app }}" = "configurador" ]; then
-            mkdir -p android/configurador/assets/iconos
-            rm -rf android/configurador/assets/iconos/configurador
+            mkdir -p android/configurador/assets/iconos android/configurador/assets/cursores
+            rm -rf android/configurador/assets/iconos/configurador android/configurador/assets/cursores
             cp -R assets/iconos/configurador android/configurador/assets/iconos/configurador
+            cp -R assets/cursores android/configurador/assets/cursores
           fi
       - name: Limpiar APK anterior
         working-directory: android/${{ matrix.app }}

@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
+import ctypes
 import io
 import os
 import re
+import struct
+import sys
+import tempfile
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
 
@@ -135,6 +139,7 @@ class Configurador:
         self.field_dock_max_width = 700
 
         self._build_ui()
+        self._install_native_cursor_hook()
         self._set_status("Listo. Importe una plantilla para comenzar.")
 
     def _build_ui(self):
@@ -945,6 +950,113 @@ class Configurador:
             return None
         return "break"
 
+
+    def _cursor_asset_path(self, *parts):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        return os.path.join(base, *parts)
+
+    def _crear_archivo_cur(self, png_path):
+        """Convierte un PNG RGBA a CUR de Windows con punto activo arriba a la izquierda."""
+        imagen = Image.open(png_path).convert("RGBA")
+        resampling = getattr(Image, "Resampling", Image)
+        imagen.thumbnail((32, 32), resampling.NEAREST)
+        ancho, alto = imagen.size
+        pixeles = imagen.load()
+        xor = bytearray()
+        for y in range(alto - 1, -1, -1):
+            for x in range(ancho):
+                r, g, b, a = pixeles[x, y]
+                xor.extend((b, g, r, a))
+        stride_mascara = ((ancho + 31) // 32) * 4
+        mascara = bytearray()
+        for y in range(alto - 1, -1, -1):
+            fila = bytearray(stride_mascara)
+            for x in range(ancho):
+                if pixeles[x, y][3] == 0:
+                    fila[x // 8] |= 1 << (7 - (x % 8))
+            mascara.extend(fila)
+        dib = struct.pack(
+            "<IiiHHIIiiII", 40, ancho, alto * 2, 1, 32, 0,
+            len(xor), 0, 0, 0, 0
+        ) + bytes(xor) + bytes(mascara)
+        cabecera = struct.pack("<HHH", 0, 2, 1)
+        entrada = struct.pack(
+            "<BBBBHHII", ancho if ancho < 256 else 0,
+            alto if alto < 256 else 0, 0, 0, 0, 0, len(dib), 22
+        )
+        archivo = tempfile.NamedTemporaryFile(prefix="fdt_cursor_", suffix=".cur", delete=False)
+        try:
+            archivo.write(cabecera + entrada + dib)
+            return archivo.name
+        finally:
+            archivo.close()
+
+    def _install_native_cursor_hook(self):
+        """Instala cursores PNG personalizados en el lienzo de Windows, no en otras ventanas."""
+        if os.name != "nt":
+            return
+        try:
+            self._cursor_user32 = ctypes.windll.user32
+            self._cursor_handles = {}
+            self._cursor_temp_paths = []
+            self._cursor_user32.LoadCursorFromFileW.restype = ctypes.c_void_p
+            self._cursor_user32.LoadCursorFromFileW.argtypes = [ctypes.c_wchar_p]
+            self._cursor_user32.SetCursor.argtypes = [ctypes.c_void_p]
+            self._cursor_user32.SetCursor.restype = ctypes.c_void_p
+            archivos = {
+                TOOL_SELECT: ("assets", "iconos", "configurador", "seleccionar.png"),
+                TOOL_HAND: ("assets", "iconos", "configurador", "desplazar.png"),
+                TOOL_TEXT: ("assets", "cursores", "cursor_texto.png"),
+                TOOL_NUMBER: ("assets", "cursores", "cursor_numerico.png"),
+                TOOL_IMAGE: ("assets", "cursores", "cursor_imagen.png"),
+                TOOL_ZOOM: ("assets", "iconos", "configurador", "zoom_mas.png"),
+            }
+            for herramienta, partes in archivos.items():
+                ruta_png = self._cursor_asset_path(*partes)
+                if not os.path.isfile(ruta_png):
+                    continue
+                ruta_cur = self._crear_archivo_cur(ruta_png)
+                self._cursor_temp_paths.append(ruta_cur)
+                handle = self._cursor_user32.LoadCursorFromFileW(ruta_cur)
+                if handle:
+                    self._cursor_handles[herramienta] = handle
+            self._cursor_original_proc = None
+            self._cursor_hook_callback = ctypes.WINFUNCTYPE(
+                ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint,
+                ctypes.c_size_t, ctypes.c_ssize_t
+            )(self._native_cursor_wndproc)
+            hwnd = ctypes.c_void_p(self.canvas.winfo_id())
+            set_proc = getattr(
+                self._cursor_user32, "SetWindowLongPtrW",
+                self._cursor_user32.SetWindowLongW
+            )
+            set_proc.restype = ctypes.c_void_p
+            set_proc.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+            self._cursor_user32.CallWindowProcW.restype = ctypes.c_ssize_t
+            self._cursor_user32.CallWindowProcW.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint,
+                ctypes.c_size_t, ctypes.c_ssize_t
+            ]
+            self._cursor_original_proc = set_proc(
+                hwnd, -4, ctypes.cast(self._cursor_hook_callback, ctypes.c_void_p)
+            )
+        except Exception:
+            # Si Windows no permite instalar el procedimiento, se conservan los cursores estándar.
+            self._cursor_original_proc = None
+
+    def _native_cursor_wndproc(self, hwnd, message, wparam, lparam):
+        if message == 0x0020 and (lparam & 0xFFFF) == 1:  # WM_SETCURSOR / HTCLIENT
+            handle = getattr(self, "_cursor_handles", {}).get(self.tool)
+            if handle:
+                self._cursor_user32.SetCursor(handle)
+                return 1
+        original = getattr(self, "_cursor_original_proc", None)
+        if original:
+            return self._cursor_user32.CallWindowProcW(
+                original, hwnd, message, wparam, lparam
+            )
+        return 0
+
     def set_tool(self, tool):
         # Evitar que un gesto de desplazamiento anterior quede activo al
         # cambiar de herramienta mientras el ratón aún está presionado.
@@ -952,7 +1064,9 @@ class Configurador:
         self.tool = tool
         if tool != TOOL_ZOOM:
             self._ocultar_lupa()
-        self.canvas.config(cursor="crosshair" if tool == TOOL_ZOOM else "")
+        # En Windows el cursor nativo toma la imagen de la herramienta activa.
+        if os.name != "nt":
+            self.canvas.config(cursor="hand2" if tool == TOOL_HAND else "crosshair" if tool == TOOL_ZOOM else "arrow")
         nombres = {
             TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
             TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",

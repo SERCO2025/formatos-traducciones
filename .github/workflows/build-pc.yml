@@ -51,7 +51,7 @@ jobs:
           Write-Host "Fuente preparada en assets\fa-solid-900.ttf"
 
       - name: Compilar Configurador
-        run: pyinstaller --clean --noconfirm --onefile --windowed --icon "FdT Config Icon.ico" --add-data "assets/fa-solid-900.ttf;assets" --add-data "assets/iconos/configurador;assets/iconos/configurador" --name FormatosTraducidos-Configurador --paths . configurador/main.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --icon "FdT Config Icon.ico" --add-data "assets/fa-solid-900.ttf;assets" --add-data "assets/iconos/configurador;assets/iconos/configurador" --add-data "assets/cursores;assets/cursores" --name FormatosTraducidos-Configurador --paths . configurador/main.py
 
       - name: Compilar Capturador
         run: pyinstaller --clean --noconfirm --onefile --windowed --icon "FdT Icon.ico" --name FormatosTraducidos-Capturador --paths . capturador/main.py
