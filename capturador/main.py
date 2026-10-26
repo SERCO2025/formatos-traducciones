@@ -821,17 +821,38 @@ class CapturadorApp:
             foto = ImageTk.PhotoImage(copia)
             self._final_preview_photo = foto
 
-            x = y = 0
+            x, y = vista.coords(foto_id)
+            ancla_imagen = None
             if event is not None and factor is not None:
+                # Guardar el punto de la imagen bajo el puntero en coordenadas
+                # de la imagen original, antes de cambiar tamaño o región desplazable.
                 px = vista.canvasx(event.x)
                 py = vista.canvasy(event.y)
-                anterior_x, anterior_y = vista.coords(foto_id)
-                proporcion = zoom["valor"] / zoom_anterior
-                x = px - (px - anterior_x) * proporcion
-                y = py - (py - anterior_y) * proporcion
+                ancla_imagen = (
+                    (px - x) / zoom_anterior,
+                    (py - y) / zoom_anterior,
+                )
+
             vista.itemconfigure(foto_id, image=foto)
+            if ancla_imagen is not None:
+                # Actualizar primero la región; Tk puede cambiar el origen lógico
+                # del canvas si la imagen se encuentra parcialmente en negativo.
+                vista.configure(scrollregion=(
+                    min(0, x), min(0, y),
+                    max(ancho, x + nuevo_ancho),
+                    max(alto, y + nuevo_alto),
+                ))
+                px = vista.canvasx(event.x)
+                py = vista.canvasy(event.y)
+                x = px - ancla_imagen[0] * zoom["valor"]
+                y = py - ancla_imagen[1] * zoom["valor"]
+
             vista.coords(foto_id, x, y)
-            vista.configure(scrollregion=(0, 0, max(ancho, x + nuevo_ancho), max(alto, y + nuevo_alto)))
+            vista.configure(scrollregion=(
+                min(0, x), min(0, y),
+                max(ancho, x + nuevo_ancho),
+                max(alto, y + nuevo_alto),
+            ))
 
         def actualizar_region():
             caja = vista.bbox(foto_id)
