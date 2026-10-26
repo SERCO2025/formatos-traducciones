@@ -1026,12 +1026,7 @@ class Configurador:
             for evento in ("<Enter>", "<Motion>", "<B1-Motion>", "<ButtonPress-1>", "<ButtonPress-3>"):
                 self.canvas.bind(evento, self._aplicar_cursor_nativo, add="+")
 
-            # Algunos manejadores de Tk/Windows vuelven a imponer la flecha
-            # aunque el ratón no se mueva. Reaplicar el cursor mientras el
-            # puntero permanezca sobre el lienzo evita que se quede la flecha.
-            self.root.after(15, self._mantener_cursor_nativo)
-
-            # Intentar mantenerlo también en reposo mediante WM_SETCURSOR.
+            # Intentar mantenerlo en reposo mediante WM_SETCURSOR.
             # Si esta parte falla, los cursores siguen disponibles para el respaldo.
             try:
                 self._cursor_comctl32 = ctypes.windll.comctl32
@@ -1060,6 +1055,12 @@ class Configurador:
                 ))
             except Exception:
                 self._cursor_subclass_installed = False
+
+            # El temporizador solo es un respaldo si Windows no permitió
+            # instalar el manejador nativo. Ejecutar SetCursor repetidamente
+            # junto con WM_SETCURSOR provoca parpadeo al competir ambos.
+            if not self._cursor_subclass_installed:
+                self.root.after(100, self._mantener_cursor_nativo)
         except Exception as exc:
             try:
                 self._set_status("Error al cargar cursores personalizados: %s" % exc)
@@ -1097,7 +1098,8 @@ class Configurador:
             pass
         try:
             if self.root.winfo_exists():
-                self.root.after(15, self._mantener_cursor_nativo)
+                if not getattr(self, "_cursor_subclass_installed", False):
+                    self.root.after(100, self._mantener_cursor_nativo)
         except Exception:
             pass
 
