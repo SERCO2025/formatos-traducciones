@@ -1041,10 +1041,10 @@ class Configurador:
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(
                     path=os.path.abspath(ruta),
-                    width=imagen.width,
-                    height=imagen.height,
-                    dpi=300,
-                    mode="RGB",
+                    width=ancho,
+                    height=alto,
+                    dpi=dpi,
+                    mode=modo,
                 ),
             )
             self.current_fdt_path = None
