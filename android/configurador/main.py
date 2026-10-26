@@ -1422,7 +1422,7 @@ class ConfiguradorApp(App):
             
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
-                template=TemplateInfo(path=ruta, width=imagen.width, height=imagen.height, dpi=300, mode="RGB"),
+                template=TemplateInfo(path=ruta, width=ancho, height=alto, dpi=dpi, mode=modo),
             )
             
             self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
