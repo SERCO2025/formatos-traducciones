@@ -150,8 +150,12 @@ def guardar_fdt(formato: Formato, ruta):
             "No se encontró la imagen de plantilla: %s" % template_path
         )
 
-    # El FDT incluye una copia JPEG RGB sin alterar las dimensiones en píxeles.
-    data["template"]["path"] = "template/plantilla.jpg"
+    # Conservar el archivo de plantilla original, su extensión y sus bytes.
+    extension = template_path.suffix.lower()
+    if not extension or extension not in {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}:
+        raise ValueError("Formato de plantilla no admitido para FDT: %s" % (extension or "(sin extensión)"))
+    nombre_plantilla = "plantilla" + extension
+    data["template"]["path"] = "template/" + nombre_plantilla
 
     # Las tipografías utilizadas por los campos también quedan dentro del FDT.
     # Esto evita que el renderizador dependa de que la misma fuente exista
@@ -193,26 +197,10 @@ def guardar_fdt(formato: Formato, ruta):
         campo_data["text_style"]["font_family"] = fuentes_empaquetadas[clave][1]
 
     temp_path = ruta.with_suffix(ruta.suffix + ".tmp")
-    normalized_path = None
     if temp_path.exists():
         temp_path.unlink()
 
     try:
-        from PIL import Image
-
-        fd, normalized_name = tempfile.mkstemp(
-            prefix="fdt_template_", suffix=".jpg", dir=str(ruta.parent)
-        )
-        os.close(fd)
-        normalized_path = Path(normalized_name)
-        with Image.open(str(template_path)) as imagen_original:
-            imagen_rgb = imagen_original.convert("RGB")
-            imagen_rgb.save(
-                str(normalized_path), format="JPEG", quality=100,
-                subsampling=0, optimize=False, dpi=(300, 300),
-            )
-            imagen_rgb.close()
-
         with zipfile.ZipFile(
             str(temp_path), "w", compression=zipfile.ZIP_DEFLATED
         ) as paquete:
@@ -220,7 +208,7 @@ def guardar_fdt(formato: Formato, ruta):
                 "format.json",
                 json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
             )
-            paquete.write(str(normalized_path), "template/plantilla.jpg")
+            paquete.write(str(template_path), "template/" + nombre_plantilla)
 
             for fuente_path, nombre_interno in fuentes_empaquetadas.values():
                 paquete.write(str(fuente_path), nombre_interno)
@@ -251,8 +239,6 @@ def guardar_fdt(formato: Formato, ruta):
     finally:
         if temp_path.exists():
             temp_path.unlink()
-        if normalized_path is not None and normalized_path.exists():
-            normalized_path.unlink()
 
 
 def cargar_fdt(ruta):
@@ -335,8 +321,6 @@ def validar_fdt(formato: Formato):
     if formato.template.dpi <= 0:
         errores.append("El DPI de la plantilla debe ser mayor que cero.")
 
-    if formato.template.mode.upper() != "RGB":
-        errores.append("La plantilla debe trabajar en modo RGB.")
 
     ids = set()
     ordenes = set()
