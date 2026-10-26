@@ -967,11 +967,18 @@ class Configurador:
         # cambiar de herramienta mientras el ratón aún está presionado.
         self._pan_last = None
         self.tool = tool
-        # Desplazar usa la mano señaladora estándar de Tkinter en Windows.
+        # Desplazar usa la mano estándar; con Lupa se oculta la flecha
+        # del sistema para que el indicador dibujado sea el único puntero visible.
+        cursor = "hand2" if tool == TOOL_HAND else ("none" if tool == TOOL_ZOOM else "arrow")
         try:
-            self.canvas.configure(cursor="hand2" if tool == TOOL_HAND else "arrow")
-        except Exception:
-            pass
+            self.canvas.configure(cursor=cursor)
+        except tk.TclError:
+            # Si esta versión de Tk/Windows no reconoce "none", no alterar
+            # el funcionamiento de las demás herramientas.
+            try:
+                self.canvas.configure(cursor="hand2" if tool == TOOL_HAND else "arrow")
+            except tk.TclError:
+                pass
 
         # Resaltar únicamente el botón de la herramienta activa.
         for button in getattr(self, "_tool_buttons", []):
@@ -1795,7 +1802,7 @@ class Configurador:
                 self._ocultar_lupa()
                 self._magnifier_label = tk.Canvas(
                     self.root, width=24, height=24, bg="#f0f0f0",
-                    bd=0, highlightthickness=0
+                    bd=0, highlightthickness=0, cursor="none"
                 )
                 self._magnifier_label.create_oval(
                     2, 2, 15, 15, outline="#202020", width=3
@@ -1806,6 +1813,12 @@ class Configurador:
                 self._magnifier_label.create_oval(
                     3, 3, 14, 14, outline="#ffffff", width=1
                 )
+            # El widget flotante también debe ocultar la flecha al quedar
+            # debajo del puntero; así solo se ve la lupa dibujada.
+            try:
+                self._magnifier_label.configure(cursor="none")
+            except tk.TclError:
+                pass
             self._magnifier_label.place(x=x, y=y)
             self._magnifier_label.lift()
             return
