@@ -152,8 +152,12 @@ def guardar_fdt(formato: Formato, ruta):
             "No se encontró la imagen de plantilla: %s" % template_path
         )
 
-    # Las rutas almacenadas dentro del FDT son internas al contenedor.
-    data["template"]["path"] = "template/" + template_path.name
+    # Conservar el archivo de plantilla original, su extensión y sus bytes.
+    extension = template_path.suffix.lower()
+    if not extension or extension not in {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}:
+        raise ValueError("Formato de plantilla no admitido para FDT: %s" % (extension or "(sin extensión)"))
+    nombre_plantilla = "plantilla" + extension
+    data["template"]["path"] = "template/" + nombre_plantilla
 
     # Las tipografías utilizadas por los campos también quedan dentro del FDT.
     # Esto evita que el renderizador dependa de que la misma fuente exista
@@ -206,10 +210,7 @@ def guardar_fdt(formato: Formato, ruta):
                 "format.json",
                 json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
             )
-            paquete.write(
-                str(template_path),
-                "template/" + template_path.name,
-            )
+            paquete.write(str(template_path), "template/" + nombre_plantilla)
 
             for fuente_path, nombre_interno in fuentes_empaquetadas.values():
                 paquete.write(str(fuente_path), nombre_interno)
@@ -255,6 +256,20 @@ def cargar_fdt(ruta):
                 if "format.json" not in nombres:
                     raise ValueError("El FDT no contiene format.json.")
 
+                # Validar todas las rutas antes de extraer el ZIP para evitar
+                # que un FDT manipulado escriba archivos fuera del directorio temporal.
+                raiz_segura = directorio.resolve()
+                for miembro in paquete.infolist():
+                    destino = (directorio / miembro.filename).resolve()
+                    try:
+                        comun = os.path.commonpath((str(raiz_segura), str(destino)))
+                    except ValueError:
+                        comun = ""
+                    if comun != str(raiz_segura):
+                        raise ValueError(
+                            "El FDT contiene una ruta de archivo insegura: %s"
+                            % miembro.filename
+                        )
                 paquete.extractall(str(directorio))
 
             with (directorio / "format.json").open("r", encoding="utf-8") as archivo:
@@ -311,8 +326,8 @@ def validar_fdt(formato: Formato):
     if formato.template.dpi <= 0:
         errores.append("El DPI de la plantilla debe ser mayor que cero.")
 
-    if formato.template.mode.upper() != "RGB":
-        errores.append("La plantilla debe trabajar en modo RGB.")
+    # La plantilla puede ser RGB, RGBA u otro modo admitido por Pillow.
+    # No forzar RGB aquí: eso descartaría transparencia PNG válida.
 
     ids = set()
     ordenes = set()
