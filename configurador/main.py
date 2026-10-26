@@ -1784,12 +1784,40 @@ class Configurador:
             TOOL_TEXT: ("A", ("Segoe UI", 10, "bold")),
             TOOL_NUMBER: ("#", ("Segoe UI", 10, "bold")),
             TOOL_IMAGE: ("□", ("Segoe UI Symbol", 13, "bold")),
-            TOOL_ZOOM: ("🔍", ("Segoe UI Symbol", 18)),
         }
+        x = event.x_root - self.root.winfo_rootx() + 8
+        y = event.y_root - self.root.winfo_rooty() + 8
+
+        if self.tool == TOOL_ZOOM:
+            # Tkinter/Windows no ofrece un cursor de lupa estándar. Dibujar
+            # una lupa clásica con primitivas evita emojis y archivos .cur/.png.
+            if not isinstance(self._magnifier_label, tk.Canvas):
+                self._ocultar_lupa()
+                self._magnifier_label = tk.Canvas(
+                    self.root, width=24, height=24, bg="#f0f0f0",
+                    bd=0, highlightthickness=0
+                )
+                self._magnifier_label.create_oval(
+                    2, 2, 15, 15, outline="#202020", width=3
+                )
+                self._magnifier_label.create_line(
+                    13, 13, 22, 22, fill="#202020", width=4
+                )
+                self._magnifier_label.create_oval(
+                    3, 3, 14, 14, outline="#ffffff", width=1
+                )
+            self._magnifier_label.place(x=x, y=y)
+            self._magnifier_label.lift()
+            return
+
         indicador = indicadores.get(self.tool)
         if indicador is None:
             self._ocultar_lupa()
             return
+        # Si venimos de la lupa dibujada, reemplazarla por el indicador de texto.
+        if isinstance(self._magnifier_label, tk.Canvas):
+            self._magnifier_label.destroy()
+            self._magnifier_label = None
         texto, fuente = indicador
         if self._magnifier_label is None:
             self._magnifier_label = tk.Label(
@@ -1798,8 +1826,6 @@ class Configurador:
             )
         else:
             self._magnifier_label.configure(text=texto, font=fuente)
-        x = event.x_root - self.root.winfo_rootx() + 8
-        y = event.y_root - self.root.winfo_rooty() + 8
         self._magnifier_label.place(x=x, y=y)
         self._magnifier_label.lift()
 
