@@ -276,16 +276,39 @@ def cargar_fdt(ruta):
                 data = json.load(archivo)
 
             template_dir = directorio / "template"
-            imagenes = [
-                p for p in template_dir.iterdir()
-                if p.is_file()
-            ] if template_dir.exists() else []
+            template_data = data.setdefault("template", {})
+            ruta_interna = str(template_data.get("path", "") or "").replace("\\\\", "/")
+            plantilla = None
 
-            if not imagenes:
-                raise ValueError("El FDT no contiene la imagen de plantilla.")
+            # Respetar la ruta exacta declarada en format.json. No elegir
+            # arbitrariamente el primer archivo si el ZIP contiene más recursos.
+            if ruta_interna:
+                partes = [parte for parte in ruta_interna.split("/") if parte not in ("", ".")]
+                if ".." in partes:
+                    raise ValueError("La ruta de plantilla dentro del FDT no es válida.")
+                candidato = directorio.joinpath(*partes).resolve()
+                try:
+                    dentro = os.path.commonpath((str(directorio.resolve()), str(candidato)))
+                except ValueError:
+                    dentro = ""
+                if dentro != str(directorio.resolve()):
+                    raise ValueError("La ruta de plantilla dentro del FDT no es segura.")
+                if candidato.is_file():
+                    plantilla = candidato
 
-            plantilla = imagenes[0]
-            data.setdefault("template", {})["path"] = str(plantilla)
+            if plantilla is None:
+                imagenes = [
+                    p for p in template_dir.iterdir()
+                    if p.is_file()
+                ] if template_dir.exists() else []
+                if len(imagenes) == 1:
+                    plantilla = imagenes[0]
+                elif not imagenes:
+                    raise ValueError("El FDT no contiene la imagen de plantilla.")
+                else:
+                    raise ValueError("El FDT contiene varias imágenes y no declara una ruta de plantilla válida.")
+
+            template_data["path"] = str(plantilla)
 
             # Convertir las rutas internas de fuentes a rutas reales extraídas.
             for campo_data in data.get("fields", []):
