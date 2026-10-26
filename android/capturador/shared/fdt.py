@@ -277,7 +277,7 @@ def cargar_fdt(ruta):
 
             template_dir = directorio / "template"
             template_data = data.setdefault("template", {})
-            ruta_interna = str(template_data.get("path", "") or "").replace("\\\\", "/")
+            ruta_interna = str(template_data.get("path", "") or "").replace("\\", "/")
             plantilla = None
 
             # Respetar la ruta exacta declarada en format.json. No elegir
