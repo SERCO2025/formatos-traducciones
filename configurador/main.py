@@ -1913,9 +1913,9 @@ class Configurador:
             return "break"
 
     def on_canvas_motion(self, event):
-        if self.tool == TOOL_ZOOM:
-            self._mostrar_lupa(event)
-        elif self._magnifier_label is not None:
+        # El cursor personalizado ya representa la herramienta Zoom.
+        # No dibujar una segunda lupa como etiqueta flotante junto al puntero.
+        if self._magnifier_label is not None:
             self._ocultar_lupa()
 
     def _mostrar_lupa(self, event):
