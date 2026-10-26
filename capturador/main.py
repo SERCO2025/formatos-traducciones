@@ -235,7 +235,7 @@ class CapturadorApp:
         dialog.geometry("590x330")
         dialog.grab_set()
 
-        tk.Label(dialog, text="Carpeta de destino para los JPEG", bg="#202020", fg="white").pack(anchor="w", padx=16, pady=(16, 5))
+        tk.Label(dialog, text="Carpeta de destino para los documentos terminados", bg="#202020", fg="white").pack(anchor="w", padx=16, pady=(16, 5))
         carpeta_var = tk.StringVar(value=self._output_folder)
         fila = tk.Frame(dialog, bg="#202020")
         fila.pack(fill="x", padx=16)
@@ -248,7 +248,7 @@ class CapturadorApp:
         ttk.Button(fila, text="Examinar...", command=elegir_carpeta).pack(side="left", padx=(6, 0))
 
         limpieza_var = tk.BooleanVar(value=self._auto_cleanup_enabled)
-        ttk.Checkbutton(dialog, text="Activar limpieza automática de JPEG antiguos", variable=limpieza_var).pack(anchor="w", padx=16, pady=(18, 8))
+        ttk.Checkbutton(dialog, text="Activar limpieza automática de documentos antiguos", variable=limpieza_var).pack(anchor="w", padx=16, pady=(18, 8))
         tk.Label(dialog, text="Días de conservación (1 a 365)", bg="#202020", fg="white").pack(anchor="w", padx=16)
         dias_var = tk.StringVar(value=str(self._retention_days))
         dias = ttk.Spinbox(dialog, from_=1, to=365, textvariable=dias_var, width=8)
@@ -257,7 +257,7 @@ class CapturadorApp:
             dias.configure(state="normal" if limpieza_var.get() else "disabled")
         limpieza_var.trace_add("write", estado_dias)
         estado_dias()
-        tk.Label(dialog, text="Solo se eliminan JPEG generados por esta aplicación que sigan en la carpeta configurada.", bg="#202020", fg="#c8c8c8", wraplength=550, justify="left").pack(anchor="w", padx=16, pady=8)
+        tk.Label(dialog, text="Solo se eliminan imágenes generadas por esta aplicación que sigan en la carpeta configurada.", bg="#202020", fg="#c8c8c8", wraplength=550, justify="left").pack(anchor="w", padx=16, pady=8)
         botones = tk.Frame(dialog, bg="#202020")
         botones.pack(fill="x", padx=16, pady=12)
 
@@ -307,7 +307,7 @@ class CapturadorApp:
                 self._generated_files.pop(registrada, None)
                 cambios = True
                 continue
-            if not ruta.lower().endswith((".jpg", ".jpeg")):
+            if not ruta.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")):
                 continue
             try:
                 creado = float(datos.get("created_at", ahora))
