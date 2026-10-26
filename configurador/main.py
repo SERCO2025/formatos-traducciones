@@ -967,9 +967,9 @@ class Configurador:
         # cambiar de herramienta mientras el ratón aún está presionado.
         self._pan_last = None
         self.tool = tool
-        # Todas las herramientas conservan la flecha estándar de Windows.
+        # Desplazar usa la mano señaladora estándar de Tkinter en Windows.
         try:
-            self.canvas.configure(cursor="arrow")
+            self.canvas.configure(cursor="hand2" if tool == TOOL_HAND else "arrow")
         except Exception:
             pass
 
