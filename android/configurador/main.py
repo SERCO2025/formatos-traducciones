@@ -1353,13 +1353,19 @@ class ConfiguradorApp(App):
             
             if tipo == "image":
                 mime_type = str(resolver.getType(uri) or "").lower()
-                if not extension or extension not in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
+                if not extension or extension not in [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"]:
                     if "png" in mime_type:
                         extension = ".png"
                     elif "webp" in mime_type:
                         extension = ".webp"
-                    else:
+                    elif "tiff" in mime_type or "tif" in mime_type:
+                        extension = ".tiff"
+                    elif "bmp" in mime_type:
+                        extension = ".bmp"
+                    elif "jpeg" in mime_type or "jpg" in mime_type:
                         extension = ".jpg"
+                    else:
+                        raise IOError("Formato de imagen no admitido o extensión desconocida: " + (mime_type or "sin MIME"))
             
             if tipo == "fdt":
                 extension = ".fdt"
@@ -1418,7 +1424,15 @@ class ConfiguradorApp(App):
                 raise IOError("El archivo copiado tiene 0 bytes. Fallo de permisos o de copia en Android.")
 
             from PIL import Image
-            imagen = Image.open(ruta).convert("RGB")
+            with Image.open(ruta) as original:
+                ancho, alto = original.size
+                dpi_info = original.info.get("dpi", (300, 300))
+                try:
+                    dpi = max(1, int(round(float(dpi_info[0] or 300))))
+                except (TypeError, ValueError, IndexError):
+                    dpi = 300
+                modo = original.mode
+                imagen = original.convert("RGB")
             
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
@@ -1548,7 +1562,7 @@ class ConfiguradorApp(App):
         layout = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(6))
         chooser = FileChooserListView(path="/storage/emulated/0", dirselect=False)
         if not guardar:
-            chooser.filters = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"] if imagenes else ["*.fdt"]
+            chooser.filters = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp", "*.tif", "*.tiff"] if imagenes else ["*.fdt"]
             layout.add_widget(chooser)
             def confirmar(_):
                 if chooser.selection:
