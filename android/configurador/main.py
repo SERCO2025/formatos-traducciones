@@ -1051,6 +1051,11 @@ class ConfiguradorApp(App):
             if id(widget) in visitados:
                 continue
             visitados.add(id(widget))
+            # No ejecutar atajos globales mientras se escribe. En Android, el
+            # teclado virtual puede emitir eventos de tecla con un TextInput
+            # enfocado aunque la detección del Popup varíe según el backend.
+            if isinstance(widget, TextInput) and getattr(widget, "focus", False):
+                return True
             if isinstance(widget, (Popup, ModalView)) and getattr(widget, "_is_open", False):
                 return True
             pendientes.extend(list(getattr(widget, "children", []) or []))
