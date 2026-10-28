@@ -796,12 +796,12 @@ class ConfiguradorApp(App):
                 with open(self._diagnostico_crash_path, "r", encoding="utf-8", errors="replace") as previo:
                     self._diagnostico_crash_anterior = previo.read()[-12000:]
             self._diagnostico_crash_file = open(self._diagnostico_crash_path, "w", encoding="utf-8", buffering=1)
-            self._diagnostico_crash_file.write("INICIO DE SESION DE DIAGNOSTICO\\n")
+            self._diagnostico_crash_file.write("INICIO DE SESION DE DIAGNOSTICO\n")
             faulthandler.enable(file=self._diagnostico_crash_file, all_threads=True)
             hook_anterior = sys.excepthook
             def registrar_excepcion(tipo, valor, tb):
                 try:
-                    self._diagnostico_crash_file.write("\\nEXCEPCION NO CONTROLADA\\n")
+                    self._diagnostico_crash_file.write("\nEXCEPCION NO CONTROLADA\n")
                     traceback.print_exception(tipo, valor, tb, file=self._diagnostico_crash_file)
                     self._diagnostico_crash_file.flush()
                 except Exception:
@@ -937,7 +937,7 @@ class ConfiguradorApp(App):
         try:
             archivo = getattr(self, "_diagnostico_crash_file", None)
             if archivo:
-                archivo.write("ETAPA: %s\\n" % etapa)
+                archivo.write("ETAPA: %s\n" % etapa)
                 archivo.flush()
         except Exception:
             pass
@@ -2447,12 +2447,6 @@ class ConfiguradorApp(App):
             pregunta.bind(text=lambda _inst, valor: self._marca_diagnostico_crash(
                 "PREGUNTA_TEXTO_LONGITUD_%d" % len(valor or "")
             ))
-            try:
-                Window.bind(on_textinput=lambda _window, texto: self._marca_diagnostico_crash(
-                    "EVENTO_TECLADO_TEXTO_LONGITUD_%d" % len(texto or "")
-                ))
-            except Exception:
-                pass
             self._marca_diagnostico_crash("ASIGNANDO_FOCUS_PREGUNTA")
             pregunta.focus = True
             self._marca_diagnostico_crash("FOCUS_PREGUNTA_ASIGNADO")
