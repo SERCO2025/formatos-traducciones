@@ -3,6 +3,8 @@ import copy
 import os
 import uuid
 import traceback
+import sys
+import faulthandler
 from math import hypot
 
 from kivy.app import App
@@ -786,6 +788,28 @@ class ConfiguradorApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._diagnostico_crash_path = os.path.join(self.user_data_dir, "diagnostico_cierre.log")
+        self._diagnostico_crash_anterior = ""
+        self._diagnostico_crash_file = None
+        try:
+            if os.path.isfile(self._diagnostico_crash_path):
+                with open(self._diagnostico_crash_path, "r", encoding="utf-8", errors="replace") as previo:
+                    self._diagnostico_crash_anterior = previo.read()[-12000:]
+            self._diagnostico_crash_file = open(self._diagnostico_crash_path, "w", encoding="utf-8", buffering=1)
+            self._diagnostico_crash_file.write("INICIO DE SESION DE DIAGNOSTICO\\n")
+            faulthandler.enable(file=self._diagnostico_crash_file, all_threads=True)
+            hook_anterior = sys.excepthook
+            def registrar_excepcion(tipo, valor, tb):
+                try:
+                    self._diagnostico_crash_file.write("\\nEXCEPCION NO CONTROLADA\\n")
+                    traceback.print_exception(tipo, valor, tb, file=self._diagnostico_crash_file)
+                    self._diagnostico_crash_file.flush()
+                except Exception:
+                    pass
+                hook_anterior(tipo, valor, tb)
+            sys.excepthook = registrar_excepcion
+        except Exception as exc:
+            print("[FDT_CRASH_DIAG] No se pudo iniciar registro: %r" % (exc,), flush=True)
         self.formato = None
         self.tool = "select"
         self.tool_buttons = {}
@@ -881,6 +905,42 @@ class ConfiguradorApp(App):
                 color.b = valor
         widget.bind(pos=actualizar, size=actualizar)
         actualizar()
+
+    def on_start(self):
+        # Si la sesión anterior terminó inesperadamente, mostrar sus últimas
+        # marcas/traceback para poder identificar el punto real del cierre.
+        previo = getattr(self, "_diagnostico_crash_anterior", "")
+        if previo.strip():
+            def mostrar_diagnostico(_dt):
+                contenido = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+                contenido.add_widget(Label(
+                    text="Se recuperó el registro de la sesión anterior. Toma una captura de este texto.",
+                    size_hint_y=None, height=dp(52),
+                ))
+                texto = TextInput(
+                    text=previo[-9000:], readonly=True, multiline=True,
+                    size_hint_y=1,
+                )
+                contenido.add_widget(texto)
+                contenido.add_widget(Button(
+                    text="Cerrar diagnóstico", size_hint_y=None, height=dp(46),
+                    on_release=lambda _b: popup.dismiss(),
+                ))
+                popup = Popup(
+                    title="Diagnóstico del cierre anterior",
+                    content=contenido, size_hint=(0.96, 0.92),
+                )
+                popup.open()
+            Clock.schedule_once(mostrar_diagnostico, 0.8)
+
+    def _marca_diagnostico_crash(self, etapa):
+        try:
+            archivo = getattr(self, "_diagnostico_crash_file", None)
+            if archivo:
+                archivo.write("ETAPA: %s\\n" % etapa)
+                archivo.flush()
+        except Exception:
+            pass
 
     def build(self):
         root = BoxLayout(orientation="vertical")
@@ -2372,13 +2432,30 @@ class ConfiguradorApp(App):
 
         popup.bind(on_dismiss=registrar_cierre_popup)
         self._registrar_diagnostico_popup("ANTES_DE_ABRIR_POPUP", popup)
+        self._marca_diagnostico_crash("ANTES_DE_ABRIR_POPUP_PROPIEDADES")
         self._propiedades_abiertas = True
         popup.open()
+        self._marca_diagnostico_crash("DESPUES_DE_ABRIR_POPUP_PROPIEDADES")
         self._registrar_diagnostico_popup("DESPUES_DE_ABRIR_POPUP", popup)
 
         # El teclado virtual se abre al enfocar el campo de la pregunta.
         def enfocar_pregunta(_dt):
+            self._marca_diagnostico_crash("ANTES_DE_FOCUS_PREGUNTA")
+            pregunta.bind(focus=lambda _inst, valor: self._marca_diagnostico_crash(
+                "PREGUNTA_FOCUS_%s" % bool(valor)
+            ))
+            pregunta.bind(text=lambda _inst, valor: self._marca_diagnostico_crash(
+                "PREGUNTA_TEXTO_LONGITUD_%d" % len(valor or "")
+            ))
+            try:
+                Window.bind(on_textinput=lambda _window, texto: self._marca_diagnostico_crash(
+                    "EVENTO_TECLADO_TEXTO_LONGITUD_%d" % len(texto or "")
+                ))
+            except Exception:
+                pass
+            self._marca_diagnostico_crash("ASIGNANDO_FOCUS_PREGUNTA")
             pregunta.focus = True
+            self._marca_diagnostico_crash("FOCUS_PREGUNTA_ASIGNADO")
             try:
                 lineas = pregunta.text.split("\n")
                 pregunta.cursor = (len(lineas[-1]), len(lineas) - 1)
