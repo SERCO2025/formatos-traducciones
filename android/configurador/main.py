@@ -807,6 +807,7 @@ class ConfiguradorApp(App):
         self._interaction_changed = False
         self._drawing_widget = None
         self._popup_propiedades_intentos = 0
+        self._propiedades_abiertas = False
         if ANDROID_AVAILABLE:
             activity.bind(on_activity_result=self._on_android_activity_result)
 
@@ -1063,6 +1064,10 @@ class ConfiguradorApp(App):
 
     def _manejar_atajo_teclado(self, window, keycode, text, modifiers):
         """Atajos para teclado físico; ignora cualquier ventana/modal secundaria."""
+        # Popup no siempre aparece en Window.children en Android. La bandera
+        # explícita evita que el teclado virtual active atajos al editar propiedades.
+        if getattr(self, "_propiedades_abiertas", False):
+            return False
         if self._hay_ventana_secundaria_abierta():
             return False
         nombre = str(keycode[1] if isinstance(keycode, (tuple, list)) and len(keycode) > 1 else keycode).lower()
@@ -2328,6 +2333,7 @@ class ConfiguradorApp(App):
 
         # Registrar el evento real de cierre y mantener intacta la restauración visual.
         def registrar_cierre_popup(_popup, *args):
+            self._propiedades_abiertas = False
             self._registrar_diagnostico_popup("EVENTO_ON_DISMISS", _popup)
             # Cualquier cierre sin Aceptar equivale a cancelar la creación.
             # Al editar un campo existente no se modifica el modelo en este punto.
@@ -2366,6 +2372,7 @@ class ConfiguradorApp(App):
 
         popup.bind(on_dismiss=registrar_cierre_popup)
         self._registrar_diagnostico_popup("ANTES_DE_ABRIR_POPUP", popup)
+        self._propiedades_abiertas = True
         popup.open()
         self._registrar_diagnostico_popup("DESPUES_DE_ABRIR_POPUP", popup)
 
