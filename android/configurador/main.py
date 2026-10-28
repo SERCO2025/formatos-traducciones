@@ -1122,7 +1122,7 @@ class ConfiguradorApp(App):
             pendientes.extend(list(getattr(widget, "children", []) or []))
         return False
 
-    def _manejar_atajo_teclado(self, window, keycode, text, modifiers):
+    def _manejar_atajo_teclado(self, window, keycode, scancode, text, modifiers):
         """Atajos para teclado físico; ignora cualquier ventana/modal secundaria."""
         # Popup no siempre aparece en Window.children en Android. La bandera
         # explícita evita que el teclado virtual active atajos al editar propiedades.
