@@ -2438,24 +2438,16 @@ class ConfiguradorApp(App):
         self._marca_diagnostico_crash("DESPUES_DE_ABRIR_POPUP_PROPIEDADES")
         self._registrar_diagnostico_popup("DESPUES_DE_ABRIR_POPUP", popup)
 
-        # El teclado virtual se abre al enfocar el campo de la pregunta.
-        def enfocar_pregunta(_dt):
-            self._marca_diagnostico_crash("ANTES_DE_FOCUS_PREGUNTA")
-            pregunta.bind(focus=lambda _inst, valor: self._marca_diagnostico_crash(
-                "PREGUNTA_FOCUS_%s" % bool(valor)
-            ))
-            pregunta.bind(text=lambda _inst, valor: self._marca_diagnostico_crash(
-                "PREGUNTA_TEXTO_LONGITUD_%d" % len(valor or "")
-            ))
-            self._marca_diagnostico_crash("ASIGNANDO_FOCUS_PREGUNTA")
-            pregunta.focus = True
-            self._marca_diagnostico_crash("FOCUS_PREGUNTA_ASIGNADO")
-            try:
-                lineas = pregunta.text.split("\n")
-                pregunta.cursor = (len(lineas[-1]), len(lineas) - 1)
-            except Exception:
-                pass
-        Clock.schedule_once(enfocar_pregunta, 0.25)
+        # PRUEBA AISLADA: no abrir automáticamente el teclado virtual.
+        # El usuario tocará la pregunta para enfocarla; así distinguimos el
+        # fallo al abrir el teclado por autoenfoque del fallo al introducir texto.
+        pregunta.bind(focus=lambda _inst, valor: self._marca_diagnostico_crash(
+            "PREGUNTA_FOCUS_%s" % bool(valor)
+        ))
+        pregunta.bind(text=lambda _inst, valor: self._marca_diagnostico_crash(
+            "PREGUNTA_TEXTO_LONGITUD_%d" % len(valor or "")
+        ))
+        self._marca_diagnostico_crash("PRUEBA_SIN_AUTOFOCUS_PREGUNTA")
 
     def editar_salida(self):
         if not self.formato:
