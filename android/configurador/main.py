@@ -1357,7 +1357,8 @@ class ConfiguradorApp(App):
                 raise IOError("Android devolvió un resultado sin archivo (URI nula).")
             self.estado.text = "Archivo seleccionado; leyendo contenido..."
             if guardar:
-                uri = self._asegurar_extension_fdt_uri(uri)
+                # El guardado valida el nombre una sola vez, escribe sobre la URI
+                # autorizada y aplica .fdt al final si hace falta.
                 self._guardar_fdt_uri(uri)
             else:
                 ruta = self._copiar_uri_a_cache(uri, tipo)
@@ -1638,9 +1639,27 @@ class ConfiguradorApp(App):
                 if salida is not None:
                     salida.close()
 
-            # Escribir primero sobre la URI autorizada por el selector.
-            # Renombrar después evita abrir para escritura una URI nueva sin permiso.
-            self._asegurar_extension_fdt_uri(uri)
+            # Aplicar la extensión después de escribir, reutilizando el nombre
+            # ya validado. No volver a consultar DISPLAY_NAME: algunos proveedores
+            # SAF dejan de publicarlo o cambian la URI después de crear/renombrar.
+            if not extension:
+                DocumentsContract = autoclass("android.provider.DocumentsContract")
+                nuevo_nombre = nombre + ".fdt"
+                try:
+                    uri_renombrado = DocumentsContract.renameDocument(
+                        resolver, uri, nuevo_nombre
+                    )
+                except Exception as exc:
+                    raise IOError(
+                        "El contenido se guardó, pero Android no pudo añadir "
+                        "automáticamente la extensión .fdt. Elija una carpeta "
+                        "o proveedor de archivos que permita renombrar documentos."
+                    ) from exc
+                if uri_renombrado is None:
+                    raise IOError(
+                        "El contenido se guardó, pero Android no pudo aplicar "
+                        "la extensión .fdt automáticamente."
+                    )
             self.estado.text = "FDT guardado correctamente."
         finally:
             if temporal and os.path.exists(temporal):
