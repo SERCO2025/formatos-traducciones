@@ -5,6 +5,7 @@ import uuid
 import traceback
 import sys
 import faulthandler
+from urllib.parse import unquote
 from math import hypot
 
 from kivy.app import App
@@ -1376,18 +1377,35 @@ class ConfiguradorApp(App):
             self._mostrar_error_tecnico("Error al recibir o copiar el archivo", exc)
 
     def _nombre_display_uri(self, resolver, uri):
+        # Primero se consulta el nombre publicado por el proveedor SAF.
         try:
             OpenableColumns = autoclass("android.provider.OpenableColumns")
             cursor = resolver.query(uri, None, None, None, None)
-            if cursor is None:
-                return ""
-            try:
-                indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                return str(cursor.getString(indice)) if indice >= 0 and cursor.moveToFirst() else ""
-            finally:
-                cursor.close()
+            if cursor is not None:
+                try:
+                    if cursor.moveToFirst():
+                        indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if indice >= 0:
+                            valor = cursor.getString(indice)
+                            if valor:
+                                return str(valor)
+                finally:
+                    cursor.close()
         except Exception:
-            return ""
+            pass
+
+        # Algunos proveedores no exponen DISPLAY_NAME en la consulta.
+        # En esos casos, intentar recuperar el nombre del ID documental SAF.
+        try:
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
+            document_id = str(DocumentsContract.getDocumentId(uri))
+            ruta_documental = unquote(document_id).replace("\\", "/")
+            nombre = ruta_documental.rsplit("/", 1)[-1].strip()
+            if nombre and ( "." in nombre or ":" in document_id or "/" in ruta_documental ):
+                return nombre
+        except Exception:
+            pass
+        return ""
 
     def _asegurar_extension_fdt_uri(self, uri):
         """Valida la extensión y añade .fdt solo cuando el nombre no tiene extensión."""
