@@ -1012,8 +1012,7 @@ class ConfiguradorApp(App):
         self.estado = Label(text="Listo. Importe una plantilla para comenzar.", size_hint_y=None, height=dp(32), halign="left")
         root.add_widget(self.estado)
         self._inicializar_cursor_raton()
-        # Recibe teclas de un teclado físico conectado al dispositivo.
-        Window.bind(on_key_down=self._manejar_atajo_teclado)
+        # En Android no se registran atajos de teclado físico.
         Window.bind(mouse_pos=self._mover_cursor_raton)
         return root
 
