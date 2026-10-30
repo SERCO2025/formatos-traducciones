@@ -1318,7 +1318,9 @@ class ConfiguradorApp(App):
                 # ACTION_CREATE_DOCUMENT necesita permiso explicito de escritura.
                 # Sin esta bandera, openOutputStream(uri) falla con SecurityException.
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                nombre = (self.formato.name.strip() if self.formato and self.formato.name.strip() else "formato") + ".fdt"
+                nombre = self.formato.name.strip() if self.formato and self.formato.name.strip() else "formato"
+                if not nombre.lower().endswith(".fdt"):
+                    nombre += ".fdt"
                 intent.putExtra(Intent.EXTRA_TITLE, nombre)
             else:
                 intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -1388,13 +1390,19 @@ class ConfiguradorApp(App):
             return ""
 
     def _asegurar_extension_fdt_uri(self, uri):
-        """Añade .fdt al nombre elegido en el selector SAF de Android."""
+        """Valida la extensión y añade .fdt solo cuando el nombre no tiene extensión."""
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         resolver = PythonActivity.mActivity.getContentResolver()
         nombre = self._nombre_display_uri(resolver, uri).strip()
         if not nombre:
             raise IOError("Android no devolvió el nombre del archivo que se va a guardar.")
-        if nombre.lower().endswith(".fdt"):
+
+        extension = os.path.splitext(nombre)[1]
+        if extension:
+            if extension.lower() != ".fdt":
+                raise IOError(
+                    "La extensión del archivo no es válida. Use .fdt o escriba el nombre sin extensión."
+                )
             return uri
 
         DocumentsContract = autoclass("android.provider.DocumentsContract")
@@ -1577,6 +1585,17 @@ class ConfiguradorApp(App):
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             actividad = PythonActivity.mActivity
             resolver = actividad.getContentResolver()
+
+            # Validar el nombre antes de escribir: solo se acepta .fdt o ningún sufijo.
+            nombre = self._nombre_display_uri(resolver, uri).strip()
+            if not nombre:
+                raise IOError("Android no devolvió el nombre del archivo que se va a guardar.")
+            extension = os.path.splitext(nombre)[1]
+            if extension and extension.lower() != ".fdt":
+                raise IOError(
+                    "La extensión del archivo no es válida. Use .fdt o escriba el nombre sin extensión."
+                )
+
             temporal = os.path.join(actividad.getCacheDir().getAbsolutePath(), "fdt_" + uuid.uuid4().hex + ".fdt")
             guardar_fdt(self.formato, temporal)
             entrada = None
@@ -1600,6 +1619,10 @@ class ConfiguradorApp(App):
                     entrada.close()
                 if salida is not None:
                     salida.close()
+
+            # Escribir primero sobre la URI autorizada por el selector.
+            # Renombrar después evita abrir para escritura una URI nueva sin permiso.
+            self._asegurar_extension_fdt_uri(uri)
             self.estado.text = "FDT guardado correctamente."
         finally:
             if temporal and os.path.exists(temporal):
