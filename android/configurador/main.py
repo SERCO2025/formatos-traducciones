@@ -1314,11 +1314,14 @@ class ConfiguradorApp(App):
             intent.setType("image/*" if tipo == "image" else ("font/*" if tipo == "font" else "*/*"))
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if not guardar:
-                intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            else:
+            if guardar:
+                # ACTION_CREATE_DOCUMENT necesita permiso explicito de escritura.
+                # Sin esta bandera, openOutputStream(uri) falla con SecurityException.
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 nombre = (self.formato.name.strip() if self.formato and self.formato.name.strip() else "formato") + ".fdt"
                 intent.putExtra(Intent.EXTRA_TITLE, nombre)
+            else:
+                intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             self._android_callback = (tipo, guardar)
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             self.estado.text = "Esperando selección de archivo en Android..."
