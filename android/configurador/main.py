@@ -2096,6 +2096,36 @@ class ConfiguradorApp(App):
                 ventana_color = ModalView(size_hint=(0.92, 0.78), background_color=(0.08, 0.08, 0.08, 1))
                 raiz_color = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
                 raiz_color.add_widget(Label(text="Selector HSV: elija el tono y después el matiz/brillo", size_hint_y=None, height=dp(38)))
+
+                # Muestra visible del color que se está seleccionando.
+                fila_muestra_selector = BoxLayout(
+                    orientation="horizontal",
+                    size_hint_y=None,
+                    height=dp(42),
+                    spacing=dp(10),
+                )
+                fila_muestra_selector.add_widget(Label(
+                    text="Color seleccionado:",
+                    size_hint_x=1,
+                    halign="left",
+                    valign="middle",
+                ))
+                muestra_selector_color = Button(
+                    text="",
+                    size_hint=(None, None),
+                    size=(dp(52), dp(36)),
+                    background_normal="",
+                    background_down="",
+                    background_color=(
+                        max(0, min(255, int(color_r.text or "0"))) / 255.0,
+                        max(0, min(255, int(color_g.text or "0"))) / 255.0,
+                        max(0, min(255, int(color_b.text or "0"))) / 255.0,
+                        1,
+                    ),
+                )
+                fila_muestra_selector.add_widget(muestra_selector_color)
+                raiz_color.add_widget(fila_muestra_selector)
+
                 tono_inicial = rgb_to_hsv(
                     max(0, min(255, int(color_r.text or "0"))) / 255.0,
                     max(0, min(255, int(color_g.text or "0"))) / 255.0,
@@ -2150,6 +2180,12 @@ class ConfiguradorApp(App):
                 def aplicar_rgb(rgb):
                     color_r.text, color_g.text, color_b.text = (str(v) for v in rgb)
                     actualizar_muestra_color()
+                    muestra_selector_color.background_color = (
+                        rgb[0] / 255.0,
+                        rgb[1] / 255.0,
+                        rgb[2] / 255.0,
+                        1,
+                    )
                 def actualizar_paleta(*_args):
                     paleta.hue = selector_hue.value
                     paleta.redibujar()
