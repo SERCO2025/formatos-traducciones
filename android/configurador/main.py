@@ -2527,7 +2527,7 @@ class ConfiguradorApp(App):
             ):
                 self.editor.template_widget.pos = posicion_plantilla_inicial
                 self.editor.constrain_template_position()
-                self.editor.refresh_fields()
+                self.editor.refresh_field_positions()
 
         # Registrar el evento real de cierre y mantener intacta la restauración visual.
         def registrar_cierre_popup(_popup, *args):
