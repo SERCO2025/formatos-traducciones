@@ -127,6 +127,8 @@ class Configurador:
         # Caché rasterizada de baja resolución para las muestras de campos.
         # Se mantiene solo en memoria y no forma parte del FDT.
         self._field_preview_cache = {}
+        # Los campos recién creados no generan muestra hasta aceptar Propiedades.
+        self._preview_pending_ids = set()
         self._template_tile_images = {}
         self._field_drag_index = None
         self._field_drop_index = None
@@ -489,6 +491,10 @@ class Configurador:
             self._position_field_resize_grip()
         self._set_status("Lista de campos " + ("activada." if self.field_panel_visible else "oculta."))
 
+    def _field_list_text(self, campo):
+        pregunta = campo.question.strip() or "(sin pregunta)"
+        return "%02d  %s  —  %s" % (campo.order, campo.field_id, pregunta)
+
     def _refresh_field_list(self):
         if not hasattr(self, "field_list"):
             return
@@ -497,10 +503,7 @@ class Configurador:
             return
         self.formato.ordenar_campos()
         for campo in self.formato.fields:
-            pregunta = campo.question.strip() or "(sin pregunta)"
-            self.field_list.insert("end", "%02d  %s  —  %s" % (
-                campo.order, campo.field_id, pregunta
-            ))
+            self.field_list.insert("end", self._field_list_text(campo))
         if self.selected_field:
             for i, campo in enumerate(self.formato.fields):
                 if campo is self.selected_field:
@@ -509,14 +512,42 @@ class Configurador:
                     self.field_list.see(i)
                     break
 
+    def _refresh_field_list_entry(self, campo, previous_index=None):
+        """Inserta o sustituye una sola fila cuando el orden no ha cambiado."""
+        if not hasattr(self, "field_list") or not self.formato:
+            return
+        try:
+            index = self.formato.fields.index(campo)
+        except ValueError:
+            self._refresh_field_list()
+            return
+        if previous_index is None:
+            self.field_list.insert(index, self._field_list_text(campo))
+        elif previous_index == index and index < self.field_list.size():
+            self.field_list.delete(index)
+            self.field_list.insert(index, self._field_list_text(campo))
+        else:
+            self._refresh_field_list()
+            return
+        if self.selected_field is campo:
+            self.field_list.selection_clear(0, "end")
+            self.field_list.selection_set(index)
+            self.field_list.see(index)
+
     def _field_list_select(self, event=None):
         if not self.formato:
             return
         sel = self.field_list.curselection()
         if not sel:
             return
-        self.selected_field = self.formato.fields[sel[0]]
-        self.redraw()
+        anterior = self.selected_field
+        nuevo = self.formato.fields[sel[0]]
+        if anterior is nuevo:
+            return
+        self.selected_field = nuevo
+        if anterior is not None:
+            self._redraw_single_field(anterior)
+        self._redraw_single_field(nuevo)
 
     def _field_list_double_click(self, event):
         self._field_list_select()
@@ -1289,7 +1320,7 @@ class Configurador:
         self.canvas.tag_lower("template_tile")
 
     def _redraw_fields_only(self):
-        """Actualiza campos sin volver a escalar ni reconstruir la plantilla."""
+        """Reconstrucción general de campos; reservar para restauraciones globales."""
         if self.template_image is None:
             return
         self.canvas.delete("field")
@@ -1301,15 +1332,24 @@ class Configurador:
             for campo in self.formato.fields:
                 self._draw_field(campo)
 
+    def _redraw_single_field(self, campo, include_preview=True):
+        """Actualiza únicamente los elementos gráficos asociados a un campo."""
+        if self.template_image is None or campo is None:
+            return
+        self.canvas.delete(campo.field_id)
+        self.field_items.pop(campo.field_id, None)
+        self._field_preview_images.pop(campo.field_id, None)
+        self._draw_field(campo, include_preview=include_preview)
+
     def _field_preview_signature(self, campo):
         """Propiedades que cambian el contenido de la muestra rasterizada."""
         p = campo.position
         s = campo.text_style
         c = s.color
         return (
-            campo.field_type, campo.question, bool(getattr(campo, "uppercase", False)),
+            campo.field_type, bool(getattr(campo, "uppercase", False)),
             s.font_family, s.font_size_px, s.bold, s.italic, s.alignment,
-            s.orientation, c.r, c.g, c.b, p.width, p.height,
+            c.r, c.g, c.b, p.width, p.height,
         )
 
     def _crear_preview_comprimido(self, campo):
@@ -1374,7 +1414,7 @@ class Configurador:
         )
         return jpeg_buffer.getvalue(), alpha_buffer.getvalue()
 
-    def _draw_field(self, campo):
+    def _draw_field(self, campo, include_preview=True):
         p = campo.position
         x1 = 20 + p.x * self.zoom
         y1 = 20 + p.y * self.zoom
@@ -1382,11 +1422,23 @@ class Configurador:
         y2 = y1 + p.height * self.zoom
 
         color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
-        # El contorno visible se rasteriza junto con la muestra; este
-        # rectángulo sin trazo conserva la zona interactiva.
+        # Sin muestra rasterizada, el propio rectángulo vectorial permanece visible.
+        entrada = self._field_preview_cache.get(campo.field_id)
+        firma = self._field_preview_signature(campo)
+        if entrada is None and campo.field_id not in self._preview_pending_ids:
+            try:
+                entrada = (firma, self._crear_preview_comprimido(campo))
+                self._field_preview_cache[campo.field_id] = entrada
+            except Exception:
+                entrada = None
+        hay_preview = (
+            include_preview and entrada is not None and entrada[0] == firma
+            and campo.field_type in (FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER)
+        )
         rect = self.canvas.create_rectangle(
             x1, y1, x2, y2,
-            outline="", width=0,
+            outline="" if hay_preview else color,
+            width=0 if hay_preview else 3,
             tags=("field", campo.field_id)
         )
 
@@ -1395,18 +1447,9 @@ class Configurador:
         # La muestra orientativa conserva las dimensiones del campo. Se cachea
         # como JPEG quality=50 más máscara alpha; el zoom usa NEAREST. Esta caché
         # solo pertenece al configurador y no afecta la salida del capturador.
-        if campo.field_type in (
-            FIELD_TYPE_IMAGE, FIELD_TYPE_TEXT, FIELD_TYPE_NUMBER
-        ):
+        if hay_preview:
             try:
-                firma = self._field_preview_signature(campo)
-                entrada = self._field_preview_cache.get(campo.field_id)
-                if entrada is None or entrada[0] != firma:
-                    comprimido = self._crear_preview_comprimido(campo)
-                    self._field_preview_cache[campo.field_id] = (firma, comprimido)
-                else:
-                    comprimido = entrada[1]
-
+                comprimido = entrada[1]
                 # Reconstruir la capa solo para dibujarla; los bytes comprimidos
                 # permanecen en caché para reducir el consumo de memoria.
                 jpeg_buffer = io.BytesIO(comprimido[0])
@@ -1512,7 +1555,9 @@ class Configurador:
 
         campo.position = Position(int(x), int(y), int(w), int(h))
         self.unsaved = True
-        self.redraw()
+        # Durante el arrastre solo se actualiza el rectángulo; la muestra se
+        # vuelve a rasterizar una sola vez al soltar el control.
+        self._redraw_single_field(campo, include_preview=False)
 
     def _canvas_to_document(self, x, y):
         return (
@@ -1582,7 +1627,10 @@ class Configurador:
                 self._move_start = None
                 self._move_origin = None
             if campo is not seleccionado_antes:
-                self._redraw_fields_only()
+                if seleccionado_antes is not None:
+                    self._redraw_single_field(seleccionado_antes)
+                if campo is not None:
+                    self._redraw_single_field(campo)
             return
 
         self.drag_start = self._canvas_to_document(cx, cy)
@@ -1629,7 +1677,7 @@ class Configurador:
                     campo.position.height,
                 )
                 self.unsaved = True
-                self._redraw_fields_only()
+                self._redraw_single_field(campo)
             return
 
         if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_IMAGE):
@@ -1652,9 +1700,18 @@ class Configurador:
             self._pan_last = None
             return
         if self.tool == TOOL_SELECT and self._field_resize_handle:
+            campo = self.selected_field
             self._field_resize_handle = None
             self._field_resize_start = None
             self._field_resize_origin = None
+            if campo is not None:
+                firma = self._field_preview_signature(campo)
+                entrada = self._field_preview_cache.get(campo.field_id)
+                if entrada is None or entrada[0] != firma:
+                    self._field_preview_cache[campo.field_id] = (
+                        firma, self._crear_preview_comprimido(campo)
+                    )
+                self._redraw_single_field(campo)
             return
         if self.tool == TOOL_SELECT:
             if self._move_changed:
@@ -1724,10 +1781,14 @@ class Configurador:
             uppercase=mayusculas_anteriores,
         )
         self.formato.agregar_campo(campo)
+        seleccionado_anterior = self.selected_field
         self.selected_field = campo
+        self._preview_pending_ids.add(campo.field_id)
         self.unsaved = True
-        self.redraw()
-        self._refresh_field_list()
+        if seleccionado_anterior is not None:
+            self._redraw_single_field(seleccionado_anterior)
+        # Al crear: solo geometría vectorial, sin generar JPEG ni máscara PNG.
+        self._draw_field(campo, include_preview=False)
         self.editar_seleccionado(
             es_nuevo=True,
             undo_antes=undo_antes_creacion,
@@ -1742,8 +1803,11 @@ class Configurador:
         cx, cy = self._event_to_canvas(event)
         campo = self._find_field_at(cx, cy)
         if campo:
+            anterior = self.selected_field
             self.selected_field = campo
-            self._redraw_fields_only()
+            if anterior is not None and anterior is not campo:
+                self._redraw_single_field(anterior)
+            self._redraw_single_field(campo)
             self.editar_seleccionado()
 
     def _mover_seleccionado_tecla(self, event, pasos_forzados=None):
@@ -1775,8 +1839,7 @@ class Configurador:
         self._push_undo()
         campo.position = Position(nx, ny, campo.position.width, campo.position.height)
         self.unsaved = True
-        self._redraw_fields_only()
-        self._refresh_field_list()
+        self._redraw_single_field(campo)
         return "break"
 
     def _eliminar_con_tecla(self, event):
@@ -2190,7 +2253,14 @@ class Configurador:
                 messagebox.showwarning("Propiedades", "Tamaño y área deben ser números positivos.", parent=dialog)
                 return
 
+            indice_anterior = self.formato.fields.index(campo)
+            id_anterior = campo.field_id
+            cache_anterior = self._field_preview_cache.get(id_anterior)
             campo.field_id = nuevo_id
+            if id_anterior != nuevo_id:
+                self.canvas.delete(id_anterior)
+                self.field_items.pop(id_anterior, None)
+                self._field_preview_images.pop(id_anterior, None)
             campo.question = question.get("1.0", "end-1c").strip()
             campo.required = required_var.get()
             campo.uppercase = uppercase_var.get()
@@ -2205,12 +2275,21 @@ class Configurador:
             campo.text_style.italic = italic_var.get()
             campo.text_style.color = color["value"]
             campo.position = Position(x, y, width, height)
-            # Las propiedades cambiaron: regenerar ahora la caché comprimida.
-            self._field_preview_cache.pop(campo.field_id, None)
-            self._field_preview_cache[campo.field_id] = (
-                self._field_preview_signature(campo),
-                self._crear_preview_comprimido(campo),
-            )
+            # La muestra solo cambia si cambia alguna propiedad que realmente
+            # modifica sus píxeles. Pregunta, ID y coordenadas no la invalidan.
+            firma_nueva = self._field_preview_signature(campo)
+            if cache_anterior is not None and cache_anterior[0] == firma_nueva:
+                if id_anterior != nuevo_id:
+                    self._field_preview_cache.pop(id_anterior, None)
+                    self._field_preview_cache[nuevo_id] = cache_anterior
+            else:
+                self._field_preview_cache.pop(id_anterior, None)
+                self._field_preview_cache.pop(nuevo_id, None)
+                self._field_preview_cache[nuevo_id] = (
+                    firma_nueva, self._crear_preview_comprimido(campo)
+                )
+            self._preview_pending_ids.discard(id_anterior)
+            self._preview_pending_ids.discard(nuevo_id)
 
             if campo.field_type == FIELD_TYPE_NUMBER:
                 campo.validation.numeric_only = True
@@ -2219,8 +2298,10 @@ class Configurador:
             self.formato.ordenar_campos()
             self.unsaved = True
             dialog.destroy()
-            self.redraw()
-            self._refresh_field_list()
+            self._redraw_single_field(campo)
+            self._refresh_field_list_entry(
+                campo, None if es_nuevo else indice_anterior
+            )
             if es_nuevo:
                 self.set_tool(TOOL_HAND)
 
@@ -2230,6 +2311,8 @@ class Configurador:
                     item for item in self.formato.fields if item is not campo
                 ]
                 self.formato.ordenar_campos()
+                self._preview_pending_ids.discard(campo.field_id)
+                self._field_preview_cache.pop(campo.field_id, None)
                 if undo_antes is not None:
                     self._undo_stack = list(undo_antes)
                 if redo_antes is not None:
@@ -2241,8 +2324,11 @@ class Configurador:
                 )
                 if unsaved_antes is not None:
                     self.unsaved = unsaved_antes
-                self.redraw()
-                self._refresh_field_list()
+                self.canvas.delete(campo.field_id)
+                self.field_items.pop(campo.field_id, None)
+                self._field_preview_images.pop(campo.field_id, None)
+                if self.selected_field is not None:
+                    self._redraw_single_field(self.selected_field)
                 self._set_status("Creación de campo cancelada.")
             dialog.destroy()
 
@@ -2261,10 +2347,14 @@ class Configurador:
         campo = self.selected_field
         self._push_undo()
         self.formato.fields.remove(campo)
+        self._preview_pending_ids.discard(campo.field_id)
+        self._field_preview_cache.pop(campo.field_id, None)
         self.formato.ordenar_campos()
         self.selected_field = None
         self.unsaved = True
-        self._redraw_fields_only()
+        self.canvas.delete(campo.field_id)
+        self.field_items.pop(campo.field_id, None)
+        self._field_preview_images.pop(campo.field_id, None)
         self._refresh_field_list()
         self._set_status("Campo eliminado.")
 
