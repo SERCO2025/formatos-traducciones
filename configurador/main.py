@@ -1341,6 +1341,15 @@ class Configurador:
         self._field_preview_images.pop(campo.field_id, None)
         self._draw_field(campo, include_preview=include_preview)
 
+    def _move_canvas_field(self, campo, old_x, old_y):
+        """Desplaza los elementos existentes sin recrear ni decodificar el preview."""
+        if campo is None:
+            return
+        dx = (campo.position.x - old_x) * self.zoom
+        dy = (campo.position.y - old_y) * self.zoom
+        if dx or dy:
+            self.canvas.move(campo.field_id, dx, dy)
+
     def _field_preview_signature(self, campo):
         """Propiedades que cambian el contenido de la muestra rasterizada."""
         p = campo.position
@@ -1673,6 +1682,7 @@ class Configurador:
                 campo = self.selected_field
                 max_x = max(0, self.template_image.width - campo.position.width)
                 max_y = max(0, self.template_image.height - campo.position.height)
+                old_x, old_y = campo.position.x, campo.position.y
                 campo.position = Position(
                     max(0, min(max_x, self._move_origin[0] + dx)),
                     max(0, min(max_y, self._move_origin[1] + dy)),
@@ -1680,7 +1690,7 @@ class Configurador:
                     campo.position.height,
                 )
                 self.unsaved = True
-                self._redraw_single_field(campo)
+                self._move_canvas_field(campo, old_x, old_y)
             return
 
         if self.drag_start is None or self.tool not in (TOOL_TEXT, TOOL_NUMBER, TOOL_IMAGE):
@@ -1840,9 +1850,10 @@ class Configurador:
         if (nx, ny) == (campo.position.x, campo.position.y):
             return "break"
         self._push_undo()
+        old_x, old_y = campo.position.x, campo.position.y
         campo.position = Position(nx, ny, campo.position.width, campo.position.height)
         self.unsaved = True
-        self._redraw_single_field(campo)
+        self._move_canvas_field(campo, old_x, old_y)
         return "break"
 
     def _eliminar_con_tecla(self, event):
@@ -2259,11 +2270,9 @@ class Configurador:
             indice_anterior = self.formato.fields.index(campo)
             id_anterior = campo.field_id
             cache_anterior = self._field_preview_cache.get(id_anterior)
+            firma_anterior = self._field_preview_signature(campo)
+            x_anterior, y_anterior = campo.position.x, campo.position.y
             campo.field_id = nuevo_id
-            if id_anterior != nuevo_id:
-                self.canvas.delete(id_anterior)
-                self.field_items.pop(id_anterior, None)
-                self._field_preview_images.pop(id_anterior, None)
             campo.question = question.get("1.0", "end-1c").strip()
             campo.required = required_var.get()
             campo.uppercase = uppercase_var.get()
@@ -2281,11 +2290,12 @@ class Configurador:
             # La muestra solo cambia si cambia alguna propiedad que realmente
             # modifica sus píxeles. Pregunta, ID y coordenadas no la invalidan.
             firma_nueva = self._field_preview_signature(campo)
+            cambia_preview = firma_anterior != firma_nueva
             if cache_anterior is not None and cache_anterior[0] == firma_nueva:
                 if id_anterior != nuevo_id:
                     self._field_preview_cache.pop(id_anterior, None)
                     self._field_preview_cache[nuevo_id] = cache_anterior
-            else:
+            elif cambia_preview or cache_anterior is None:
                 self._field_preview_cache.pop(id_anterior, None)
                 self._field_preview_cache.pop(nuevo_id, None)
                 self._field_preview_cache[nuevo_id] = (
@@ -2301,7 +2311,19 @@ class Configurador:
             self.formato.ordenar_campos()
             self.unsaved = True
             dialog.destroy()
-            self._redraw_single_field(campo)
+            if cambia_preview or es_nuevo:
+                self._redraw_single_field(campo)
+            else:
+                # ID y coordenadas no cambian los píxeles de la muestra.
+                # Se conservan los objetos Canvas y solo se actualizan sus tags/posición.
+                if id_anterior != nuevo_id:
+                    self.canvas.addtag_withtag(nuevo_id, id_anterior)
+                    self.canvas.dtag(id_anterior, id_anterior)
+                    if id_anterior in self.field_items:
+                        self.field_items[nuevo_id] = self.field_items.pop(id_anterior)
+                    if id_anterior in self._field_preview_images:
+                        self._field_preview_images[nuevo_id] = self._field_preview_images.pop(id_anterior)
+                self._move_canvas_field(campo, x_anterior, y_anterior)
             self._refresh_field_list_entry(
                 campo, None if es_nuevo else indice_anterior
             )
