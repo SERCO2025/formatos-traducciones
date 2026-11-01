@@ -851,7 +851,7 @@ class CapturadorApp(App):
                     self.respuestas[campo.field_id] = self.entrada.text
             self._avance_temporal_pendiente = self._crear_archivo_avance_temporal()
         except Exception as exc:
-            self._mensaje("No se pudo preparar el avance", "%s\\n\\n%s" % (exc, traceback.format_exc()))
+            self._mensaje("No se pudo preparar el avance", "%s\n\n%s" % (exc, traceback.format_exc()))
             return
         self._seleccionar_carpeta(self.REQUEST_SAVE_DRAFT_FOLDER)
 
