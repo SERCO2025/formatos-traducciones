@@ -1425,7 +1425,10 @@ class Configurador:
         # Sin muestra rasterizada, el propio rectángulo vectorial permanece visible.
         entrada = self._field_preview_cache.get(campo.field_id)
         firma = self._field_preview_signature(campo)
-        if entrada is None and campo.field_id not in self._preview_pending_ids:
+        if (
+            (entrada is None or entrada[0] != firma)
+            and campo.field_id not in self._preview_pending_ids
+        ):
             try:
                 entrada = (firma, self._crear_preview_comprimido(campo))
                 self._field_preview_cache[campo.field_id] = entrada
