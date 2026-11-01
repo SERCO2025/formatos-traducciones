@@ -184,6 +184,7 @@ class CapturadorApp(App):
         self._nombre_final = "resultado.jpg"
         self._preview_file = None
         self._temp_files = []
+        self._avance_temporal_pendiente = None
         self._fdt_path = None
         self._draft_dirs = []
         self._save_jpeg_folder_uri = None
@@ -438,12 +439,15 @@ class CapturadorApp(App):
                 self._limpiar_archivos_vencidos()
                 self._mostrar_configuracion()
             elif request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
-                ruta_avance = self._crear_archivo_avance_temporal()
+                ruta_avance = self._avance_temporal_pendiente
+                if not ruta_avance or not os.path.isfile(ruta_avance):
+                    raise IOError("No se encontró la copia temporal del avance preparada antes de abrir el selector de carpetas.")
                 nombre_avance = os.path.splitext(
                     construir_nombre_archivo(self.formato, self.respuestas)
                 )[0] + ".ftc"
                 destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
                 self._copiar_archivo_a_uri(ruta_avance, destino)
+                self._avance_temporal_pendiente = None
                 self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
             elif request_code == self.REQUEST_OPEN_IMAGE:
                 ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri_text, ".jpg"))
@@ -588,9 +592,14 @@ class CapturadorApp(App):
         entrada.focus = True
 
     def _entrada_cambio(self, *_):
-        if self.formato and self.formato.fields and self.formato.fields[self.indice].field_type != FIELD_TYPE_IMAGE:
-            Clock.unschedule(self._actualizar_preview)
-            Clock.schedule_once(self._actualizar_preview, 0.25)
+        if self.formato and self.formato.fields:
+            campo = self.formato.fields[self.indice]
+            if campo.field_type != FIELD_TYPE_IMAGE:
+                # Mantener la respuesta en memoria mientras se escribe. Así no
+                # depende de que Android conserve el TextInput al abrir selectores.
+                self.respuestas[campo.field_id] = self.entrada.text
+                Clock.unschedule(self._actualizar_preview)
+                Clock.schedule_once(self._actualizar_preview, 0.25)
 
     def _guardar_respuesta_actual(self):
         if not self.formato or not self.formato.fields:
@@ -832,6 +841,17 @@ class CapturadorApp(App):
     def guardar_avance(self):
         if not self.formato:
             self._mensaje("Sin captura", "Primero abre un formato .fdt o un archivo de avance.")
+            return
+        try:
+            # Capturar y empaquetar las respuestas antes de abrir el selector
+            # nativo, que puede pausar o recrear la actividad Android.
+            if self.formato.fields:
+                campo = self.formato.fields[self.indice]
+                if campo.field_type != FIELD_TYPE_IMAGE:
+                    self.respuestas[campo.field_id] = self.entrada.text
+            self._avance_temporal_pendiente = self._crear_archivo_avance_temporal()
+        except Exception as exc:
+            self._mensaje("No se pudo preparar el avance", "%s\\n\\n%s" % (exc, traceback.format_exc()))
             return
         self._seleccionar_carpeta(self.REQUEST_SAVE_DRAFT_FOLDER)
 
