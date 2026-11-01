@@ -1435,7 +1435,8 @@ class Configurador:
         entrada = self._field_preview_cache.get(campo.field_id)
         firma = self._field_preview_signature(campo)
         if (
-            (entrada is None or entrada[0] != firma)
+            include_preview
+            and (entrada is None or entrada[0] != firma)
             and campo.field_id not in self._preview_pending_ids
         ):
             try:
