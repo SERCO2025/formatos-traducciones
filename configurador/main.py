@@ -1046,6 +1046,9 @@ class Configurador:
         self.current_fdt_path = None
         self.selected_field = None
         self.field_items.clear()
+        self._field_preview_cache.clear()
+        self._preview_pending_ids.clear()
+        self._refresh_field_list()
         self.canvas.delete("all")
         self.canvas.configure(scrollregion=(0, 0, 0, 0))
         self.zoom = 1.0
@@ -1329,6 +1332,12 @@ class Configurador:
         self.field_items.clear()
         self._field_preview_images.clear()
         if self.formato:
+            ids_validos = {campo.field_id for campo in self.formato.fields}
+            self._field_preview_cache = {
+                field_id: entry for field_id, entry in self._field_preview_cache.items()
+                if field_id in ids_validos
+            }
+            self._preview_pending_ids.intersection_update(ids_validos)
             for campo in self.formato.fields:
                 self._draw_field(campo)
 
@@ -2386,9 +2395,7 @@ class Configurador:
         self.formato.ordenar_campos()
         self.selected_field = None
         self.unsaved = True
-        self.canvas.delete(campo.field_id)
-        self.field_items.pop(campo.field_id, None)
-        self._field_preview_images.pop(campo.field_id, None)
+        self._redraw_fields_only()
         self._refresh_field_list()
         self._set_status("Campo eliminado.")
 
