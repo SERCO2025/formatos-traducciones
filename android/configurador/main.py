@@ -1348,7 +1348,13 @@ class ConfiguradorApp(App):
             Intent = autoclass("android.content.Intent")
             accion = Intent.ACTION_CREATE_DOCUMENT if guardar else Intent.ACTION_OPEN_DOCUMENT
             intent = Intent(accion)
-            intent.setType("image/*" if tipo == "image" else ("font/*" if tipo == "font" else "*/*"))
+            # FDT es un contenedor ZIP con extensión propia; al crear el documento
+            # se declara su MIME real para que el selector Android no reciba */*.
+            intent.setType(
+                "application/zip"
+                if guardar
+                else ("image/*" if tipo == "image" else ("font/*" if tipo == "font" else "*/*"))
+            )
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             if guardar:
