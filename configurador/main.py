@@ -2311,18 +2311,21 @@ class Configurador:
             self.formato.ordenar_campos()
             self.unsaved = True
             dialog.destroy()
-            if cambia_preview or es_nuevo:
+            # Si cambia el ID, transferir primero la etiqueta de todos los
+            # elementos gráficos. Así la actualización localizada elimina
+            # también los elementos anteriores y no deja duplicados.
+            if id_anterior != nuevo_id:
+                self.canvas.addtag_withtag(nuevo_id, id_anterior)
+                self.canvas.dtag(id_anterior, id_anterior)
+                if id_anterior in self.field_items:
+                    self.field_items[nuevo_id] = self.field_items.pop(id_anterior)
+                if id_anterior in self._field_preview_images:
+                    self._field_preview_images[nuevo_id] = self._field_preview_images.pop(id_anterior)
+            if cambia_preview or es_nuevo or cache_anterior is None:
                 self._redraw_single_field(campo)
             else:
                 # ID y coordenadas no cambian los píxeles de la muestra.
-                # Se conservan los objetos Canvas y solo se actualizan sus tags/posición.
-                if id_anterior != nuevo_id:
-                    self.canvas.addtag_withtag(nuevo_id, id_anterior)
-                    self.canvas.dtag(id_anterior, id_anterior)
-                    if id_anterior in self.field_items:
-                        self.field_items[nuevo_id] = self.field_items.pop(id_anterior)
-                    if id_anterior in self._field_preview_images:
-                        self._field_preview_images[nuevo_id] = self._field_preview_images.pop(id_anterior)
+                # Se conservan los objetos Canvas y solo se actualiza su posición.
                 self._move_canvas_field(campo, x_anterior, y_anterior)
             self._refresh_field_list_entry(
                 campo, None if es_nuevo else indice_anterior
