@@ -339,7 +339,7 @@ class CanvasEditor(StencilView):
     def _viewport_changed(self, *_args):
         if self.template_widget is not None:
             self.constrain_template_position()
-            self.refresh_fields()
+            self.refresh_field_positions()
 
     def constrain_template_position(self, pos=None):
         """Centra plantillas pequeñas y limita el desplazamiento en coordenadas locales."""
@@ -499,8 +499,42 @@ class CanvasEditor(StencilView):
             if isinstance(widget, CampoWidget):
                 widget.actualizar()
 
+    def refresh_field(self, campo):
+        """Reconstruye únicamente el widget del campo indicado; crea el que falte."""
+        if self.template_widget is None or campo is None:
+            return
+        for widget in self.children:
+            if isinstance(widget, CampoWidget) and (
+                widget.campo is campo or widget.campo.field_id == campo.field_id
+            ):
+                widget.actualizar()
+                return
+        self.add_widget(CampoWidget(campo, self))
+
+    def refresh_field_position(self, campo):
+        """Actualiza geometría de un solo campo sin recrear canvas ni etiqueta."""
+        if campo is None:
+            return
+        for widget in self.children:
+            if isinstance(widget, CampoWidget) and (
+                widget.campo is campo or widget.campo.field_id == campo.field_id
+            ):
+                widget.actualizar_posicion()
+                return
+
+    def remove_field(self, campo):
+        """Retira únicamente el widget visual del campo indicado."""
+        if campo is None:
+            return
+        for widget in list(self.children):
+            if isinstance(widget, CampoWidget) and (
+                widget.campo is campo or widget.campo.field_id == campo.field_id
+            ):
+                self.remove_widget(widget)
+                return
+
     def refresh_field_positions(self):
-        """Sincroniza solo posiciones durante paneo; conserva etiquetas e instrucciones."""
+        """Sincroniza posiciones durante paneo sin reconstruir etiquetas ni instrucciones."""
         if self.template_widget is None:
             return
         for widget in self.children:
@@ -766,7 +800,9 @@ class CanvasEditor(StencilView):
             p.x, p.y, p.width, p.height = int(nx), int(ny), int(nw), int(nh)
 
         self.app._interaction_changed = True
-        self.refresh_fields()
+        # Igual que en el EXE: durante el gesto solo se actualiza el campo activo.
+        # Se conservan sus instrucciones y etiqueta; los demás campos no se tocan.
+        self.refresh_field_position(self.active_field)
 
     def end_field_interaction(self, touch):
         if self.app._interaction_changed:
@@ -1710,9 +1746,13 @@ class ConfiguradorApp(App):
         return "campo%d" % n
 
     def seleccionar(self, campo):
+        anterior = self.seleccionado
         self.seleccionado = campo
         if self.editor:
-            self.editor.refresh_fields()
+            if anterior is not None and anterior is not campo:
+                self.editor.refresh_field(anterior)
+            if campo is not None:
+                self.editor.refresh_field(campo)
         if campo:
             self.estado.text = "Campo %d — %s" % (campo.order, campo.field_id)
 
@@ -2390,14 +2430,14 @@ class ConfiguradorApp(App):
                 )
                 self.estado.text = "Campo %d configurado." % campo.order
 
-                def refrescar_plantilla(_dt):
+                def refrescar_campo(_dt):
                     try:
-                        self.editor.cargar_plantilla(self._visual_template_path)
+                        self.editor.refresh_field(campo)
                     except Exception as exc:
                         self._mostrar_error_tecnico(
                             "El campo se guardó, pero no se pudo actualizar la vista", exc
                         )
-                Clock.schedule_once(refrescar_plantilla, 0)
+                Clock.schedule_once(refrescar_campo, 0)
 
             except Exception as exc:
                 self.formato = formato_anterior
@@ -2510,7 +2550,9 @@ class ConfiguradorApp(App):
                         if any(item is seleccionado_antes for item in self.formato.fields)
                         else None
                     )
-                    self.editor.cargar_plantilla(self._visual_template_path)
+                    self.editor.remove_field(campo)
+                    if self.seleccionado is not None:
+                        self.editor.refresh_field(self.seleccionado)
                     self.actualizar_lista_estado()
                     self.estado.text = "Creación de campo cancelada."
                 except Exception as exc:
