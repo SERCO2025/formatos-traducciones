@@ -623,7 +623,7 @@ class Configurador:
         self.selected_field = campo
         self.unsaved = True
         self._refresh_field_list()
-        self.redraw()
+        self._redraw_fields_only()
         self._set_status("Orden de preguntas actualizado.")
 
     def _dock_toolbar(self, side):
@@ -1487,16 +1487,17 @@ class Configurador:
             except Exception:
                 pass
 
-        label = self.canvas.create_text(
-            x1 + 4, y1 + 4,
-            text="%d  %s" % (campo.order, campo.field_type),
-            fill=color, anchor="nw",
-            tags=("field", campo.field_id)
-        )
-        objetos.append(label)
+        if campo.field_id not in self._preview_pending_ids:
+            label = self.canvas.create_text(
+                x1 + 4, y1 + 4,
+                text="%d  %s" % (campo.order, campo.field_type),
+                fill=color, anchor="nw",
+                tags=("field", campo.field_id)
+            )
+            objetos.append(label)
         self.field_items[campo.field_id] = tuple(objetos)
 
-        if campo is self.selected_field:
+        if campo is self.selected_field and campo.field_id not in self._preview_pending_ids:
             self._draw_resize_handles(campo, x1, y1, x2, y2)
 
     def _draw_resize_handles(self, campo, x1, y1, x2, y2):
@@ -2408,7 +2409,7 @@ class Configurador:
         self.formato = self._undo_stack.pop()
         self.selected_field = None
         self.unsaved = True
-        self.redraw()
+        self._redraw_fields_only()
         self._refresh_field_list()
         self._set_status("Deshacer.")
 
@@ -2419,7 +2420,7 @@ class Configurador:
         self.formato = self._redo_stack.pop()
         self.selected_field = None
         self.unsaved = True
-        self.redraw()
+        self._redraw_fields_only()
         self._refresh_field_list()
         self._set_status("Rehacer.")
 
