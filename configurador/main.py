@@ -1102,6 +1102,9 @@ class Configurador:
             self._set_status(
                 "Plantilla importada: %d × %d px" % (imagen.width, imagen.height)
             )
+            # Inicializar la interacción del lienzo y dejar activa la Lupa.
+            # Se agenda para después de que Tkinter termine de dibujar la plantilla.
+            self.root.after_idle(self._activar_lienzo_despues_de_cargar)
         except Exception as exc:
             messagebox.showerror("Error", "No se pudo importar la plantilla.\n%s" % exc)
 
@@ -1144,14 +1147,13 @@ class Configurador:
             self._refresh_field_list()
             self.unsaved = False
             self._set_status("Formato abierto: " + os.path.basename(ruta))
-            # Reproducir un clic de Selección en el píxel (1, 1) de la plantilla,
-            # en la esquina superior izquierda, y después activar Desplazar.
-            # Se agenda tras abrir para que Tkinter termine de actualizar el lienzo.
-            self.root.after_idle(self._activar_desplazar_al_abrir)
+            # Inicializar el lienzo con un clic de Selección en el píxel (1, 1)
+            # y dejar activa la Lupa para comenzar a trabajar.
+            self.root.after_idle(self._activar_lienzo_despues_de_cargar)
         except Exception as exc:
             messagebox.showerror("Error al abrir", str(exc))
 
-    def _activar_desplazar_al_abrir(self):
+    def _activar_lienzo_despues_de_cargar(self):
         if self.template_image is None or not self.formato:
             return
         # La plantilla se dibuja con un margen de 20 px y escala según el zoom.
@@ -1161,11 +1163,12 @@ class Configurador:
         self.canvas.update_idletasks()
         x = int(round(20 + self.zoom))
         y = int(round(20 + self.zoom))
-        # Usar los mismos eventos del lienzo que un clic real con Selección.
+        # Reproducir el clic con la herramienta Selección en el píxel (1, 1).
         self.set_tool(TOOL_SELECT)
         self.canvas.event_generate("<ButtonPress-1>", x=x, y=y)
         self.canvas.event_generate("<ButtonRelease-1>", x=x, y=y)
-        self.set_tool(TOOL_HAND)
+        # La herramienta inicial de trabajo será Lupa, no Desplazar.
+        self.set_tool(TOOL_ZOOM)
 
     def guardar(self):
         if not self.formato:
