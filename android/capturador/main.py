@@ -190,6 +190,9 @@ class CapturadorApp(App):
         self._save_jpeg_folder_uri = None
         self._retention_days = 7
         self._cleanup_enabled = True
+        self._diagnostico_path = os.path.join(self.user_data_dir, "diagnostico_capturador.log")
+        self._diagnostico_seq = 0
+        self._diagnostico("INICIO_BUILD")
         self._generated_files = {}
         self._settings_file = os.path.join(self.user_data_dir, "output_settings.json")
         self._legacy_save_folder_config = os.path.join(self.user_data_dir, "save_jpeg_folder.json")
@@ -284,6 +287,13 @@ class CapturadorApp(App):
         self.btn_guardar_avance.bind(on_release=lambda *_: self.guardar_avance())
         controls_draft.add_widget(self.btn_guardar_avance)
         root.add_widget(controls_draft)
+        # Instrumentación temporal: observar cambios reales de los widgets sin alterar su lógica.
+        self.entrada.bind(text=lambda *_: self._diagnostico("WIDGET_ENTRADA_TEXT"))
+        self.entrada.bind(focus=lambda *_: self._diagnostico("WIDGET_ENTRADA_FOCUS"))
+        self.entrada.bind(disabled=lambda *_: self._diagnostico("WIDGET_ENTRADA_DISABLED"))
+        self.btn_atras.bind(disabled=lambda *_: self._diagnostico("WIDGET_VOLVER_DISABLED"))
+        self.btn_atras.bind(parent=lambda *_: self._diagnostico("WIDGET_VOLVER_PARENT"))
+        self._diagnostico("BUILD_WIDGETS_LISTOS")
 
         # El botón Salir ya está aislado en el encabezado superior derecho.
 
@@ -295,6 +305,38 @@ class CapturadorApp(App):
         else:
             self.estado.text = "Entorno de prueba: los selectores requieren Android."
         return root
+
+    def _diagnostico(self, etapa):
+        """Registra estados de navegación y widgets; no almacena respuestas ni datos personales."""
+        try:
+            self._diagnostico_seq = getattr(self, "_diagnostico_seq", 0) + 1
+            formato = getattr(self, "formato", None)
+            campos = getattr(formato, "fields", []) if formato else []
+            indice = getattr(self, "indice", None)
+            campo = campos[indice] if isinstance(indice, int) and 0 <= indice < len(campos) else None
+            entrada = getattr(self, "entrada", None)
+            atras = getattr(self, "btn_atras", None)
+            texto = getattr(entrada, "text", "") if entrada is not None else ""
+            linea = (
+                "%06d | %s | indice=%r | total=%d | campo=%r | respuesta_len=%d | "
+                "entrada_id=%r | entrada_parent=%s | entrada_disabled=%r | entrada_focus=%r | "
+                "volver_id=%r | volver_parent=%s | volver_disabled=%r\n"
+                % (self._diagnostico_seq, etapa, indice, len(campos),
+                   getattr(campo, "field_id", None), len(texto or ""),
+                   id(entrada) if entrada is not None else None,
+                   bool(getattr(entrada, "parent", None)) if entrada is not None else None,
+                   getattr(entrada, "disabled", None), getattr(entrada, "focus", None),
+                   id(atras) if atras is not None else None,
+                   bool(getattr(atras, "parent", None)) if atras is not None else None,
+                   getattr(atras, "disabled", None))
+            )
+            ruta = getattr(self, "_diagnostico_path", None)
+            if ruta:
+                with open(ruta, "a", encoding="utf-8") as archivo:
+                    archivo.write(linea)
+                    archivo.flush()
+        except Exception:
+            pass
 
     def _manejar_tecla_android(self, window, key, scancode, codepoint, modifiers):
         # El botón Atrás de Android nunca cierra la aplicación.
@@ -409,6 +451,7 @@ class CapturadorApp(App):
         self._intent(self.REQUEST_OPEN_IMAGE, "android.intent.action.OPEN_DOCUMENT", "image/*")
 
     def _on_activity_result(self, request_code, result_code, intent):
+        self._diagnostico("ACTIVITY_RESULT_INICIO_%s" % request_code)
         try:
             Activity = autoclass("android.app.Activity")
             if result_code != Activity.RESULT_OK or intent is None:
@@ -432,8 +475,11 @@ class CapturadorApp(App):
                 self.btn_guardar_avance.disabled = False
                 self._mostrar_campo()
             elif request_code == self.REQUEST_OPEN_DRAFT:
+                self._diagnostico("ANTES_COPIAR_FTC")
                 ruta = self._copiar_uri_a_cache(uri, ".ftc")
+                self._diagnostico("ANTES_ABRIR_FTC")
                 self._abrir_archivo_avance(ruta)
+                self._diagnostico("DESPUES_ABRIR_FTC")
             elif request_code == self.REQUEST_CONFIG_OUTPUT_FOLDER:
                 self._recordar_carpeta_destino(uri, intent)
                 self._limpiar_archivos_vencidos()
@@ -479,7 +525,10 @@ class CapturadorApp(App):
                             "Se guardó el JPEG como:\n%s" % self._nombre_final,
                         )
         except Exception as exc:
+            self._diagnostico("ACTIVITY_RESULT_EXCEPCION_%s" % type(exc).__name__)
             self._mensaje("Error al procesar el archivo", "%s\n\n%s" % (exc, traceback.format_exc()))
+        finally:
+            self._diagnostico("ACTIVITY_RESULT_FIN_%s" % request_code)
 
     def _extension_uri(self, uri, fallback):
         try:
@@ -586,12 +635,15 @@ class CapturadorApp(App):
         return False
 
     def _enfocar_respuesta_siguiente(self, *_):
+        self._diagnostico("CALLBACK_ENFOCAR_INICIO")
         entrada = getattr(self, "entrada", None)
         if entrada is None or entrada.disabled or not entrada.parent:
             return
         entrada.focus = True
+        self._diagnostico("CALLBACK_ENFOCAR_FIN")
 
     def _entrada_cambio(self, *_):
+        self._diagnostico("CALLBACK_ENTRADA_CAMBIO")
         if self.formato and self.formato.fields:
             campo = self.formato.fields[self.indice]
             if campo.field_type != FIELD_TYPE_IMAGE:
@@ -620,6 +672,7 @@ class CapturadorApp(App):
         return True
 
     def _mostrar_campo(self):
+        self._diagnostico("MOSTRAR_CAMPO_INICIO")
         if not self.formato or not self.formato.fields:
             return
         campo = self.formato.fields[self.indice]
@@ -627,6 +680,7 @@ class CapturadorApp(App):
         self.estado.text = "%s — Campo %d de %d" % (self.formato.name, self.indice + 1, total)
         self.pregunta.text = (campo.question or "").strip() or campo.field_id
         self.entrada.text = self.respuestas.get(campo.field_id, "")
+        self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
         self.entrada.hint_text = "Seleccione una imagen" if es_imagen else "Escriba la respuesta aquí"
@@ -637,9 +691,11 @@ class CapturadorApp(App):
             else ("No se ha seleccionado imagen." if es_imagen else "")
         )
         self.btn_atras.disabled = self.indice <= 0
+        self._diagnostico("MOSTRAR_CAMPO_DESPUES_VOLVER")
         self.btn_siguiente.disabled = False
         self.btn_siguiente.text = "Finalizar" if self.indice == total - 1 else "Continuar"
         self._actualizar_preview()
+        self._diagnostico("MOSTRAR_CAMPO_FIN")
 
     def anterior(self):
         if not self.formato or self.indice <= 0:
@@ -856,6 +912,7 @@ class CapturadorApp(App):
         self._seleccionar_carpeta(self.REQUEST_SAVE_DRAFT_FOLDER)
 
     def _abrir_archivo_avance(self, ruta):
+        self._diagnostico("ABRIR_FTC_INICIO")
         directorio = tempfile.mkdtemp(prefix="formatos_traducidos_avance_")
         self._draft_dirs.append(directorio)
         with zipfile.ZipFile(ruta, "r") as paquete:
@@ -876,12 +933,15 @@ class CapturadorApp(App):
         self.formato = formato
         self._fdt_path = ruta_fdt
         self.respuestas = respuestas
+        self._diagnostico("ABRIR_FTC_RESPUESTAS_CARGADAS")
         try:
             self.indice = max(0, min(int(datos.get("indice", 0)), len(formato.fields) - 1))
         except (TypeError, ValueError):
             self.indice = 0
         self.btn_guardar_avance.disabled = False
+        self._diagnostico("ABRIR_FTC_ANTES_MOSTRAR")
         self._mostrar_campo()
+        self._diagnostico("ABRIR_FTC_DESPUES_MOSTRAR")
         self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
 
     def _cargar_configuracion_salida(self):
