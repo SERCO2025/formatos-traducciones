@@ -2291,11 +2291,15 @@ class Configurador:
             # modifica sus píxeles. Pregunta, ID y coordenadas no la invalidan.
             firma_nueva = self._field_preview_signature(campo)
             cambia_preview = firma_anterior != firma_nueva
-            if cache_anterior is not None and cache_anterior[0] == firma_nueva:
+            regenerar_preview = (
+                cache_anterior is None or cache_anterior[0] != firma_nueva
+                or cambia_preview
+            )
+            if not regenerar_preview:
                 if id_anterior != nuevo_id:
                     self._field_preview_cache.pop(id_anterior, None)
                     self._field_preview_cache[nuevo_id] = cache_anterior
-            elif cambia_preview or cache_anterior is None:
+            else:
                 self._field_preview_cache.pop(id_anterior, None)
                 self._field_preview_cache.pop(nuevo_id, None)
                 self._field_preview_cache[nuevo_id] = (
@@ -2321,7 +2325,7 @@ class Configurador:
                     self.field_items[nuevo_id] = self.field_items.pop(id_anterior)
                 if id_anterior in self._field_preview_images:
                     self._field_preview_images[nuevo_id] = self._field_preview_images.pop(id_anterior)
-            if cambia_preview or es_nuevo or cache_anterior is None:
+            if regenerar_preview or es_nuevo:
                 self._redraw_single_field(campo)
             else:
                 # ID y coordenadas no cambian los píxeles de la muestra.
