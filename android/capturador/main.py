@@ -151,7 +151,7 @@ class PinchZoomScrollView(ScrollView):
 from PIL import Image as PILImage
 
 from shared.fdt import cargar_fdt
-from shared.ftc import normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import construir_nombre_archivo, renderizar_imagen
 from shared.validators import validar_respuesta, validar_todas_las_respuestas
@@ -1165,13 +1165,9 @@ class CapturadorApp(App):
                     extension = os.path.splitext(imagen_path)[1].lower()
                     if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
                         extension = ".jpg"
-                    seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
-                    interno = "imagenes/%s%s" % (seguro, extension)
-                    if interno in datos["imagenes"].values():
-                        sufijo = 1
-                        while "imagenes/%s_%d%s" % (seguro, sufijo, extension) in datos["imagenes"].values():
-                            sufijo += 1
-                        interno = "imagenes/%s_%d%s" % (seguro, sufijo, extension)
+                    interno = construir_ruta_imagen_ftc(
+                        campo.field_id, extension, datos["imagenes"]
+                    )
                     datos["imagenes"][campo.field_id] = interno
                     datos["respuestas"][campo.field_id] = ""
                 else:
