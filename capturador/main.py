@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import atexit
 import json
 import os
 import re
@@ -11,7 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from shared.fdt import cargar_fdt
+from shared.fdt import cargar_fdt, limpiar_fdt_temporales
 from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import (
@@ -37,6 +38,7 @@ class CapturadorApp:
         self._final_preview_photo = None
         self._fdt_path = None
         self._draft_dirs = []
+        atexit.register(self._limpiar_temporales)
         self._output_folder = ""
         self._retention_days = 7
         self._auto_cleanup_enabled = True
@@ -399,6 +401,21 @@ class CapturadorApp:
         dialog.grab_set()
         dialog.focus_force()
 
+    def _limpiar_temporales(self):
+        """Elimina extracciones FDT y avances FTC temporales al cerrar el EXE."""
+        for directorio in list(self._draft_dirs):
+            try:
+                if directorio and os.path.isdir(directorio):
+                    import shutil
+                    shutil.rmtree(directorio, ignore_errors=True)
+            except OSError:
+                pass
+        self._draft_dirs = []
+        try:
+            limpiar_fdt_temporales()
+        except Exception:
+            pass
+
     def _mostrar_inicio(self):
         self.pregunta.config(text="Abra un formato .fdt para comenzar.")
         self.entrada.config(state="disabled")
@@ -424,6 +441,7 @@ class CapturadorApp:
             )
             return
 
+        limpiar_fdt_temporales(keep_path=formato.template.path)
         self.formato = formato
         self._fdt_path = os.path.abspath(ruta)
         self.respuestas = {campo.field_id: "" for campo in formato.fields}
@@ -478,6 +496,7 @@ class CapturadorApp:
                         archivo_imagen.write(paquete.read(interno))
 
             formato = cargar_fdt(ruta_fdt)
+            limpiar_fdt_temporales(keep_path=formato.template.path)
             campos = {campo.field_id: campo for campo in formato.fields}
             respuestas = {campo.field_id: "" for campo in formato.fields}
             for campo_id, valor in respuestas_guardadas.items():
