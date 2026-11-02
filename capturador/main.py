@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from shared.fdt import cargar_fdt
-from shared.ftc import normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import (
     construir_nombre_archivo,
@@ -566,12 +566,11 @@ class CapturadorApp:
                             extension = os.path.splitext(imagen_path)[1].lower()
                             if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
                                 extension = ".jpg"
-                            seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
-                            interno = "imagenes/%s%s" % (seguro, extension)
-                            # Evitar que campos distintos con el mismo ID sanitizado
-                            # colisionen al guardar sus imágenes.
-                            if interno in datos["imagenes"].values():
-                                interno = "imagenes/%s_%d%s" % (seguro, len(datos["imagenes"]), extension)
+                            # Evitar colisiones incluso cuando un ID sanitizado
+                            # coincide con el sufijo de otro campo.
+                            interno = construir_ruta_imagen_ftc(
+                                campo.field_id, extension, datos["imagenes"]
+                            )
                             datos["imagenes"][campo.field_id] = interno
                             datos["respuestas"][campo.field_id] = ""
                             paquete.write(imagen_path, interno)
