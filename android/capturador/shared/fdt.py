@@ -342,18 +342,26 @@ def validar_fdt(formato: Formato):
             )
         ordenes.add(campo.order)
 
-        if campo.position.width < 0 or campo.position.height < 0:
+        posicion = campo.position
+        if posicion.width <= 0 or posicion.height <= 0:
             errores.append(
-                "El área del campo %s no puede tener dimensiones negativas."
+                "El área del campo %s debe tener anchura y altura mayores que cero."
+                % (campo.field_id or "(sin ID)")
+            )
+        if (
+            posicion.x < 0
+            or posicion.y < 0
+            or posicion.x + posicion.width > formato.template.width
+            or posicion.y + posicion.height > formato.template.height
+        ):
+            errores.append(
+                "El campo %s queda fuera de los límites de la plantilla."
                 % (campo.field_id or "(sin ID)")
             )
 
         if campo.field_type == FIELD_TYPE_NUMBER:
             campo.validation.numeric_only = True
             campo.validation.alphanumeric_only = False
-        elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
-            campo.validation.numeric_only = False
-            campo.validation.alphanumeric_only = True
         else:
             campo.validation.numeric_only = False
             campo.validation.alphanumeric_only = False
