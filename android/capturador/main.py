@@ -17,6 +17,7 @@ from pathlib import Path
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.graphics import Color, Line, Rectangle
@@ -155,7 +156,7 @@ from shared.renderer import construir_nombre_archivo, renderizar_imagen
 from shared.validators import validar_respuesta, validar_todas_las_respuestas
 
 try:
-    from jnius import autoclass
+    from jnius import autoclass, cast
     from android import activity
     ANDROID_NATIVE = True
 except Exception:
@@ -220,11 +221,17 @@ class CapturadorApp(App):
         self.btn_configuracion.bind(on_release=lambda *_: self._mostrar_configuracion())
         encabezado.add_widget(self.btn_configuracion)
         self.btn_diagnostico = Button(
-            text="Enviar log", size_hint=(None, None),
-            width=dp(78), height=dp(33), font_size="10sp",
+            text="Ver log", size_hint=(None, None),
+            width=dp(72), height=dp(33), font_size="10sp",
         )
-        self.btn_diagnostico.bind(on_release=lambda *_: self._compartir_diagnostico())
+        self.btn_diagnostico.bind(on_release=lambda *_: self._mostrar_diagnostico())
         encabezado.add_widget(self.btn_diagnostico)
+        self.btn_compartir_diagnostico = Button(
+            text="Enviar", size_hint=(None, None),
+            width=dp(62), height=dp(33), font_size="10sp",
+        )
+        self.btn_compartir_diagnostico.bind(on_release=lambda *_: self._compartir_diagnostico())
+        encabezado.add_widget(self.btn_compartir_diagnostico)
         # Botón Salir en la esquina superior derecha.
         self.btn_salir = Button(
             text="Salir", size_hint=(None, None),
@@ -366,14 +373,61 @@ class CapturadorApp(App):
             intent.setType("text/plain")
             intent.putExtra(Intent.EXTRA_SUBJECT, "Diagnóstico Capturador Android")
             intent.putExtra(Intent.EXTRA_TEXT, contenido)
-            chooser = Intent.createChooser(intent, "Compartir diagnóstico")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            titulo = cast("java.lang.CharSequence", "Compartir diagnóstico")
+            chooser = Intent.createChooser(intent, titulo)
             PythonActivity.mActivity.startActivity(chooser)
-        except Exception as exc:
-            self._mensaje(
-                "No se pudo compartir el diagnóstico",
-                "%s\\n\\n%s" % (exc, traceback.format_exc()),
+        except Exception:
+            try:
+                # Respaldo: Android muestra directamente las aplicaciones compatibles.
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                PythonActivity.mActivity.startActivity(intent)
+            except Exception as exc:
+                self._mensaje(
+                    "No se pudo compartir el diagnóstico",
+                    "%s\\n\\n%s" % (exc, traceback.format_exc()),
+                )
+
+    def _mostrar_diagnostico(self):
+        """Muestra el registro en un campo de texto seleccionable y copiable."""
+        try:
+            with open(self._diagnostico_path, "r", encoding="utf-8") as archivo:
+                contenido = archivo.read()
+            if not contenido.strip():
+                contenido = "Todavía no hay registros de diagnóstico."
+            panel = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+            visor = TextInput(
+                text=contenido,
+                multiline=True,
+                readonly=True,
+                size_hint=(1, 1),
+                font_size="11sp",
+                cursor_blink=False,
+                background_color=(0.96, 0.96, 0.96, 1),
+                foreground_color=(0.08, 0.08, 0.08, 1),
+                selection_color=(0.25, 0.48, 0.78, 0.45),
             )
+            panel.add_widget(visor)
+            botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+            seleccionar = Button(text="Seleccionar todo")
+            copiar = Button(text="Copiar")
+            cerrar = Button(text="Cerrar")
+            botones.add_widget(seleccionar)
+            botones.add_widget(copiar)
+            botones.add_widget(cerrar)
+            panel.add_widget(botones)
+            popup = Popup(
+                title="Diagnóstico del capturador",
+                content=panel,
+                size_hint=(0.96, 0.88),
+                auto_dismiss=False,
+            )
+            seleccionar.bind(on_release=lambda *_: (setattr(visor, "focus", True), visor.select_all()))
+            copiar.bind(on_release=lambda *_: Clipboard.copy(contenido))
+            cerrar.bind(on_release=popup.dismiss)
+            popup.open()
+        except Exception as exc:
+            self._mensaje("No se pudo abrir el diagnóstico", str(exc))
 
     def _manejar_tecla_android(self, window, key, scancode, codepoint, modifiers):
         # El botón Atrás de Android nunca cierra la aplicación.
