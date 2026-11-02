@@ -3,12 +3,13 @@ import io
 import importlib
 import importlib.util
 import sys
+import tempfile
 import unittest
 import warnings
 import zipfile
 
-from shared.ftc import normalizar_ruta_imagen_ftc, validar_entradas_ftc
-from shared.fdt import validar_fdt
+from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.fdt import cargar_fdt, validar_fdt
 from shared.models import Field, Formato, Position, TemplateInfo
 
 
@@ -80,6 +81,14 @@ class ValidacionFTC(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validar_entradas_ftc(paquete)
 
+    def test_nombres_de_imagen_permanecen_unicos_con_sufijos_en_conflicto(self):
+        rutas = {}
+        for field_id in ("a!", "a__2", "a?"):
+            rutas[field_id] = construir_ruta_imagen_ftc(
+                field_id, ".jpg", rutas
+            )
+        self.assertEqual(len(set(rutas.values())), 3)
+
 
 class ValidacionFDT(unittest.TestCase):
     def crear_formato(self, posicion):
@@ -114,6 +123,15 @@ class ValidacionFDT(unittest.TestCase):
         formato = self.crear_formato(Position(x=10, y=10, width=0, height=20))
         with self.assertRaises(ValueError):
             validar_fdt(formato)
+
+    def test_rechaza_rutas_zip_fuera_del_fdt(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "malicioso.fdt"
+            with zipfile.ZipFile(str(ruta), "w") as paquete:
+                paquete.writestr("format.json", b"{}")
+                paquete.writestr("../fuera.txt", b"no debe extraerse")
+            with self.assertRaisesRegex(ValueError, "ruta de archivo insegura"):
+                cargar_fdt(ruta)
 
 
 
@@ -156,6 +174,15 @@ class ValidacionFDTAndroid(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             ANDROID_FDT.validar_fdt(formato)
+
+    def test_rechaza_rutas_zip_fuera_del_fdt(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "malicioso_android.fdt"
+            with zipfile.ZipFile(str(ruta), "w") as paquete:
+                paquete.writestr("format.json", b"{}")
+                paquete.writestr("../fuera_android.txt", b"no debe extraerse")
+            with self.assertRaisesRegex(ValueError, "ruta de archivo insegura"):
+                ANDROID_FDT.cargar_fdt(ruta)
 
 
 if __name__ == "__main__":
