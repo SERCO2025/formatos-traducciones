@@ -243,6 +243,8 @@ def renderizar_imagen(formato, respuestas):
         )
         color = (estilo.color.r, estilo.color.g, estilo.color.b)
 
+        y_texto = posicion.y + 10
+
         if estilo.orientation == "vertical":
             caja = Image.new(
                 "RGBA",
@@ -258,17 +260,65 @@ def renderizar_imagen(formato, respuestas):
                 anchor="la",
             )
             caja = caja.rotate(90, expand=True)
-            imagen.paste(caja, (posicion.x, posicion.y), caja)
+            imagen.paste(caja, (posicion.x, y_texto), caja)
+            continue
+
+        if estilo.alignment == "justify":
+            # Justificación real por línea: se ajustan los espacios entre
+            # palabras para que cada línea no final de párrafo alcance el
+            # ancho del campo. La última línea queda alineada a la izquierda.
+            ancho_maximo = max(1, int(posicion.width))
+            espacio = max(1, dibujo.textbbox((0, 0), " ", font=fuente)[2])
+            lineas = []
+            for parrafo in texto.split("\n"):
+                palabras = parrafo.split()
+                if not palabras:
+                    lineas.append(("", False))
+                    continue
+                linea = []
+                ancho_linea = 0
+                for palabra in palabras:
+                    ancho_palabra = dibujo.textbbox((0, 0), palabra, font=fuente)[2]
+                    candidato = ancho_palabra if not linea else ancho_linea + espacio + ancho_palabra
+                    if linea and candidato > ancho_maximo:
+                        lineas.append((" ".join(linea), True))
+                        linea = [palabra]
+                        ancho_linea = ancho_palabra
+                    else:
+                        linea.append(palabra)
+                        ancho_linea = candidato
+                if linea:
+                    lineas.append((" ".join(linea), False))
+
+            metricas = fuente.getmetrics() if hasattr(fuente, "getmetrics") else (0, fuente.getbbox("Ag")[3])
+            alto_linea = max(1, int(metricas[0] + metricas[1]))
+            y_texto = int(posicion.y)
+            for linea, justificar in lineas:
+                if not linea:
+                    y_texto += alto_linea
+                    continue
+                palabras = linea.split()
+                anchos = [dibujo.textbbox((0, 0), palabra, font=fuente)[2] for palabra in palabras]
+                ancho_palabras = sum(anchos)
+                if justificar and len(palabras) > 1 and ancho_maximo > ancho_palabras:
+                    hueco = float(ancho_maximo - ancho_palabras) / float(len(palabras) - 1)
+                    x_texto = float(posicion.x)
+                    for palabra, ancho_palabra in zip(palabras, anchos):
+                        dibujo.text((int(round(x_texto)), y_texto), palabra, fill=color, font=fuente, anchor="lt")
+                        x_texto += ancho_palabra + hueco
+                else:
+                    dibujo.text((posicion.x, y_texto), linea, fill=color, font=fuente, anchor="lt")
+                y_texto += alto_linea
             continue
 
         if estilo.alignment == "center":
-            xy = (posicion.x + posicion.width // 2, posicion.y)
+            xy = (posicion.x + posicion.width // 2, y_texto)
             anchor = "mt"
         elif estilo.alignment == "right":
-            xy = (posicion.x + posicion.width, posicion.y)
+            xy = (posicion.x + posicion.width, y_texto)
             anchor = "rt"
         else:
-            xy = (posicion.x, posicion.y)
+            xy = (posicion.x, y_texto)
             anchor = "lt"
 
         if "\n" in texto:
@@ -289,7 +339,7 @@ def renderizar_imagen(formato, respuestas):
                 x_texto = posicion.x - caja_texto[0]
 
             dibujo.multiline_text(
-                (x_texto, posicion.y),
+                (x_texto, y_texto),
                 texto,
                 fill=color,
                 font=fuente,
