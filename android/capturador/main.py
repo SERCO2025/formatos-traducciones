@@ -277,13 +277,13 @@ class CapturadorApp(App):
         controls_nav.add_widget(self.btn_siguiente)
         root.add_widget(controls_nav)
 
-        # Mantener el objeto porque _mostrar_campo actualiza su texto,
-        # pero no añadirlo al layout: así no ocupa espacio ni baja el preview.
+        # La etiqueta solo ocupa espacio cuando el campo actual es una imagen.
         self.info_imagen = Label(
-            text="", size_hint_y=None, height=dp(34),
+            text="", size_hint_y=None, height=0,
             font_size="12sp", halign="left", valign="middle",
         )
         self.info_imagen.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        root.add_widget(self.info_imagen)
 
         preview_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         self.preview = Image(
@@ -581,6 +581,8 @@ class CapturadorApp(App):
         try:
             Activity = autoclass("android.app.Activity")
             if result_code != Activity.RESULT_OK or intent is None:
+                if request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
+                    self._descartar_avance_temporal_pendiente()
                 return
             uri = intent.getData()
             if uri is None:
@@ -622,7 +624,7 @@ class CapturadorApp(App):
                 )[0] + ".ftc"
                 destino = self._crear_documento_en_carpeta(uri, "application/octet-stream", nombre_avance)
                 self._copiar_archivo_a_uri(ruta_avance, destino)
-                self._avance_temporal_pendiente = None
+                self._descartar_avance_temporal_pendiente()
                 self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
             elif request_code == self.REQUEST_OPEN_IMAGE:
                 ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri, ".jpg"))
@@ -656,6 +658,8 @@ class CapturadorApp(App):
                         )
         except Exception as exc:
             detalle = traceback.format_exc()
+            if request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
+                self._descartar_avance_temporal_pendiente()
             self._diagnostico("ACTIVITY_RESULT_EXCEPCION_%s" % type(exc).__name__)
             self._diagnostico_error("TRACEBACK_ACTIVITY_RESULT", detalle)
             self._mensaje("Error al procesar el archivo", "%s\\n\\n%s" % (exc, detalle))
@@ -953,6 +957,7 @@ class CapturadorApp(App):
             if es_imagen and self.respuestas.get(campo.field_id, "")
             else ("No se ha seleccionado imagen." if es_imagen else "")
         )
+        self.info_imagen.height = dp(34) if es_imagen else 0
         self.btn_atras.disabled = self.indice <= 0
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_VOLVER")
         self.btn_siguiente.disabled = False
@@ -1160,10 +1165,26 @@ class CapturadorApp(App):
         self._temp_files.append(ruta)
         return ruta
 
+    def _descartar_avance_temporal_pendiente(self):
+        ruta = self._avance_temporal_pendiente
+        self._avance_temporal_pendiente = None
+        if not ruta:
+            return
+        try:
+            if os.path.isfile(ruta):
+                os.remove(ruta)
+        except OSError as exc:
+            self._diagnostico_error("ELIMINAR_AVANCE_TEMPORAL", exc)
+        try:
+            self._temp_files.remove(ruta)
+        except ValueError:
+            pass
+
     def guardar_avance(self):
         if not self.formato:
             self._mensaje("Sin captura", "Primero abre un formato .fdt o un archivo de avance.")
             return
+        self._descartar_avance_temporal_pendiente()
         try:
             # Capturar y empaquetar las respuestas antes de abrir el selector
             # nativo, que puede pausar o recrear la actividad Android.
