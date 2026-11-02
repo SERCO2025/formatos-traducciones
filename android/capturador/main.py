@@ -231,18 +231,6 @@ class CapturadorApp(App):
         )
         self.btn_configuracion.bind(on_release=lambda *_: self._mostrar_configuracion())
         encabezado.add_widget(self.btn_configuracion)
-        self.btn_diagnostico = Button(
-            text="Ver log", size_hint=(None, None),
-            width=dp(72), height=dp(33), font_size="10sp",
-        )
-        self.btn_diagnostico.bind(on_release=lambda *_: self._mostrar_diagnostico())
-        encabezado.add_widget(self.btn_diagnostico)
-        self.btn_compartir_diagnostico = Button(
-            text="Enviar", size_hint=(None, None),
-            width=dp(62), height=dp(33), font_size="10sp",
-        )
-        self.btn_compartir_diagnostico.bind(on_release=lambda *_: self._compartir_diagnostico())
-        encabezado.add_widget(self.btn_compartir_diagnostico)
         # Botón Salir en la esquina superior derecha.
         self.btn_salir = Button(
             text="Salir", size_hint=(None, None),
