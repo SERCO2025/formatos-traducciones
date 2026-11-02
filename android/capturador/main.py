@@ -674,7 +674,6 @@ class CapturadorApp(App):
             "image/webp": ".webp",
             "image/bmp": ".bmp",
             "image/tiff": ".tiff",
-            "image/gif": ".gif",
         }
         try:
             resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
@@ -691,7 +690,7 @@ class CapturadorApp(App):
                     if indice >= 0:
                         nombre = str(cursor.getString(indice) or "")
                         extension = os.path.splitext(nombre)[1].lower()
-                        if extension in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"):
+                        if extension in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
                             return extension
             finally:
                 if cursor is not None:
