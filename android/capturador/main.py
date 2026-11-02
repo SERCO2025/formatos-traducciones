@@ -1242,7 +1242,7 @@ class CapturadorApp(App):
                 for campo_id, interno in imagenes_guardadas.items():
                     if campo_id not in campos:
                         raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
-                    interno = str(interno).replace("\\\\", "/")
+                    interno = str(interno).replace("\\", "/")
                     partes = interno.split("/")
                     if (
                         len(partes) != 2
