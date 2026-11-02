@@ -1145,9 +1145,16 @@ class CapturadorApp(App):
         if self.formato.fields:
             campo = self.formato.fields[self.indice]
             if campo.field_type != FIELD_TYPE_IMAGE:
-                self.respuestas[campo.field_id] = self.entrada.text
+                respuesta_actual = self.entrada.text
+                if getattr(campo, "uppercase", False):
+                    respuesta_actual = respuesta_actual.upper()
+                self.respuestas[campo.field_id] = respuesta_actual
 
-        ruta = os.path.join(tempfile.gettempdir(), "captura_pendiente_%d.ftc" % len(self._temp_files))
+        descriptor, ruta = tempfile.mkstemp(
+            prefix="captura_pendiente_", suffix=".ftc",
+            dir=tempfile.gettempdir(),
+        )
+        os.close(descriptor)
         datos = {"version": 1, "indice": self.indice, "respuestas": {}, "imagenes": {}}
         for campo in self.formato.fields:
             valor = self.respuestas.get(campo.field_id, "")
@@ -1171,13 +1178,21 @@ class CapturadorApp(App):
             else:
                 datos["respuestas"][campo.field_id] = "" if valor is None else str(valor)
 
-        with zipfile.ZipFile(ruta, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
-            paquete.write(self._fdt_path, "formato.fdt")
-            paquete.writestr("captura.json", json.dumps(datos, ensure_ascii=False, indent=2).encode("utf-8"))
-            for campo_id, interno in datos["imagenes"].items():
-                imagen_path = self.respuestas.get(campo_id, "")
-                if imagen_path and os.path.isfile(str(imagen_path)):
-                    paquete.write(str(imagen_path), interno)
+        try:
+            with zipfile.ZipFile(ruta, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+                paquete.write(self._fdt_path, "formato.fdt")
+                paquete.writestr("captura.json", json.dumps(datos, ensure_ascii=False, indent=2).encode("utf-8"))
+                for campo_id, interno in datos["imagenes"].items():
+                    imagen_path = self.respuestas.get(campo_id, "")
+                    if imagen_path and os.path.isfile(str(imagen_path)):
+                        paquete.write(str(imagen_path), interno)
+        except Exception:
+            try:
+                if os.path.isfile(ruta):
+                    os.remove(ruta)
+            except OSError as exc:
+                self._diagnostico_error("ELIMINAR_FTC_PARCIAL", exc)
+            raise
         self._temp_files.append(ruta)
         return ruta
 
