@@ -251,10 +251,26 @@ def cargar_fdt(ruta):
         _EXTRACTED_DIRS.append(str(directorio))
         try:
             with zipfile.ZipFile(str(ruta), "r") as paquete:
-                nombres = paquete.namelist()
+                entradas = paquete.infolist()
+                nombres_lista = [miembro.filename for miembro in entradas]
+                nombres = set(nombres_lista)
+                if len(nombres) != len(nombres_lista):
+                    raise ValueError("El FDT contiene nombres de archivo duplicados.")
                 if "format.json" not in nombres:
                     raise ValueError("El FDT no contiene format.json.")
 
+                raiz_segura = directorio.resolve()
+                for miembro in entradas:
+                    destino = (directorio / miembro.filename).resolve()
+                    try:
+                        comun = os.path.commonpath((str(raiz_segura), str(destino)))
+                    except ValueError:
+                        comun = ""
+                    if comun != str(raiz_segura):
+                        raise ValueError(
+                            "El FDT contiene una ruta de archivo insegura: %s"
+                            % miembro.filename
+                        )
                 paquete.extractall(str(directorio))
 
             with (directorio / "format.json").open("r", encoding="utf-8") as archivo:
