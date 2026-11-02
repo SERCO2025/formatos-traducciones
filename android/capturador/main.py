@@ -770,6 +770,12 @@ class CapturadorApp(App):
         self._diagnostico("CALLBACK_ENTRADA_CAMBIO")
         if self._actualizando_entrada:
             return
+        # Android puede entregar cambios tardíos del IME al regresar de un
+        # selector nativo. Sin foco, el usuario no está editando este campo:
+        # no guardar ese eco como respuesta ni programar una vista previa.
+        if not self.entrada.focus:
+            self._diagnostico("CALLBACK_ENTRADA_IGNORADO_SIN_FOCO")
+            return
         if self.formato and self.formato.fields:
             campo = self.formato.fields[self.indice]
             if campo.field_type != FIELD_TYPE_IMAGE:
