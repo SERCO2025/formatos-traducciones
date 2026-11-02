@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [desarrollo, 'fix/**', diagnostico-atajos-numlock]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
