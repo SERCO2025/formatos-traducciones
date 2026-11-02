@@ -8,7 +8,13 @@ import unittest
 import warnings
 import zipfile
 
-from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.ftc import (
+    construir_ruta_imagen_ftc,
+    filtrar_respuestas_ftc,
+    normalizar_ruta_imagen_ftc,
+    validar_campo_imagen_ftc,
+    validar_entradas_ftc,
+)
 from shared.fdt import cargar_fdt, validar_fdt
 from shared.models import Field, Formato, Position, TemplateInfo
 
@@ -88,6 +94,32 @@ class ValidacionFTC(unittest.TestCase):
                 field_id, ".jpg", rutas
             )
         self.assertEqual(len(set(rutas.values())), 3)
+
+    def test_no_carga_rutas_externas_desde_respuestas_de_imagen(self):
+        campos = {
+            "texto": Field(field_id="texto", question="Texto"),
+            "foto": Field(field_id="foto", question="Foto", field_type="image"),
+        }
+        respuestas = filtrar_respuestas_ftc(
+            {
+                "texto": "respuesta válida",
+                "foto": r"C:\\datos\\privados\\foto.jpg",
+                "campo_inexistente": "no cargar",
+            },
+            campos,
+        )
+        self.assertEqual(respuestas, {"texto": "respuesta válida"})
+
+    def test_rechaza_imagen_asociada_a_campo_no_imagen(self):
+        campos = {
+            "texto": Field(field_id="texto", question="Texto"),
+            "foto": Field(field_id="foto", question="Foto", field_type="image"),
+        }
+        self.assertIs(validar_campo_imagen_ftc("foto", campos), campos["foto"])
+        with self.assertRaises(ValueError):
+            validar_campo_imagen_ftc("texto", campos)
+        with self.assertRaises(ValueError):
+            validar_campo_imagen_ftc("inexistente", campos)
 
 
 class ValidacionFDT(unittest.TestCase):
