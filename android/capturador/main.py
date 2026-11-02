@@ -553,6 +553,26 @@ class CapturadorApp(App):
         self._intent(self.REQUEST_OPEN_IMAGE, "android.intent.action.OPEN_DOCUMENT", "image/*")
 
     def _on_activity_result(self, request_code, result_code, intent):
+        """Entrega el resultado SAF al hilo principal antes de tocar widgets Kivy."""
+        try:
+            # pyjnius puede invocar este callback desde un hilo de Android.
+            # Clock.schedule_once es seguro desde ese hilo; todo el procesamiento
+            # posterior (incluida la creación de diálogos y layouts) ocurre en Kivy.
+            Clock.schedule_once(
+                lambda _dt: self._procesar_activity_result(
+                    request_code, result_code, intent
+                ),
+                0,
+            )
+        except Exception as exc:
+            # No crear diálogos aquí: este callback todavía puede estar fuera
+            # del hilo gráfico. Registrar el fallo para diagnóstico.
+            self._diagnostico_error(
+                "PROGRAMAR_ACTIVITY_RESULT",
+                "%s\\n\\n%s" % (exc, traceback.format_exc()),
+            )
+
+    def _procesar_activity_result(self, request_code, result_code, intent):
         self._diagnostico("ACTIVITY_RESULT_INICIO_%s" % request_code)
         try:
             Activity = autoclass("android.app.Activity")
