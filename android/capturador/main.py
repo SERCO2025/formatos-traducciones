@@ -625,7 +625,7 @@ class CapturadorApp(App):
                 self._avance_temporal_pendiente = None
                 self._mensaje("Avance guardado", "La captura pendiente se guardó como:\n%s\n\nPuedes abrirla después con «Abrir avance»." % (self._nombre_documento_uri(destino) or nombre_avance))
             elif request_code == self.REQUEST_OPEN_IMAGE:
-                ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri_text, ".jpg"))
+                ruta = self._copiar_uri_a_cache(uri, self._extension_uri(uri, ".jpg"))
                 if not self.formato or not self.formato.fields:
                     return
                 campo = self.formato.fields[self.indice]
@@ -663,13 +663,35 @@ class CapturadorApp(App):
             self._diagnostico("ACTIVITY_RESULT_FIN_%s" % request_code)
 
     def _extension_uri(self, uri, fallback):
+        """Obtiene la extensión real usando MIME y nombre expuesto por SAF."""
+        extensiones_mime = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/bmp": ".bmp",
+            "image/tiff": ".tiff",
+            "image/gif": ".gif",
+        }
         try:
             resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
-            tipo = str(resolver.getType(uri) or "")
-            if tipo == "image/png":
-                return ".png"
-            if tipo == "image/jpeg":
-                return ".jpg"
+            tipo = str(resolver.getType(uri) or "").lower()
+            if tipo in extensiones_mime:
+                return extensiones_mime[tipo]
+
+            cursor = None
+            try:
+                OpenableColumns = autoclass("android.provider.OpenableColumns")
+                cursor = resolver.query(uri, [OpenableColumns.DISPLAY_NAME], None, None, None)
+                if cursor is not None and cursor.moveToFirst():
+                    indice = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if indice >= 0:
+                        nombre = str(cursor.getString(indice) or "")
+                        extension = os.path.splitext(nombre)[1].lower()
+                        if extension in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"):
+                            return extension
+            finally:
+                if cursor is not None:
+                    cursor.close()
         except Exception:
             pass
         return fallback
