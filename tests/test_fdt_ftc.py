@@ -133,6 +133,17 @@ class ValidacionFDT(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ruta de archivo insegura"):
                 cargar_fdt(ruta)
 
+    def test_rechaza_entradas_duplicadas_fdt(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "duplicado.fdt"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(str(ruta), "w") as paquete:
+                    paquete.writestr("format.json", b"{}")
+                    paquete.writestr("format.json", b'{"name":"otro"}')
+            with self.assertRaisesRegex(ValueError, "nombres de archivo duplicados"):
+                cargar_fdt(ruta)
+
 
 
 class ValidacionFDTAndroid(unittest.TestCase):
@@ -182,6 +193,17 @@ class ValidacionFDTAndroid(unittest.TestCase):
                 paquete.writestr("format.json", b"{}")
                 paquete.writestr("../fuera_android.txt", b"no debe extraerse")
             with self.assertRaisesRegex(ValueError, "ruta de archivo insegura"):
+                ANDROID_FDT.cargar_fdt(ruta)
+
+    def test_rechaza_entradas_duplicadas_fdt(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "duplicado_android.fdt"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(str(ruta), "w") as paquete:
+                    paquete.writestr("format.json", b"{}")
+                    paquete.writestr("format.json", b'{"name":"otro"}')
+            with self.assertRaisesRegex(ValueError, "nombres de archivo duplicados"):
                 ANDROID_FDT.cargar_fdt(ruta)
 
 
