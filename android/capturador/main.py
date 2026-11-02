@@ -766,14 +766,6 @@ class CapturadorApp(App):
         # No consumir el toque: los botones y demás controles deben funcionar.
         return False
 
-    def _enfocar_respuesta_siguiente(self, *_):
-        self._diagnostico("CALLBACK_ENFOCAR_INICIO")
-        entrada = getattr(self, "entrada", None)
-        if entrada is None or entrada.disabled or not entrada.parent:
-            return
-        entrada.focus = True
-        self._diagnostico("CALLBACK_ENFOCAR_FIN")
-
     def _entrada_cambio(self, *_):
         self._diagnostico("CALLBACK_ENTRADA_CAMBIO")
         if self._actualizando_entrada:
@@ -934,8 +926,6 @@ class CapturadorApp(App):
         if self.indice < len(self.formato.fields) - 1:
             self.indice += 1
             self._mostrar_campo()
-            # Continuar debe dejar lista la respuesta siguiente para escribir.
-            Clock.schedule_once(self._enfocar_respuesta_siguiente, 0.15)
             return
         errores = validar_todas_las_respuestas(self.formato, self.respuestas)
         if errores:
