@@ -151,7 +151,13 @@ class PinchZoomScrollView(ScrollView):
 from PIL import Image as PILImage
 
 from shared.fdt import cargar_fdt, limpiar_fdt_temporales
-from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.ftc import (
+    construir_ruta_imagen_ftc,
+    filtrar_respuestas_ftc,
+    normalizar_ruta_imagen_ftc,
+    validar_campo_imagen_ftc,
+    validar_entradas_ftc,
+)
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import construir_nombre_archivo, renderizar_imagen
 from shared.validators import validar_respuesta, validar_todas_las_respuestas
@@ -1259,14 +1265,13 @@ class CapturadorApp(App):
                     raise ValueError("Las respuestas o imágenes del avance tienen una estructura no válida.")
 
                 respuestas = {campo.field_id: "" for campo in formato.fields}
-                for campo_id, valor in respuestas_guardadas.items():
-                    if campo_id in campos:
-                        respuestas[campo_id] = "" if valor is None else str(valor)
+                respuestas.update(
+                    filtrar_respuestas_ftc(respuestas_guardadas, campos)
+                )
 
                 # Extraer únicamente imágenes declaradas y contenidas en imagenes/.
                 for campo_id, interno in imagenes_guardadas.items():
-                    if campo_id not in campos:
-                        raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
+                    validar_campo_imagen_ftc(campo_id, campos)
                     interno = normalizar_ruta_imagen_ftc(interno)
                     if interno not in nombres:
                         continue
