@@ -74,6 +74,14 @@ class ValidacionFTC(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validar_entradas_ftc(paquete)
 
+    def test_rechaza_archivo_ftc_corrupto(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "corrupto.ftc"
+            ruta.write_bytes(b"no es un archivo ZIP")
+            with self.assertRaises(zipfile.BadZipFile):
+                with zipfile.ZipFile(str(ruta), "r") as paquete:
+                    validar_entradas_ftc(paquete)
+
     def test_rechaza_nombres_zip_duplicados(self):
         buffer = io.BytesIO()
         with warnings.catch_warnings():
@@ -176,6 +184,13 @@ class ValidacionFDT(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "nombres de archivo duplicados"):
                 cargar_fdt(ruta)
 
+    def test_rechaza_fdt_zip_corrupto(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "corrupto.fdt"
+            ruta.write_bytes(b"PK\\x03\\x04archivo truncado")
+            with self.assertRaises(zipfile.BadZipFile):
+                cargar_fdt(ruta)
+
 
 
 class ValidacionFDTAndroid(unittest.TestCase):
@@ -236,6 +251,13 @@ class ValidacionFDTAndroid(unittest.TestCase):
                     paquete.writestr("format.json", b"{}")
                     paquete.writestr("format.json", b'{"name":"otro"}')
             with self.assertRaisesRegex(ValueError, "nombres de archivo duplicados"):
+                ANDROID_FDT.cargar_fdt(ruta)
+
+    def test_rechaza_fdt_zip_corrupto(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            ruta = __import__("pathlib").Path(temporal) / "corrupto_android.fdt"
+            ruta.write_bytes(b"PK\\x03\\x04archivo truncado")
+            with self.assertRaises(zipfile.BadZipFile):
                 ANDROID_FDT.cargar_fdt(ruta)
 
 
