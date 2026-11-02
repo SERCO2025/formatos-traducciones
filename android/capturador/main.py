@@ -1272,7 +1272,7 @@ class CapturadorApp(App):
                     interno = normalizar_ruta_imagen_ftc(interno)
                     if interno not in nombres:
                         continue
-                    destino = os.path.join(directorio, "imagenes", partes[1])
+                    destino = os.path.join(directorio, "imagenes", os.path.basename(interno))
                     os.makedirs(os.path.dirname(destino), exist_ok=True)
                     with open(destino, "wb") as archivo_imagen:
                         archivo_imagen.write(paquete.read(interno))
