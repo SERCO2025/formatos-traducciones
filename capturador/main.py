@@ -563,8 +563,13 @@ class CapturadorApp:
             ruta += ".ftc"
 
         datos = {"version": 1, "indice": self.indice, "respuestas": {}, "imagenes": {}}
+        descriptor, ruta_temporal = tempfile.mkstemp(
+            prefix="captura_pendiente_", suffix=".ftc.tmp",
+            dir=os.path.dirname(os.path.abspath(ruta)),
+        )
+        os.close(descriptor)
         try:
-            with zipfile.ZipFile(ruta, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+            with zipfile.ZipFile(ruta_temporal, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
                 paquete.write(self._fdt_path, "formato.fdt")
                 for campo in self.formato.fields:
                     valor = self.respuestas.get(campo.field_id, "")
@@ -591,12 +596,18 @@ class CapturadorApp:
                     "captura.json",
                     json.dumps(datos, ensure_ascii=False, indent=2).encode("utf-8"),
                 )
+            os.replace(ruta_temporal, ruta)
             messagebox.showinfo(
                 "Avance guardado",
                 "La captura pendiente se guardó correctamente como:\\n%s\\n\\nPuedes abrirla después con «Abrir avance FTC»."
                 % ruta,
             )
         except Exception as exc:
+            try:
+                if os.path.isfile(ruta_temporal):
+                    os.remove(ruta_temporal)
+            except OSError:
+                pass
             messagebox.showerror(
                 "No se pudo guardar el avance",
                 "Ocurrió un error al guardar el archivo FTC.\\n\\n%s" % exc,
