@@ -469,9 +469,10 @@ class CapturadorApp:
                 # la carpeta interna "imagenes/", evitando rutas externas al avance.
                 for campo_id, interno in imagenes.items():
                     interno = normalizar_ruta_imagen_ftc(interno)
+                    imagenes[campo_id] = interno
                     if interno not in nombres:
                         continue
-                    destino = os.path.join(directorio, "imagenes", partes[1])
+                    destino = os.path.join(directorio, "imagenes", os.path.basename(interno))
                     os.makedirs(os.path.dirname(destino), exist_ok=True)
                     with open(destino, "wb") as archivo_imagen:
                         archivo_imagen.write(paquete.read(interno))
@@ -485,7 +486,7 @@ class CapturadorApp:
             for campo_id, interno in imagenes.items():
                 if campo_id not in campos:
                     raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
-                ruta_imagen = os.path.join(directorio, "imagenes", os.path.basename(str(interno).replace("\\\\", "/")))
+                ruta_imagen = os.path.join(directorio, "imagenes", os.path.basename(interno))
                 if os.path.isfile(ruta_imagen):
                     respuestas[campo_id] = ruta_imagen
 
