@@ -28,7 +28,7 @@ ANDROID_MODELS = importlib.import_module("android_shared.models")
 class ValidacionFTC(unittest.TestCase):
     def test_normaliza_separadores_windows(self):
         self.assertEqual(
-            normalizar_ruta_imagen_ftc(r"imagenes\\foto.jpg"),
+            normalizar_ruta_imagen_ftc(r"imagenes\foto.jpg"),
             "imagenes/foto.jpg",
         )
 
@@ -36,7 +36,7 @@ class ValidacionFTC(unittest.TestCase):
         for ruta in (
             "../foto.jpg",
             "imagenes/../foto.jpg",
-            "imagenes\\..\\foto.jpg",
+            r"imagenes\..\foto.jpg",
             "imagenes/C:/foto.jpg",
             "imagenes/C:foto.jpg",
             "imagenes/subcarpeta/foto.jpg",
