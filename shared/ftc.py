@@ -2,6 +2,7 @@
 """Validaciones comunes para contenedores de avance FTC."""
 
 import os
+import re
 
 
 def validar_entradas_ftc(paquete):
@@ -29,4 +30,15 @@ def normalizar_ruta_imagen_ftc(interno):
         or os.path.basename(partes[1]) != partes[1]
     ):
         raise ValueError("El avance contiene una ruta de imagen no válida.")
+    return interno
+
+
+def construir_ruta_imagen_ftc(field_id, extension, imagenes):
+    """Genera un nombre interno único aunque varios IDs se saniticen igual."""
+    seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", str(field_id)) or "imagen"
+    interno = "imagenes/%s%s" % (seguro, extension)
+    sufijo = 1
+    while interno in imagenes.values():
+        interno = "imagenes/%s_%d%s" % (seguro, sufijo, extension)
+        sufijo += 1
     return interno
