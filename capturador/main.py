@@ -13,7 +13,13 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from shared.fdt import cargar_fdt, limpiar_fdt_temporales
-from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
+from shared.ftc import (
+    construir_ruta_imagen_ftc,
+    filtrar_respuestas_ftc,
+    normalizar_ruta_imagen_ftc,
+    validar_campo_imagen_ftc,
+    validar_entradas_ftc,
+)
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import (
     construir_nombre_archivo,
@@ -499,12 +505,11 @@ class CapturadorApp:
             limpiar_fdt_temporales(keep_path=formato.template.path)
             campos = {campo.field_id: campo for campo in formato.fields}
             respuestas = {campo.field_id: "" for campo in formato.fields}
-            for campo_id, valor in respuestas_guardadas.items():
-                if campo_id in campos:
-                    respuestas[campo_id] = "" if valor is None else str(valor)
+            respuestas.update(
+                filtrar_respuestas_ftc(respuestas_guardadas, campos)
+            )
             for campo_id, interno in imagenes.items():
-                if campo_id not in campos:
-                    raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
+                validar_campo_imagen_ftc(campo_id, campos)
                 ruta_imagen = os.path.join(directorio, "imagenes", os.path.basename(interno))
                 if os.path.isfile(ruta_imagen):
                     respuestas[campo_id] = ruta_imagen
