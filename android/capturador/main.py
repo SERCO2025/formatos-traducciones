@@ -192,6 +192,12 @@ class CapturadorApp(App):
         self._cleanup_enabled = True
         self._diagnostico_path = os.path.join(self.user_data_dir, "diagnostico_capturador.log")
         self._diagnostico_seq = 0
+        try:
+            os.makedirs(self.user_data_dir, exist_ok=True)
+            with open(self._diagnostico_path, "w", encoding="utf-8"):
+                pass
+        except Exception:
+            pass
         self._diagnostico("INICIO_BUILD")
         self._generated_files = {}
         self._settings_file = os.path.join(self.user_data_dir, "output_settings.json")
@@ -213,6 +219,12 @@ class CapturadorApp(App):
         )
         self.btn_configuracion.bind(on_release=lambda *_: self._mostrar_configuracion())
         encabezado.add_widget(self.btn_configuracion)
+        self.btn_diagnostico = Button(
+            text="Enviar log", size_hint=(None, None),
+            width=dp(78), height=dp(33), font_size="10sp",
+        )
+        self.btn_diagnostico.bind(on_release=lambda *_: self._compartir_diagnostico())
+        encabezado.add_widget(self.btn_diagnostico)
         # Botón Salir en la esquina superior derecha.
         self.btn_salir = Button(
             text="Salir", size_hint=(None, None),
@@ -337,6 +349,31 @@ class CapturadorApp(App):
                     archivo.flush()
         except Exception:
             pass
+
+    def _compartir_diagnostico(self):
+        """Abre el menú nativo de Android para compartir el registro de diagnóstico."""
+        if not ANDROID_NATIVE:
+            self._mensaje("No disponible", "El envío del diagnóstico requiere Android.")
+            return
+        try:
+            with open(self._diagnostico_path, "r", encoding="utf-8") as archivo:
+                contenido = archivo.read()
+            if not contenido.strip():
+                self._mensaje("Diagnóstico vacío", "Todavía no hay registros para compartir.")
+                return
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType("text/plain")
+            intent.putExtra(Intent.EXTRA_SUBJECT, "Diagnóstico Capturador Android")
+            intent.putExtra(Intent.EXTRA_TEXT, contenido)
+            chooser = Intent.createChooser(intent, "Compartir diagnóstico")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            PythonActivity.mActivity.startActivity(chooser)
+        except Exception as exc:
+            self._mensaje(
+                "No se pudo compartir el diagnóstico",
+                "%s\\n\\n%s" % (exc, traceback.format_exc()),
+            )
 
     def _manejar_tecla_android(self, window, key, scancode, codepoint, modifiers):
         # El botón Atrás de Android nunca cierra la aplicación.
