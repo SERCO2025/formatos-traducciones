@@ -264,7 +264,7 @@ class CapturadorApp(App):
             text="", multiline=True, size_hint_y=None, height=dp(115),
             font_size="18sp", hint_text="Escriba la respuesta aquí",
         )
-        self.entrada.bind(text=self._entrada_cambio)
+        self._entrada_cambio_uid = self.entrada.fbind("text", self._entrada_cambio)
         root.add_widget(self.entrada)
 
         # Navegación en el espacio existente entre la respuesta y la vista previa.
@@ -885,14 +885,18 @@ class CapturadorApp(App):
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self._diagnostico("MOSTRAR_CAMPO_ANTES_RESPUESTA_TIPO_%s" % type(respuesta_guardada).__name__)
-        # Al restaurar una respuesta durante la navegación, desconectar el
-        # callback para que el cambio programático no lo invoque. El observador
-        # de diagnóstico del widget permanece enlazado y no se modifica.
-        self.entrada.unbind(text=self._entrada_cambio)
+        # Retirar por UID únicamente el callback de lógica mientras se
+        # restaura el texto. El observador de diagnóstico permanece enlazado.
+        entrada_cambio_uid = getattr(self, "_entrada_cambio_uid", None)
+        if entrada_cambio_uid:
+            self.entrada.unbind_uid("text", entrada_cambio_uid)
+            self._entrada_cambio_uid = None
         try:
             self.entrada.text = respuesta_guardada
         finally:
-            self.entrada.bind(text=self._entrada_cambio)
+            self._entrada_cambio_uid = self.entrada.fbind(
+                "text", self._entrada_cambio
+            )
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
