@@ -462,7 +462,7 @@ class CapturadorApp:
                 # la carpeta interna "imagenes/", evitando rutas externas al avance.
                 imagenes = datos.get("imagenes", {}) or {}
                 for campo_id, interno in imagenes.items():
-                    interno = str(interno).replace("\\\\", "/")
+                    interno = str(interno).replace("\\", "/")
                     partes = interno.split("/")
                     if len(partes) != 2 or partes[0] != "imagenes" or partes[1] in ("", ".", ".."):
                         raise ValueError("El avance contiene una ruta de imagen no válida.")
