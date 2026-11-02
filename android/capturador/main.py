@@ -900,6 +900,9 @@ class CapturadorApp(App):
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
+        # Enfocar solo los campos de texto sin respuesta; una respuesta
+        # restaurada debe quedar visible sin activar el teclado Android.
+        self.entrada.focus = not es_imagen and not bool(respuesta_guardada)
         self.entrada.hint_text = "Seleccione una imagen" if es_imagen else "Escriba la respuesta aquí"
         self.btn_imagen.disabled = not es_imagen
         self.info_imagen.text = (
