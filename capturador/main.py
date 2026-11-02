@@ -442,7 +442,10 @@ class CapturadorApp:
         directorio = None
         try:
             with zipfile.ZipFile(ruta, "r") as paquete:
-                nombres = set(paquete.namelist())
+                nombres_lista = [entrada.filename for entrada in paquete.infolist()]
+                nombres = set(nombres_lista)
+                if len(nombres) != len(nombres_lista):
+                    raise ValueError("El avance contiene nombres de archivo duplicados.")
                 if "formato.fdt" not in nombres or "captura.json" not in nombres:
                     raise ValueError("El archivo no contiene formato.fdt y captura.json; no es un avance FTC válido.")
 
@@ -457,14 +460,28 @@ class CapturadorApp:
 
                 with open(ruta_json, "r", encoding="utf-8") as archivo:
                     datos = json.load(archivo)
+                if not isinstance(datos, dict):
+                    raise ValueError("La información del avance no tiene una estructura válida.")
+
+                # Extraer únicamente imágenes declaradas y contenidas en imagenes/.
+                imagenes = datos.get("imagenes", {}) or {}
+                respuestas_guardadas = datos.get("respuestas", {}) or {}
+                if not isinstance(imagenes, dict) or not isinstance(respuestas_guardadas, dict):
+                    raise ValueError("Las respuestas o imágenes del avance tienen una estructura no válida.")
 
                 # Extraer únicamente imágenes declaradas en captura.json y dentro de
                 # la carpeta interna "imagenes/", evitando rutas externas al avance.
-                imagenes = datos.get("imagenes", {}) or {}
                 for campo_id, interno in imagenes.items():
                     interno = str(interno).replace("\\", "/")
                     partes = interno.split("/")
-                    if len(partes) != 2 or partes[0] != "imagenes" or partes[1] in ("", ".", ".."):
+                    if (
+                        len(partes) != 2
+                        or partes[0] != "imagenes"
+                        or partes[1] in ("", ".", "..")
+                        or ":" in partes[1]
+                        or partes[1].startswith("/")
+                        or os.path.basename(partes[1]) != partes[1]
+                    ):
                         raise ValueError("El avance contiene una ruta de imagen no válida.")
                     if interno not in nombres:
                         continue
@@ -474,10 +491,15 @@ class CapturadorApp:
                         archivo_imagen.write(paquete.read(interno))
 
             formato = cargar_fdt(ruta_fdt)
+            campos = {campo.field_id: campo for campo in formato.fields}
             respuestas = {campo.field_id: "" for campo in formato.fields}
-            respuestas.update(datos.get("respuestas", {}) or {})
-            for campo_id, interno in (datos.get("imagenes", {}) or {}).items():
-                ruta_imagen = os.path.join(directorio, *str(interno).replace("\\\\", "/").split("/"))
+            for campo_id, valor in respuestas_guardadas.items():
+                if campo_id in campos:
+                    respuestas[campo_id] = "" if valor is None else str(valor)
+            for campo_id, interno in imagenes.items():
+                if campo_id not in campos:
+                    raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
+                ruta_imagen = os.path.join(directorio, "imagenes", os.path.basename(str(interno).replace("\\\\", "/")))
                 if os.path.isfile(ruta_imagen):
                     respuestas[campo_id] = ruta_imagen
 
