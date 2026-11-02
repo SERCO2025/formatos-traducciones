@@ -1099,6 +1099,8 @@ class CapturadorApp(App):
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             PythonActivity.mActivity.startActivityForResult(intent, request_code)
         except Exception as exc:
+            if request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
+                self._descartar_avance_temporal_pendiente()
             self._mensaje("No se pudo abrir el selector de carpetas", str(exc))
 
     def _crear_documento_en_carpeta(self, tree_uri, mime, nombre):
@@ -1560,6 +1562,41 @@ class CapturadorApp(App):
             )
 
 
+
+    def on_stop(self):
+        """Libera archivos y directorios temporales al cerrar la aplicación."""
+        try:
+            Clock.unschedule(self._actualizar_campo_pendiente)
+        except Exception:
+            pass
+        self._descartar_avance_temporal_pendiente()
+
+        rutas_temporales = set(getattr(self, "_temp_files", []))
+        for atributo in ("_preview_file", "_imagen_final"):
+            ruta = getattr(self, atributo, None)
+            if ruta:
+                rutas_temporales.add(ruta)
+        rutas_temporales.add(
+            os.path.join(tempfile.gettempdir(), "capturador_android_preview.png")
+        )
+        rutas_temporales.add(
+            os.path.join(tempfile.gettempdir(), "formatos_traducidos_final_preview.png")
+        )
+        for ruta in rutas_temporales:
+            try:
+                if ruta and os.path.isfile(ruta):
+                    os.remove(ruta)
+            except OSError as exc:
+                self._diagnostico_error("LIMPIAR_ARCHIVO_TEMPORAL", exc)
+        self._temp_files = []
+
+        for directorio in getattr(self, "_draft_dirs", []):
+            try:
+                if directorio and os.path.isdir(directorio):
+                    shutil.rmtree(directorio, ignore_errors=True)
+            except OSError as exc:
+                self._diagnostico_error("LIMPIAR_DIRECTORIO_TEMPORAL", exc)
+        self._draft_dirs = []
 
 
 if __name__ == "__main__":
