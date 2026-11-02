@@ -725,21 +725,44 @@ class CapturadorApp(App):
         return ruta
 
     def _copiar_archivo_a_uri(self, ruta, uri):
+        """Copia un archivo a un documento SAF y elimina el destino si la copia falla."""
         contexto = autoclass("org.kivy.android.PythonActivity").mActivity
         resolver = contexto.getContentResolver()
-        salida = resolver.openOutputStream(uri, "w")
-        if salida is None:
-            raise IOError("Android no pudo crear el archivo de salida.")
+        salida = None
         try:
+            salida = resolver.openOutputStream(uri, "w")
+            if salida is None:
+                raise IOError("Android no pudo abrir el archivo de salida.")
             with open(ruta, "rb") as archivo:
                 while True:
                     datos = archivo.read(65536)
                     if not datos:
                         break
                     salida.write(bytearray(datos), 0, len(datos))
-                salida.flush()
-        finally:
+            salida.flush()
             salida.close()
+            salida = None
+        except Exception as error_copia:
+            if salida is not None:
+                try:
+                    salida.close()
+                except Exception:
+                    pass
+            # El URI corresponde al documento recién creado por esta operación.
+            # Si la escritura falla, no dejar un JPEG/FTC vacío o incompleto.
+            try:
+                DocumentsContract = autoclass("android.provider.DocumentsContract")
+                eliminado = DocumentsContract.deleteDocument(resolver, uri)
+                self._diagnostico(
+                    "SAF_COPIA_FALLIDA_DESTINO_ELIMINADO"
+                    if eliminado else "SAF_COPIA_FALLIDA_DESTINO_NO_ELIMINADO"
+                )
+            except Exception as error_limpieza:
+                self._diagnostico_error(
+                    "SAF_ELIMINAR_DESTINO_INCOMPLETO",
+                    "%s\\nError original de copia: %s" % (error_limpieza, error_copia),
+                )
+            raise
 
     def _nombre_documento_uri(self, uri):
         """Devuelve el nombre real asignado por el proveedor de documentos."""
