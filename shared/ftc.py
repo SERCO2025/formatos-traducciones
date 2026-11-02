@@ -42,3 +42,22 @@ def construir_ruta_imagen_ftc(field_id, extension, imagenes):
         interno = "imagenes/%s_%d%s" % (seguro, sufijo, extension)
         sufijo += 1
     return interno
+
+
+def filtrar_respuestas_ftc(respuestas_guardadas, campos):
+    """Carga solo respuestas de texto/número; nunca rutas externas para imágenes."""
+    return {
+        field_id: "" if valor is None else str(valor)
+        for field_id, valor in respuestas_guardadas.items()
+        if field_id in campos and getattr(campos[field_id], "field_type", None) != "image"
+    }
+
+
+def validar_campo_imagen_ftc(field_id, campos):
+    """Impide asociar una imagen FTC a un campo inexistente o no visual."""
+    campo = campos.get(field_id)
+    if campo is None:
+        raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
+    if getattr(campo, "field_type", None) != "image":
+        raise ValueError("El avance asocia una imagen a un campo que no es de imagen.")
+    return campo
