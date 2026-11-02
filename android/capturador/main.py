@@ -150,7 +150,7 @@ class PinchZoomScrollView(ScrollView):
 
 from PIL import Image as PILImage
 
-from shared.fdt import cargar_fdt
+from shared.fdt import cargar_fdt, limpiar_fdt_temporales
 from shared.ftc import construir_ruta_imagen_ftc, normalizar_ruta_imagen_ftc, validar_entradas_ftc
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import construir_nombre_archivo, renderizar_imagen
@@ -596,6 +596,7 @@ class CapturadorApp(App):
                 ruta = self._copiar_uri_a_cache(uri, ".fdt")
                 try:
                     formato = cargar_fdt(ruta)
+                    limpiar_fdt_temporales(keep_path=formato.template.path)
                 except Exception as exc:
                     self._mensaje("No se pudo abrir el formato", "%s\n\n%s" % (exc, traceback.format_exc()))
                     return
@@ -1250,6 +1251,7 @@ class CapturadorApp(App):
                     raise ValueError("La información del avance no tiene una estructura válida.")
 
                 formato = cargar_fdt(ruta_fdt)
+                limpiar_fdt_temporales(keep_path=formato.template.path)
                 campos = {campo.field_id: campo for campo in formato.fields}
                 respuestas_guardadas = datos.get("respuestas", {}) or {}
                 imagenes_guardadas = datos.get("imagenes", {}) or {}
@@ -1584,6 +1586,10 @@ class CapturadorApp(App):
         except Exception:
             pass
         self._descartar_avance_temporal_pendiente()
+        try:
+            limpiar_fdt_temporales()
+        except Exception as exc:
+            self._diagnostico_error("LIMPIAR_FDT_EXTRAIDOS", exc)
 
         rutas_temporales = set(getattr(self, "_temp_files", []))
         for atributo in ("_preview_file", "_imagen_final"):
