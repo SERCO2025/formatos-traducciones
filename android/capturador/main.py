@@ -339,7 +339,7 @@ class CapturadorApp(App):
             linea = (
                 "%06d | %s | indice=%r | total=%d | campo=%r | respuesta_len=%d | "
                 "entrada_id=%r | entrada_parent=%s | entrada_disabled=%r | entrada_focus=%r | "
-                "volver_id=%r | volver_parent=%s | volver_disabled=%r\n"
+                "volver_id=%r | volver_parent=%s | volver_disabled=%r\\n"
                 % (self._diagnostico_seq, etapa, indice, len(campos),
                    getattr(campo, "field_id", None), len(texto or ""),
                    id(entrada) if entrada is not None else None,
@@ -353,6 +353,17 @@ class CapturadorApp(App):
             if ruta:
                 with open(ruta, "a", encoding="utf-8") as archivo:
                     archivo.write(linea)
+                    archivo.flush()
+        except Exception:
+            pass
+
+    def _diagnostico_error(self, etapa, error):
+        """Añade el traceback de una excepción al log, sin registrar respuestas."""
+        try:
+            ruta = getattr(self, "_diagnostico_path", None)
+            if ruta:
+                with open(ruta, "a", encoding="utf-8") as archivo:
+                    archivo.write("\\n--- %s ---\\n%s\\n" % (etapa, error))
                     archivo.flush()
         except Exception:
             pass
@@ -616,8 +627,10 @@ class CapturadorApp(App):
                             "Se guardó el JPEG como:\n%s" % self._nombre_final,
                         )
         except Exception as exc:
+            detalle = traceback.format_exc()
             self._diagnostico("ACTIVITY_RESULT_EXCEPCION_%s" % type(exc).__name__)
-            self._mensaje("Error al procesar el archivo", "%s\n\n%s" % (exc, traceback.format_exc()))
+            self._diagnostico_error("TRACEBACK_ACTIVITY_RESULT", detalle)
+            self._mensaje("Error al procesar el archivo", "%s\\n\\n%s" % (exc, detalle))
         finally:
             self._diagnostico("ACTIVITY_RESULT_FIN_%s" % request_code)
 
@@ -768,9 +781,15 @@ class CapturadorApp(App):
             return
         campo = self.formato.fields[self.indice]
         total = len(self.formato.fields)
+        self._diagnostico("MOSTRAR_CAMPO_ANTES_ESTADO")
         self.estado.text = "%s — Campo %d de %d" % (self.formato.name, self.indice + 1, total)
+        self._diagnostico("MOSTRAR_CAMPO_DESPUES_ESTADO")
+        self._diagnostico("MOSTRAR_CAMPO_ANTES_PREGUNTA_TIPO_%s" % type(campo.question).__name__)
         self.pregunta.text = (campo.question or "").strip() or campo.field_id
-        self.entrada.text = self.respuestas.get(campo.field_id, "")
+        self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
+        respuesta_guardada = self.respuestas.get(campo.field_id, "")
+        self._diagnostico("MOSTRAR_CAMPO_ANTES_RESPUESTA_TIPO_%s" % type(respuesta_guardada).__name__)
+        self.entrada.text = respuesta_guardada
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
