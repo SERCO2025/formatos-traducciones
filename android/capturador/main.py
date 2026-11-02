@@ -1297,6 +1297,14 @@ class CapturadorApp(App):
         except Exception:
             if directorio and os.path.isdir(directorio):
                 shutil.rmtree(directorio, ignore_errors=True)
+            try:
+                formato_actual = getattr(self, "formato", None)
+                ruta_activa = (
+                    formato_actual.template.path if formato_actual else None
+                )
+                limpiar_fdt_temporales(keep_path=ruta_activa)
+            except Exception as error_limpieza:
+                self._diagnostico_error("LIMPIAR_FDT_TRAS_ERROR_FTC", error_limpieza)
             raise
 
     def _cargar_configuracion_salida(self):
