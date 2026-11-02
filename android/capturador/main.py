@@ -1130,38 +1130,85 @@ class CapturadorApp(App):
     def _abrir_archivo_avance(self, ruta):
         self._diagnostico("ABRIR_FTC_INICIO")
         directorio = tempfile.mkdtemp(prefix="formatos_traducidos_avance_")
-        self._draft_dirs.append(directorio)
-        with zipfile.ZipFile(ruta, "r") as paquete:
-            nombres = paquete.namelist()
-            if "formato.fdt" not in nombres or "captura.json" not in nombres:
-                raise ValueError("El archivo no es un avance válido de Formatos Traducidos.")
-            paquete.extractall(directorio)
-        ruta_fdt = os.path.join(directorio, "formato.fdt")
-        with open(os.path.join(directorio, "captura.json"), "r", encoding="utf-8") as archivo:
-            datos = json.load(archivo)
-        formato = cargar_fdt(ruta_fdt)
-        respuestas = {campo.field_id: "" for campo in formato.fields}
-        respuestas.update(datos.get("respuestas", {}))
-        for campo_id, interno in (datos.get("imagenes", {}) or {}).items():
-            ruta_imagen = os.path.join(directorio, *str(interno).split("/"))
-            if os.path.isfile(ruta_imagen):
-                respuestas[campo_id] = ruta_imagen
-        Clock.unschedule(self._actualizar_campo_pendiente)
-        self._campo_preview_pendiente = None
-        self.formato = formato
-        self._fdt_path = ruta_fdt
-        self.respuestas = respuestas
-        self._diagnostico("ABRIR_FTC_RESPUESTAS_CARGADAS")
         try:
-            self.indice = max(0, min(int(datos.get("indice", 0)), len(formato.fields) - 1))
-        except (TypeError, ValueError):
-            self.indice = 0
-        self.btn_guardar_avance.disabled = False
-        self._inicializar_imagen_procesada()
-        self._diagnostico("ABRIR_FTC_ANTES_MOSTRAR")
-        self._mostrar_campo()
-        self._diagnostico("ABRIR_FTC_DESPUES_MOSTRAR")
-        self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
+            with zipfile.ZipFile(ruta, "r") as paquete:
+                entradas = paquete.infolist()
+                nombres_lista = [entrada.filename for entrada in entradas]
+                nombres = set(nombres_lista)
+                if len(nombres) != len(nombres_lista):
+                    raise ValueError("El avance contiene nombres de archivo duplicados.")
+                if "formato.fdt" not in nombres or "captura.json" not in nombres:
+                    raise ValueError("El archivo no es un avance válido de Formatos Traducidos.")
+
+                # Extraer primero solo los dos archivos estructurales conocidos.
+                ruta_fdt = os.path.join(directorio, "formato.fdt")
+                with open(ruta_fdt, "wb") as destino:
+                    destino.write(paquete.read("formato.fdt"))
+                ruta_json = os.path.join(directorio, "captura.json")
+                with open(ruta_json, "wb") as destino:
+                    destino.write(paquete.read("captura.json"))
+
+                with open(ruta_json, "r", encoding="utf-8") as archivo:
+                    datos = json.load(archivo)
+                if not isinstance(datos, dict):
+                    raise ValueError("La información del avance no tiene una estructura válida.")
+
+                formato = cargar_fdt(ruta_fdt)
+                campos = {campo.field_id: campo for campo in formato.fields}
+                respuestas_guardadas = datos.get("respuestas", {}) or {}
+                imagenes_guardadas = datos.get("imagenes", {}) or {}
+                if not isinstance(respuestas_guardadas, dict) or not isinstance(imagenes_guardadas, dict):
+                    raise ValueError("Las respuestas o imágenes del avance tienen una estructura no válida.")
+
+                respuestas = {campo.field_id: "" for campo in formato.fields}
+                for campo_id, valor in respuestas_guardadas.items():
+                    if campo_id in campos:
+                        respuestas[campo_id] = "" if valor is None else str(valor)
+
+                # Extraer únicamente imágenes declaradas y contenidas en imagenes/.
+                for campo_id, interno in imagenes_guardadas.items():
+                    if campo_id not in campos:
+                        raise ValueError("El avance contiene una imagen asociada a un campo inexistente.")
+                    interno = str(interno).replace("\\\\", "/")
+                    partes = interno.split("/")
+                    if (
+                        len(partes) != 2
+                        or partes[0] != "imagenes"
+                        or partes[1] in ("", ".", "..")
+                        or ":" in partes[1]
+                        or partes[1].startswith("/")
+                    ):
+                        raise ValueError("El avance contiene una ruta de imagen no válida.")
+                    if interno not in nombres:
+                        continue
+                    destino = os.path.join(directorio, "imagenes", partes[1])
+                    os.makedirs(os.path.dirname(destino), exist_ok=True)
+                    with open(destino, "wb") as archivo_imagen:
+                        archivo_imagen.write(paquete.read(interno))
+                    respuestas[campo_id] = destino
+
+            self._draft_dirs.append(directorio)
+            directorio = None
+            Clock.unschedule(self._actualizar_campo_pendiente)
+            self._campo_preview_pendiente = None
+            self.formato = formato
+            self._fdt_path = ruta_fdt
+            self.respuestas = respuestas
+            self._diagnostico("ABRIR_FTC_RESPUESTAS_CARGADAS")
+            try:
+                self.indice = max(0, min(int(datos.get("indice", 0)), len(formato.fields) - 1))
+            except (TypeError, ValueError):
+                self.indice = 0
+            self.btn_guardar_avance.disabled = False
+            self._inicializar_imagen_procesada()
+            self._diagnostico("ABRIR_FTC_ANTES_MOSTRAR")
+            self._mostrar_campo()
+            self._diagnostico("ABRIR_FTC_DESPUES_MOSTRAR")
+            self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
+        except Exception:
+            if directorio and os.path.isdir(directorio):
+                shutil.rmtree(directorio, ignore_errors=True)
+            raise
 
     def _cargar_configuracion_salida(self):
         """Carga preferencias persistentes y migra la carpeta de la versión anterior."""
