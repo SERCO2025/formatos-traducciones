@@ -885,11 +885,14 @@ class CapturadorApp(App):
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self._diagnostico("MOSTRAR_CAMPO_ANTES_RESPUESTA_TIPO_%s" % type(respuesta_guardada).__name__)
-        self._actualizando_entrada = True
+        # Al restaurar una respuesta durante la navegación, desconectar el
+        # callback para que el cambio programático no lo invoque. El observador
+        # de diagnóstico del widget permanece enlazado y no se modifica.
+        self.entrada.unbind(text=self._entrada_cambio)
         try:
             self.entrada.text = respuesta_guardada
         finally:
-            self._actualizando_entrada = False
+            self.entrada.bind(text=self._entrada_cambio)
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
