@@ -187,7 +187,7 @@ class ValidacionFDT(unittest.TestCase):
     def test_rechaza_fdt_zip_corrupto(self):
         with tempfile.TemporaryDirectory() as temporal:
             ruta = __import__("pathlib").Path(temporal) / "corrupto.fdt"
-            ruta.write_bytes(b"PK\\x03\\x04archivo truncado")
+            ruta.write_bytes(b"PK" + bytes([3, 4]) + b"archivo truncado")
             with self.assertRaises(zipfile.BadZipFile):
                 cargar_fdt(ruta)
 
@@ -256,7 +256,7 @@ class ValidacionFDTAndroid(unittest.TestCase):
     def test_rechaza_fdt_zip_corrupto(self):
         with tempfile.TemporaryDirectory() as temporal:
             ruta = __import__("pathlib").Path(temporal) / "corrupto_android.fdt"
-            ruta.write_bytes(b"PK\\x03\\x04archivo truncado")
+            ruta.write_bytes(b"PK" + bytes([3, 4]) + b"archivo truncado")
             with self.assertRaises(zipfile.BadZipFile):
                 ANDROID_FDT.cargar_fdt(ruta)
 
