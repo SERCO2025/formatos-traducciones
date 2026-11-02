@@ -645,9 +645,10 @@ class CapturadorApp:
         texto_pregunta = campo.question.strip() or campo.field_id
         self.pregunta.config(text=texto_pregunta)
 
+        respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self.entrada.config(state="normal")
         self.entrada.delete("1.0", "end")
-        self.entrada.insert("1.0", self.respuestas.get(campo.field_id, ""))
+        self.entrada.insert("1.0", respuesta_guardada)
 
         if campo.field_type == FIELD_TYPE_IMAGE:
             self.entrada.config(state="disabled")
@@ -657,10 +658,16 @@ class CapturadorApp:
                 text=("Imagen seleccionada: " + ruta)
                 if ruta else "No se ha seleccionado imagen."
             )
+            self.root.focus_set()
         else:
             self.btn_imagen.pack_forget()
             self.archivo_imagen.config(text="")
-            self.entrada.focus_set()
+            # Mantener el mismo criterio de Android: no abrir el teclado
+            # sobre una respuesta ya guardada; enfocar solo campos vacíos.
+            if respuesta_guardada:
+                self.root.focus_set()
+            else:
+                self.entrada.focus_set()
 
         self.btn_atras.config(
             state="normal" if self.indice > 0 else "disabled"
