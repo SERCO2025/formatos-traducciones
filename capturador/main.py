@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from shared.fdt import cargar_fdt
+from shared.ftc import normalizar_ruta_imagen_ftc, validar_entradas_ftc
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import (
     construir_nombre_archivo,
@@ -442,12 +443,7 @@ class CapturadorApp:
         directorio = None
         try:
             with zipfile.ZipFile(ruta, "r") as paquete:
-                nombres_lista = [entrada.filename for entrada in paquete.infolist()]
-                nombres = set(nombres_lista)
-                if len(nombres) != len(nombres_lista):
-                    raise ValueError("El avance contiene nombres de archivo duplicados.")
-                if "formato.fdt" not in nombres or "captura.json" not in nombres:
-                    raise ValueError("El archivo no contiene formato.fdt y captura.json; no es un avance FTC válido.")
+                nombres = validar_entradas_ftc(paquete)
 
                 directorio = tempfile.mkdtemp(prefix="formatos_traducidos_avance_")
                 ruta_fdt = os.path.join(directorio, "formato.fdt")
@@ -472,17 +468,7 @@ class CapturadorApp:
                 # Extraer únicamente imágenes declaradas en captura.json y dentro de
                 # la carpeta interna "imagenes/", evitando rutas externas al avance.
                 for campo_id, interno in imagenes.items():
-                    interno = str(interno).replace("\\", "/")
-                    partes = interno.split("/")
-                    if (
-                        len(partes) != 2
-                        or partes[0] != "imagenes"
-                        or partes[1] in ("", ".", "..")
-                        or ":" in partes[1]
-                        or partes[1].startswith("/")
-                        or os.path.basename(partes[1]) != partes[1]
-                    ):
-                        raise ValueError("El avance contiene una ruta de imagen no válida.")
+                    interno = normalizar_ruta_imagen_ftc(interno)
                     if interno not in nombres:
                         continue
                     destino = os.path.join(directorio, "imagenes", partes[1])
