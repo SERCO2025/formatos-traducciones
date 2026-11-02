@@ -586,6 +586,8 @@ class CapturadorApp(App):
                 return
             uri = intent.getData()
             if uri is None:
+                if request_code == self.REQUEST_SAVE_DRAFT_FOLDER:
+                    self._descartar_avance_temporal_pendiente()
                 self._mensaje("Error", "Android no devolvió la ubicación del archivo.")
                 return
             uri_text = str(uri.toString())
@@ -707,6 +709,7 @@ class CapturadorApp(App):
             raise IOError("Android no pudo abrir el archivo seleccionado.")
         ruta = os.path.join(tempfile.gettempdir(), "fdt_android_%s%s" % (len(self._temp_files), extension))
         salida = None
+        copia_completa = False
         try:
             FileOutputStream = autoclass("java.io.FileOutputStream")
             salida = FileOutputStream(ruta)
@@ -717,13 +720,25 @@ class CapturadorApp(App):
                     break
                 salida.write(buffer, 0, cantidad)
             salida.flush()
+            salida.close()
+            salida = None
+            copia_completa = True
         finally:
             try:
                 flujo.close()
             except Exception:
                 pass
             if salida is not None:
-                salida.close()
+                try:
+                    salida.close()
+                except Exception:
+                    pass
+            if not copia_completa:
+                try:
+                    if os.path.isfile(ruta):
+                        os.remove(ruta)
+                except OSError as exc:
+                    self._diagnostico_error("ELIMINAR_CACHE_PARCIAL", exc)
         self._temp_files.append(ruta)
         return ruta
 
@@ -1171,15 +1186,18 @@ class CapturadorApp(App):
         self._avance_temporal_pendiente = None
         if not ruta:
             return
+        eliminado = not os.path.exists(ruta)
         try:
-            if os.path.isfile(ruta):
+            if not eliminado and os.path.isfile(ruta):
                 os.remove(ruta)
+                eliminado = True
         except OSError as exc:
             self._diagnostico_error("ELIMINAR_AVANCE_TEMPORAL", exc)
-        try:
-            self._temp_files.remove(ruta)
-        except ValueError:
-            pass
+        if eliminado:
+            try:
+                self._temp_files.remove(ruta)
+            except ValueError:
+                pass
 
     def guardar_avance(self):
         if not self.formato:
