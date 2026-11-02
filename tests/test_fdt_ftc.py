@@ -260,6 +260,18 @@ class ValidacionFDTAndroid(unittest.TestCase):
             with self.assertRaises(zipfile.BadZipFile):
                 ANDROID_FDT.cargar_fdt(ruta)
 
+    def test_limpieza_de_extracciones_fdt_android(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            raiz = __import__("pathlib").Path(temporal) / "extraido"
+            raiz.mkdir()
+            plantilla = raiz / "plantilla.jpg"
+            plantilla.write_bytes(b"imagen")
+            ANDROID_FDT._EXTRACTED_DIRS.append(str(raiz))
+            ANDROID_FDT.limpiar_fdt_temporales(keep_path=str(plantilla))
+            self.assertTrue(raiz.is_dir())
+            ANDROID_FDT.limpiar_fdt_temporales()
+            self.assertFalse(raiz.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
