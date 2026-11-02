@@ -362,6 +362,9 @@ def validar_fdt(formato: Formato):
         if campo.field_type == FIELD_TYPE_NUMBER:
             campo.validation.numeric_only = True
             campo.validation.alphanumeric_only = False
+        elif campo.field_type == FIELD_TYPE_ALPHANUMERIC:
+            campo.validation.numeric_only = False
+            campo.validation.alphanumeric_only = True
         else:
             campo.validation.numeric_only = False
             campo.validation.alphanumeric_only = False
