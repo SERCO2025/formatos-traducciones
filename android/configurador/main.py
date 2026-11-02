@@ -1135,9 +1135,48 @@ class ConfiguradorApp(App):
         opcion("Alejar", lambda: self.set_zoom(self.scale * 0.8))
         opcion("Acercar", lambda: self.set_zoom(self.scale * 1.25))
         opcion("Restablecer zoom", lambda: self.set_zoom(1.0))
-        contenido.add_widget(Label(text="Formatos Traducidos", size_hint_y=None, height=dp(38), font_size="11sp"))
+        lista_menu.add_widget(Label(text="Formatos Traducidos", size_hint_y=None, height=dp(38), font_size="11sp"))
+        seccion("SALIR")
+        opcion("Salir", self._confirmar_salida)
         panel.add_widget(contenido)
         panel.open()
+
+    def _confirmar_salida(self):
+        contenido = BoxLayout(
+            orientation="vertical",
+            padding=dp(14),
+            spacing=dp(10),
+        )
+        aviso = Label(
+            text="¿Desea cerrar el configurador?\\nAsegúrese de guardar los cambios antes de salir.",
+            halign="center",
+            valign="middle",
+            font_size="15sp",
+        )
+        aviso.bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        contenido.add_widget(aviso)
+
+        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        popup = Popup(
+            title="Salir",
+            content=contenido,
+            size_hint=(0.9, None),
+            height=dp(190),
+            auto_dismiss=False,
+        )
+        cancelar = Button(text="Cancelar")
+        salir = Button(text="Salir")
+        cancelar.bind(on_release=lambda *_: popup.dismiss())
+
+        def salir_confirmado(*_):
+            popup.dismiss()
+            self.stop()
+
+        salir.bind(on_release=salir_confirmado)
+        botones.add_widget(cancelar)
+        botones.add_widget(salir)
+        contenido.add_widget(botones)
+        popup.open()
 
     def _hay_ventana_secundaria_abierta(self):
         """Evita ejecutar atajos mientras haya un menú, diálogo o modal abierto."""
