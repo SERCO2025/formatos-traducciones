@@ -528,6 +528,14 @@ class CapturadorApp:
                     % (self.indice + 1, len(formato.fields)),
                 )
         except Exception as exc:
+            try:
+                formato_actual = getattr(self, "formato", None)
+                ruta_activa = (
+                    formato_actual.template.path if formato_actual else None
+                )
+                limpiar_fdt_temporales(keep_path=ruta_activa)
+            except Exception:
+                pass
             messagebox.showerror(
                 "No se pudo abrir el avance",
                 "El archivo FTC no pudo cargarse correctamente.\\n\\n%s" % exc,
