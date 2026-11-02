@@ -184,6 +184,10 @@ class CapturadorApp(App):
         self._imagen_final = None
         self._nombre_final = "resultado.jpg"
         self._preview_file = None
+        self._imagen_plantilla_base = None
+        self._imagen_procesada_preview = None
+        self._campo_preview_pendiente = None
+        self._actualizando_entrada = False
         self._temp_files = []
         self._avance_temporal_pendiente = None
         self._fdt_path = None
@@ -590,11 +594,14 @@ class CapturadorApp(App):
                 except Exception as exc:
                     self._mensaje("No se pudo abrir el formato", "%s\n\n%s" % (exc, traceback.format_exc()))
                     return
+                Clock.unschedule(self._actualizar_campo_pendiente)
+                self._campo_preview_pendiente = None
                 self.formato = formato
                 self._fdt_path = ruta
                 self.respuestas = {campo.field_id: "" for campo in formato.fields}
                 self.indice = 0
                 self.btn_guardar_avance.disabled = False
+                self._inicializar_imagen_procesada()
                 self._mostrar_campo()
             elif request_code == self.REQUEST_OPEN_DRAFT:
                 self._diagnostico("ANTES_COPIAR_FTC")
@@ -626,6 +633,7 @@ class CapturadorApp(App):
                     self._mensaje("Campo incorrecto", "La pregunta actual no corresponde a una imagen.")
                     return
                 self.respuestas[campo.field_id] = ruta
+                self._actualizar_campo_procesado(campo)
                 self._mostrar_campo()
             elif request_code == self.REQUEST_SAVE_JPEG:
                 if self._imagen_final is not None:
@@ -768,14 +776,74 @@ class CapturadorApp(App):
 
     def _entrada_cambio(self, *_):
         self._diagnostico("CALLBACK_ENTRADA_CAMBIO")
+        if self._actualizando_entrada:
+            return
         if self.formato and self.formato.fields:
             campo = self.formato.fields[self.indice]
             if campo.field_type != FIELD_TYPE_IMAGE:
-                # Mantener la respuesta en memoria mientras se escribe. Así no
-                # depende de que Android conserve el TextInput al abrir selectores.
+                # Solo una modificación real del usuario marca el campo para
+                # actualizar su región; restaurar texto guardado no lo hace.
                 self.respuestas[campo.field_id] = self.entrada.text
-                Clock.unschedule(self._actualizar_preview)
-                Clock.schedule_once(self._actualizar_preview, 0.25)
+                self._campo_preview_pendiente = campo
+                Clock.unschedule(self._actualizar_campo_pendiente)
+                Clock.schedule_once(self._actualizar_campo_pendiente, 0.25)
+
+    def _inicializar_imagen_procesada(self):
+        """Prepara una copia limpia de la plantilla y procesa las respuestas una sola vez."""
+        if not self.formato:
+            self._imagen_plantilla_base = None
+            self._imagen_procesada_preview = None
+            return
+        self._imagen_plantilla_base = PILImage.open(
+            self.formato.template.path
+        ).convert("RGB").copy()
+        self._imagen_procesada_preview = renderizar_imagen(
+            self.formato, self.respuestas
+        )
+
+    def _actualizar_campo_pendiente(self, *_):
+        campo = self._campo_preview_pendiente
+        self._campo_preview_pendiente = None
+        if campo is not None:
+            self._actualizar_campo_procesado(campo)
+
+    def _actualizar_campo_procesado(self, campo):
+        """Redibuja la región del campo y los campos que se superponen con ella."""
+        if not self.formato or self._imagen_plantilla_base is None:
+            return
+        try:
+            posicion = campo.position
+            margen = max(20, min(100, int(max(posicion.width, posicion.height) * 0.2)))
+            izquierda = max(0, posicion.x - margen)
+            arriba = max(0, posicion.y - margen)
+            derecha = min(self._imagen_plantilla_base.width, posicion.x + posicion.width + margen)
+            abajo = min(self._imagen_plantilla_base.height, posicion.y + posicion.height + margen)
+
+            # Incluir campos superpuestos y texto cercano que pueda invadir la
+            # región. Se restauran desde la plantilla limpia y se dibujan otra vez.
+            campos_region = []
+            for otro in self.formato.fields:
+                p = otro.position
+                margen_otro = 0 if otro.field_type == FIELD_TYPE_IMAGE else max(
+                    20, min(100, int(max(p.width, p.height) * 0.2))
+                )
+                if (p.x - margen_otro < derecha and
+                        p.x + p.width + margen_otro > izquierda and
+                        p.y - margen_otro < abajo and
+                        p.y + p.height + margen_otro > arriba):
+                    campos_region.append(otro)
+
+            import copy
+            formato_region = copy.copy(self.formato)
+            formato_region.fields = campos_region
+            imagen_region = renderizar_imagen(formato_region, self.respuestas)
+            caja = (izquierda, arriba, derecha, abajo)
+            self._imagen_procesada_preview.paste(
+                imagen_region.crop(caja), (izquierda, arriba)
+            )
+            self._actualizar_preview()
+        except Exception as exc:
+            self.estado.text = "Vista previa no disponible: %s" % exc
 
     def _guardar_respuesta_actual(self):
         if not self.formato or not self.formato.fields:
@@ -787,7 +855,11 @@ class CapturadorApp(App):
         if getattr(campo, "uppercase", False):
             respuesta = respuesta.upper()
             if self.entrada.text != respuesta:
-                self.entrada.text = respuesta
+                self._actualizando_entrada = True
+                try:
+                    self.entrada.text = respuesta
+                finally:
+                    self._actualizando_entrada = False
         valido, mensaje = validar_respuesta(campo, respuesta)
         if not valido:
             self._mensaje("Respuesta no válida", mensaje)
@@ -799,6 +871,10 @@ class CapturadorApp(App):
         self._diagnostico("MOSTRAR_CAMPO_INICIO")
         if not self.formato or not self.formato.fields:
             return
+        # Consolidar el dibujo pendiente del campo anterior antes de navegar.
+        if self._campo_preview_pendiente is not None:
+            Clock.unschedule(self._actualizar_campo_pendiente)
+            self._actualizar_campo_pendiente()
         campo = self.formato.fields[self.indice]
         total = len(self.formato.fields)
         self._diagnostico("MOSTRAR_CAMPO_ANTES_ESTADO")
@@ -809,7 +885,11 @@ class CapturadorApp(App):
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self._diagnostico("MOSTRAR_CAMPO_ANTES_RESPUESTA_TIPO_%s" % type(respuesta_guardada).__name__)
-        self.entrada.text = respuesta_guardada
+        self._actualizando_entrada = True
+        try:
+            self.entrada.text = respuesta_guardada
+        finally:
+            self._actualizando_entrada = False
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_TEXTO")
         es_imagen = campo.field_type == FIELD_TYPE_IMAGE
         self.entrada.disabled = es_imagen
@@ -861,18 +941,18 @@ class CapturadorApp(App):
         if not self.formato or not self.formato.fields:
             return
         try:
-            respuestas = dict(self.respuestas)
+            if self._imagen_procesada_preview is None:
+                self._inicializar_imagen_procesada()
             campo = self.formato.fields[self.indice]
-            if campo.field_type != FIELD_TYPE_IMAGE and not self.entrada.disabled:
-                respuestas[campo.field_id] = self.entrada.text
-            imagen = renderizar_imagen(self.formato, respuestas)
             p = campo.position
             margen = max(20, min(100, int(max(p.width, p.height) * 0.2)))
             izquierda = max(0, p.x - margen)
             arriba = max(0, p.y - margen)
-            derecha = min(imagen.width, p.x + p.width + margen)
-            abajo = min(imagen.height, p.y + p.height + margen)
-            recorte = imagen.crop((izquierda, arriba, derecha, abajo))
+            derecha = min(self._imagen_procesada_preview.width, p.x + p.width + margen)
+            abajo = min(self._imagen_procesada_preview.height, p.y + p.height + margen)
+            recorte = self._imagen_procesada_preview.crop(
+                (izquierda, arriba, derecha, abajo)
+            )
             ruta = os.path.join(tempfile.gettempdir(), "capturador_android_preview.png")
             recorte.save(ruta, format="PNG")
             self._mostrar_imagen(ruta)
@@ -1060,6 +1140,8 @@ class CapturadorApp(App):
             ruta_imagen = os.path.join(directorio, *str(interno).split("/"))
             if os.path.isfile(ruta_imagen):
                 respuestas[campo_id] = ruta_imagen
+        Clock.unschedule(self._actualizar_campo_pendiente)
+        self._campo_preview_pendiente = None
         self.formato = formato
         self._fdt_path = ruta_fdt
         self.respuestas = respuestas
@@ -1069,6 +1151,7 @@ class CapturadorApp(App):
         except (TypeError, ValueError):
             self.indice = 0
         self.btn_guardar_avance.disabled = False
+        self._inicializar_imagen_procesada()
         self._diagnostico("ABRIR_FTC_ANTES_MOSTRAR")
         self._mostrar_campo()
         self._diagnostico("ABRIR_FTC_DESPUES_MOSTRAR")
