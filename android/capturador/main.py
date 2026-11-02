@@ -1089,10 +1089,15 @@ class CapturadorApp(App):
                 imagen_path = str(valor)
                 if os.path.isfile(imagen_path):
                     extension = os.path.splitext(imagen_path)[1].lower()
-                    if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+                    if extension not in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"):
                         extension = ".jpg"
                     seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", campo.field_id) or "imagen"
                     interno = "imagenes/%s%s" % (seguro, extension)
+                    if interno in datos["imagenes"].values():
+                        sufijo = 1
+                        while "imagenes/%s_%d%s" % (seguro, sufijo, extension) in datos["imagenes"].values():
+                            sufijo += 1
+                        interno = "imagenes/%s_%d%s" % (seguro, sufijo, extension)
                     datos["imagenes"][campo.field_id] = interno
                     datos["respuestas"][campo.field_id] = ""
                 else:
