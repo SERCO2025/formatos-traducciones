@@ -1470,6 +1470,9 @@ class ConfiguradorApp(App):
                     self._tomar_permiso_persistente_uri(uri, intent)
                 ruta = self._copiar_uri_a_cache(uri, tipo)
                 if tipo == "fdt":
+                    # No conservar como destino de guardado el FDT anterior si
+                    # el nuevo archivo elegido resulta inválido.
+                    self._fdt_uri = None
                     if self._abrir_ruta(ruta):
                         self._fdt_uri = uri
                 elif tipo == "font":
