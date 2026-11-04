@@ -589,10 +589,29 @@ class CapturadorApp(App):
             if request_code == self.REQUEST_OPEN_FDT:
                 ruta = self._copiar_uri_a_cache(uri, ".fdt")
                 try:
+                    # Un FTC también es un ZIP. Identificar su estructura antes de
+                    # intentar interpretarlo como FDT evita mostrar una excepción
+                    # técnica cuando el usuario eligió el tipo de archivo equivocado.
+                    if zipfile.is_zipfile(ruta):
+                        with zipfile.ZipFile(ruta, "r") as paquete:
+                            nombres = {entrada.filename for entrada in paquete.infolist()}
+                        if {"formato.fdt", "captura.json"}.issubset(nombres):
+                            self._mensaje(
+                                "Archivo incorrecto",
+                                "El archivo seleccionado es un avance FTC, no un formato FDT. "
+                                "Para abrirlo, utiliza la opción «Abrir avance».",
+                            )
+                            return
                     formato = cargar_fdt(ruta)
                     limpiar_fdt_temporales(keep_path=formato.template.path)
-                except Exception as exc:
-                    self._mensaje("No se pudo abrir el formato", "%s\n\n%s" % (exc, traceback.format_exc()))
+                except Exception:
+                    # El detalle permanece en el registro interno de diagnóstico;
+                    # al usuario se le informa el resultado, no el traceback.
+                    self._diagnostico_error("ERROR_ABRIR_FDT", traceback.format_exc())
+                    self._mensaje(
+                        "Formato no válido",
+                        "El archivo seleccionado no es un formato FDT válido o está dañado.",
+                    )
                     return
                 Clock.unschedule(self._actualizar_campo_pendiente)
                 self._campo_preview_pendiente = None
