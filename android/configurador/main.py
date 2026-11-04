@@ -1699,7 +1699,11 @@ class ConfiguradorApp(App):
             return
         if ANDROID_AVAILABLE:
             if self._fdt_uri is not None:
-                self._guardar_fdt_uri(self._fdt_uri)
+                try:
+                    self._guardar_fdt_uri(self._fdt_uri)
+                except Exception as exc:
+                    self.estado.text = "Error al guardar el FDT."
+                    self._mostrar_error_tecnico("No se pudo guardar el FDT", exc)
             else:
                 self._abrir_selector_android("fdt", guardar=True)
         else:
