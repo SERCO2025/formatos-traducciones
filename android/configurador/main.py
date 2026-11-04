@@ -862,6 +862,7 @@ class ConfiguradorApp(App):
         self.zoom_label = None
         self._visual_template_path = None
         self._android_callback = None
+        self._fdt_uri = None
         self._font_import_target = None
         self._undo = []
         self._redo = []
@@ -1144,14 +1145,14 @@ class ConfiguradorApp(App):
     def _confirmar_salida(self):
         contenido = BoxLayout(
             orientation="vertical",
-            padding=dp(14),
-            spacing=dp(10),
+            padding=dp(16),
+            spacing=dp(12),
         )
         aviso = Label(
-            text="¿Desea cerrar el configurador?\\nAsegúrese de guardar los cambios antes de salir.",
+            text="¿Desea cerrar el configurador?\nAsegúrese de guardar los cambios antes de salir.",
             halign="center",
             valign="middle",
-            font_size="15sp",
+            font_size="14sp",
         )
         aviso.bind(size=lambda inst, val: setattr(inst, "text_size", val))
         contenido.add_widget(aviso)
@@ -1160,12 +1161,19 @@ class ConfiguradorApp(App):
         popup = Popup(
             title="Salir",
             content=contenido,
-            size_hint=(0.9, None),
-            height=dp(190),
+            size_hint=(0.92, None),
+            height=dp(230),
             auto_dismiss=False,
         )
         cancelar = Button(text="Cancelar")
-        salir = Button(text="Salir")
+        salir = Button(
+            text="Salir",
+            background_normal="",
+            background_down="",
+            background_color=(0.82, 0.0, 0.0, 1),
+            color=(1, 1, 0, 1),
+            bold=True,
+        )
         cancelar.bind(on_release=lambda *_: popup.dismiss())
 
         def salir_confirmado(*_):
@@ -1363,6 +1371,7 @@ class ConfiguradorApp(App):
         self.clear_drawing_preview()
         limpiar_fdt_temporales()
         self.formato = None
+        self._fdt_uri = None
         self.seleccionado = None
         self._visual_template_path = None
         self._undo = []
@@ -1391,6 +1400,7 @@ class ConfiguradorApp(App):
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             if guardar:
+                intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                 # ACTION_CREATE_DOCUMENT necesita permiso explicito de escritura.
                 # Sin esta bandera, openOutputStream(uri) falla con SecurityException.
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -1400,6 +1410,10 @@ class ConfiguradorApp(App):
                 intent.putExtra(Intent.EXTRA_TITLE, nombre)
             else:
                 intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                if tipo == "fdt":
+                    # Se solicita escritura además de lectura para poder sobrescribir
+                    # el mismo FDT después de abrirlo.
+                    intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             self._android_callback = (tipo, guardar)
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             self.estado.text = "Esperando selección de archivo en Android..."
@@ -1417,6 +1431,21 @@ class ConfiguradorApp(App):
             0,
         )
 
+    def _tomar_permiso_persistente_uri(self, uri, intent):
+        """Conserva los permisos SAF concedidos para reutilizar la URI del FDT."""
+        try:
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            resolver = PythonActivity.mActivity.getContentResolver()
+            Intent = autoclass("android.content.Intent")
+            permisos = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            concedidos = int(intent.getFlags()) & permisos
+            if concedidos:
+                resolver.takePersistableUriPermission(uri, concedidos)
+        except Exception as exc:
+            # El acceso actual puede seguir funcionando aunque el proveedor no
+            # permita persistir el permiso; dejar constancia para diagnóstico.
+            print("[FDT_URI] No se pudo persistir el permiso SAF: %r" % (exc,), flush=True)
+
     def _procesar_resultado_android(self, request_code, result_code, intent):
         if request_code != 4001 or not self._android_callback:
             return
@@ -1432,13 +1461,17 @@ class ConfiguradorApp(App):
                 raise IOError("Android devolvió un resultado sin archivo (URI nula).")
             self.estado.text = "Archivo seleccionado; leyendo contenido..."
             if guardar:
+                self._tomar_permiso_persistente_uri(uri, intent)
                 # El guardado valida el nombre una sola vez, escribe sobre la URI
                 # autorizada y aplica .fdt al final si hace falta.
                 self._guardar_fdt_uri(uri)
             else:
+                if tipo == "fdt":
+                    self._tomar_permiso_persistente_uri(uri, intent)
                 ruta = self._copiar_uri_a_cache(uri, tipo)
                 if tipo == "fdt":
-                    self._abrir_ruta(ruta)
+                    if self._abrir_ruta(ruta):
+                        self._fdt_uri = uri
                 elif tipo == "font":
                     if self._font_import_target:
                         destino_fuente = self._font_import_target
@@ -1594,6 +1627,7 @@ class ConfiguradorApp(App):
             from PIL import Image
             imagen = Image.open(ruta).convert("RGB")
             
+            self._fdt_uri = None
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(path=ruta, width=imagen.width, height=imagen.height, dpi=300, mode="RGB"),
@@ -1638,9 +1672,11 @@ class ConfiguradorApp(App):
             limpiar_fdt_temporales(keep_path=formato.template.path)
             self.actualizar_zoom()
             self.estado.text = "FDT abierto. %d campo(s)." % len(self.formato.fields)
+            return True
         except Exception as exc:
             self.estado.text = "Error al abrir el archivo FDT."
             self._mostrar_error_tecnico("Fallo al abrir el archivo FDT", exc)
+            return False
 
     def _calcular_zoom_inicial(self, width, height):
         # ConfiguradorApp hereda de App, no de Widget: sus dimensiones se
@@ -1658,7 +1694,16 @@ class ConfiguradorApp(App):
         return max(0.05, min(1.0, 0.82 * min(ancho_disponible / float(width), alto_disponible / float(height))))
 
     def guardar(self):
-        self.guardar_como_fdt()
+        if not self.formato:
+            self._aviso("Primero importe una plantilla.")
+            return
+        if ANDROID_AVAILABLE:
+            if self._fdt_uri is not None:
+                self._guardar_fdt_uri(self._fdt_uri)
+            else:
+                self._abrir_selector_android("fdt", guardar=True)
+        else:
+            self.guardar_como_fdt()
 
     def guardar_como_fdt(self):
         if not self.formato:
@@ -1717,6 +1762,7 @@ class ConfiguradorApp(App):
             # Aplicar la extensión después de escribir, reutilizando el nombre
             # ya validado. No volver a consultar DISPLAY_NAME: algunos proveedores
             # SAF dejan de publicarlo o cambian la URI después de crear/renombrar.
+            uri_activa = uri
             if not extension:
                 DocumentsContract = autoclass("android.provider.DocumentsContract")
                 nuevo_nombre = nombre + ".fdt"
@@ -1735,6 +1781,8 @@ class ConfiguradorApp(App):
                         "El contenido se guardó, pero Android no pudo aplicar "
                         "la extensión .fdt automáticamente."
                     )
+                uri_activa = uri_renombrado
+            self._fdt_uri = uri_activa
             self.estado.text = "FDT guardado correctamente."
         finally:
             if temporal and os.path.exists(temporal):
