@@ -8,6 +8,7 @@ mediante el selector de documentos de Android (Storage Access Framework).
 import json
 import os
 import re
+import shutil
 import tempfile
 import time
 import traceback
@@ -1306,7 +1307,7 @@ class CapturadorApp(App):
             self._mostrar_campo()
             self._diagnostico("ABRIR_FTC_DESPUES_MOSTRAR")
             self._mensaje("Avance abierto", "Se recuperaron las respuestas guardadas. Puedes continuar desde el campo %d de %d." % (self.indice + 1, len(formato.fields)))
-        except Exception:
+        except Exception as error:
             if directorio and os.path.isdir(directorio):
                 shutil.rmtree(directorio, ignore_errors=True)
             try:
@@ -1317,7 +1318,14 @@ class CapturadorApp(App):
                 limpiar_fdt_temporales(keep_path=ruta_activa)
             except Exception as error_limpieza:
                 self._diagnostico_error("LIMPIAR_FDT_TRAS_ERROR_FTC", error_limpieza)
-            raise
+
+            # El detalle técnico se conserva únicamente en el diagnóstico interno.
+            self._diagnostico_error("ERROR_ABRIR_FTC", error)
+            self._mensaje(
+                "No se pudo abrir el avance",
+                "El archivo seleccionado no es un avance FTC válido o está dañado. "
+                "Si se trata de un formato FDT, ábrelo mediante la opción «Abrir formato».",
+            )
 
     def _cargar_configuracion_salida(self):
         """Carga preferencias persistentes y migra la carpeta de la versión anterior."""
