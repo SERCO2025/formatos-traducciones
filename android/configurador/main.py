@@ -52,6 +52,53 @@ from shared.models import (
 )
 
 
+class GradientExitButton(Button):
+    """Botón rojo con degradado vertical y bisel que se invierte al presionar."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("text", "Salir")
+        kwargs.setdefault("font_size", "22sp")
+        kwargs.setdefault("bold", True)
+        kwargs.setdefault("color", (1, 1, 1, 1))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(62))
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        super().__init__(**kwargs)
+        self._bandas = []
+        with self.canvas.before:
+            for color in (
+                (1.0, .30, .30, 1), (.96, .20, .20, 1),
+                (.88, .09, .09, 1), (.76, .035, .035, 1),
+                (.62, 0, 0, 1), (.43, 0, 0, 1),
+            ):
+                instruccion_color = Color(*color)
+                rectangulo = Rectangle(pos=self.pos, size=self.size)
+                self._bandas.append((instruccion_color, rectangulo))
+            self._borde_color = Color(.30, 0, 0, 1)
+            self._borde = Line(rectangle=(self.x, self.y, self.width, self.height), width=2)
+            self._bisel_color = Color(1, .55, .55, 1)
+            self._bisel = Line(points=[self.x, self.y, self.x + self.width, self.y], width=3)
+        self.bind(pos=self._actualizar_dibujo, size=self._actualizar_dibujo, state=self._actualizar_dibujo)
+        self._actualizar_dibujo()
+
+    def _actualizar_dibujo(self, *_):
+        if not self._bandas:
+            return
+        presionado = self.state == "down"
+        alto = max(1, self.height / float(len(self._bandas)))
+        for i, (color, rectangulo) in enumerate(self._bandas):
+            y = self.y + ((len(self._bandas) - 1 - i) * alto if not presionado else i * alto)
+            rectangulo.pos = (self.x + dp(3), y + dp(2))
+            rectangulo.size = (max(1, self.width - dp(6)), alto + dp(1))
+        self._borde_color.rgba = (.95, .35, .35, 1) if presionado else (.25, 0, 0, 1)
+        self._borde.rectangle = (self.x + dp(2), self.y + dp(2), self.width - dp(4), self.height - dp(4))
+        self._bisel_color.rgba = (.30, 0, 0, 1) if presionado else (1, .65, .65, 1)
+        y_bisel = self.y + (dp(5) if presionado else self.height - dp(5))
+        self._bisel.points = [self.x + dp(8), y_bisel, self.x + self.width - dp(8), y_bisel]
+
+
 class HamburgerButton(Button):
     """Botón hamburguesa dibujado con Canvas, sin depender de una fuente Unicode."""
     def __init__(self, **kwargs):
@@ -1157,23 +1204,16 @@ class ConfiguradorApp(App):
         aviso.bind(size=lambda inst, val: setattr(inst, "text_size", val))
         contenido.add_widget(aviso)
 
-        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        botones = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(8))
         popup = Popup(
             title="Salir",
             content=contenido,
             size_hint=(0.92, None),
-            height=dp(230),
+            height=dp(246),
             auto_dismiss=False,
         )
         cancelar = Button(text="Cancelar")
-        salir = Button(
-            text="Salir",
-            background_normal="",
-            background_down="",
-            background_color=(0.82, 0.0, 0.0, 1),
-            color=(1, 1, 0, 1),
-            bold=True,
-        )
+        salir = GradientExitButton()
         cancelar.bind(on_release=lambda *_: popup.dismiss())
 
         def salir_confirmado(*_):
