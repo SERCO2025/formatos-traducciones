@@ -497,8 +497,7 @@ class CapturadorApp(App):
         popup.bind(on_dismiss=lambda *_: setattr(self, "_popup_salida", None))
         def salir_confirmado(*_):
             popup.dismiss()
-            App.get_running_app().stop()
-        boton.bind(on_release=salir_confirmado)
+            App.get_running_app().stop()        boton.bind(on_release=salir_confirmado)
         popup.open()
 
     def _mensaje(self, titulo, mensaje):
@@ -997,8 +996,7 @@ class CapturadorApp(App):
 
     def anterior(self):
         if not self.formato or self.indice <= 0:
-            return
-        if not self._guardar_respuesta_actual():
+            return        if not self._guardar_respuesta_actual():
             return
         self.indice -= 1
         self._mostrar_campo()
@@ -1323,8 +1321,7 @@ class CapturadorApp(App):
             self._diagnostico_error("ERROR_ABRIR_FTC", error)
             self._mensaje(
                 "No se pudo abrir el avance",
-                "El archivo seleccionado no es un avance FTC válido o está dañado. "
-                "Si se trata de un formato FDT, ábrelo mediante la opción «Abrir formato».",
+                "El archivo seleccionado no es un avance FTC válido o está dañado.",
             )
 
     def _cargar_configuracion_salida(self):
@@ -1498,7 +1495,6 @@ class CapturadorApp(App):
         resolver.takePersistableUriPermission(uri, permisos)
         self._save_jpeg_folder_uri = str(uri.toString())
         self._guardar_configuracion_salida()
-
     def _registrar_jpeg_generado(self, uri):
         DocumentsContract = autoclass("android.provider.DocumentsContract")
         document_id = str(DocumentsContract.getDocumentId(uri))
