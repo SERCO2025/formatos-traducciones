@@ -1323,7 +1323,7 @@ class CapturadorApp(App):
             self._diagnostico_error("ERROR_ABRIR_FTC", error)
             self._mensaje(
                 "No se pudo abrir el avance",
-                "El archivo seleccionado no es un avance FTC válido o está dañado.",
+                "El archivo seleccionado no es un avance FTC válido.",
             )
 
     def _cargar_configuracion_salida(self):
