@@ -1,0 +1,190 @@
+name: Compilar APK - Formatos Traducidos
+on:
+  workflow_dispatch:
+  push:
+    branches: [desarrollo, 'fix/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [configurador, capturador]
+    steps:
+      # Ejecución nueva para validar asignación de runners.
+      - name: Descargar proyecto
+        uses: actions/checkout@v4
+      - name: Restaurar caché de Buildozer y Android
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/${{ matrix.app }}/.buildozer
+            ~/.cache/pip
+          key: buildozer-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('android/{0}/buildozer.spec', matrix.app)) }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-${{ matrix.app }}-
+      - name: Preparar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            cmake \
+            libffi-dev \
+            libltdl-dev \
+            libssl-dev
+      - name: Instalar Android SDK API 34 y aceptar licencias
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # Buildozer usa su propio SDK en ~/.buildozer/android/platform/android-sdk.
+          # Instalar los componentes en ANDROID_HOME deja la API fuera de esa ruta.
+          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "ERROR: No se encontró sdkmanager en $SDKMANAGER"
+            find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -name sdkmanager -type f 2>/dev/null || true
+            exit 1
+          fi
+          mkdir -p "$BUILDOZER_SDK/cmdline-tools/latest"
+          # Buildozer también necesita encontrar sdkmanager dentro de su propio SDK.
+          cp -a "$ANDROID_HOME/cmdline-tools/latest/." "$BUILDOZER_SDK/cmdline-tools/latest/"
+          # Buildozer instalado por pip todavía busca sdkmanager en la ruta
+          # heredada tools/bin/sdkmanager. Este wrapper delega al CLI moderno.
+          mkdir -p "$BUILDOZER_SDK/tools/bin"
+          cat > "$BUILDOZER_SDK/tools/bin/sdkmanager" <<EOF
+          #!/usr/bin/env bash
+          exec "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" "\$@"
+          EOF
+          chmod +x "$BUILDOZER_SDK/tools/bin/sdkmanager"
+          set +o pipefail
+          yes | "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --licenses >/dev/null
+          set -o pipefail
+          "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          {
+            echo "ANDROIDSDK=$BUILDOZER_SDK"
+            echo "ANDROIDAPI=34"
+            echo "ANDROIDMINAPI=21"
+          } >> "$GITHUB_ENV"
+          test -d "$BUILDOZER_SDK/platforms/android-34"
+          test -d "$BUILDOZER_SDK/build-tools/34.0.0"
+      - name: Preparar pip y herramientas de compilación
+        run: |
+          python -m pip install --upgrade "pip<25"
+          python -m pip install "setuptools<81"
+          python -m pip install "cython==0.29.34"
+      - name: Instalar Buildozer
+        run: |
+          python -m pip install --upgrade buildozer
+          python -m pip install pillow
+      - name: Preparar icono de la aplicación
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+
+          app = "${{ matrix.app }}"
+          source = "FdT Config Icon.ico" if app == "configurador" else "FdT Icon.ico"
+          target = Path("android") / app / "icon.png"
+          with Image.open(source) as icon:
+              icon.convert("RGBA").save(target, format="PNG")
+          print(f"Icono preparado: {target}")
+          PY
+      - name: Preparar fuente Android
+        run: |
+          rm -rf "android/${{ matrix.app }}/shared"
+          cp -R shared "android/${{ matrix.app }}/shared"
+          if [ "${{ matrix.app }}" = "configurador" ]; then
+            mkdir -p android/configurador/assets/iconos android/configurador/assets/cursores
+            rm -rf android/configurador/assets/iconos/configurador android/configurador/assets/cursores
+            cp -R assets/iconos/configurador android/configurador/assets/iconos/configurador
+            cp -R assets/cursores android/configurador/assets/cursores
+          fi
+      - name: Limpiar APK anterior
+        working-directory: android/${{ matrix.app }}
+        run: |
+          rm -rf bin
+      - name: Configurar entorno para python-for-android
+        working-directory: android/${{ matrix.app }}
+        env:
+          P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
+          P4A_RELEASE_BRANCH: "develop"
+          PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+        run: |
+          echo "Python utilizado:"
+          python --version
+          echo "pip utilizado:"
+          python -m pip --version
+          echo "Buildozer utilizado:"
+          buildozer --version
+          echo "Android SDK:"
+          echo "$ANDROIDSDK"
+          echo "Android API disponible:"
+          ls -la "$ANDROIDSDK/platforms/android-34"
+      - name: Compilar APK
+        working-directory: android/${{ matrix.app }}
+        env:
+          P4A_RELEASE_URL: "https://github.com/kivy/python-for-android"
+          P4A_RELEASE_BRANCH: "develop"
+          PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          yes | buildozer android debug
+      - name: Verificar APK generado
+        working-directory: android/${{ matrix.app }}
+        run: |
+          echo "Contenido de bin/:"
+          ls -lah bin/
+          APK="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK" ]; then
+            echo "ERROR: No se generó ningún APK."
+            exit 1
+          fi
+          echo "APK generado correctamente:"
+          echo "$APK"
+      - name: Preparar artefactos
+        run: |
+          mkdir -p "artifacts/${{ matrix.app }}"
+          cp android/${{ matrix.app }}/bin/*.apk "artifacts/${{ matrix.app }}/"
+      - name: Subir artefacto a GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.app }}
+          path: artifacts/${{ matrix.app }}/*.apk
+          if-no-files-found: error
+      - name: Instalar Backblaze B2 CLI
+        run: python -m pip install b2
+      - name: Subir APK a Backblaze B2
+        continue-on-error: true
+        env:
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: |
+          test -n "$B2_APPLICATION_KEY_ID"
+          test -n "$B2_APPLICATION_KEY"
+          b2 account authorize "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
+          APK="$(find artifacts/${{ matrix.app }} -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          b2 file upload "Formatos-Traducciones" "$APK" "android/${{ matrix.app }}/v0.1.0/$(basename "$APK")"
