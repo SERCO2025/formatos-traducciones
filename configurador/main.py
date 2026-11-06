@@ -1424,19 +1424,20 @@ class Configurador:
         alto = self.template_image.height
         x0, y0 = 20, 20
         paso = 300 if self.zoom >= 0.25 else 1500
+        intervalo_etiqueta = 300 if self.zoom >= 0.5 else 1500
         self.canvas.create_line(x0, y0, x0 + ancho * self.zoom, y0, fill="#aaaaaa", width=1, tags=("ruler",))
         self.canvas.create_line(x0, y0, x0, y0 + alto * self.zoom, fill="#aaaaaa", width=1, tags=("ruler",))
         for px in range(0, ancho + 1, paso):
             x = x0 + px * self.zoom
             largo = 9 if px % 3000 == 0 else 5
             self.canvas.create_line(x, y0, x, y0 + largo, fill="#dddddd", tags=("ruler",))
-            if px % 3000 == 0:
+            if px % intervalo_etiqueta == 0:
                 self.canvas.create_text(x + 3, y0 + 11, text="%d in" % (px // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
         for py in range(0, alto + 1, paso):
             y = y0 + py * self.zoom
             largo = 9 if py % 3000 == 0 else 5
             self.canvas.create_line(x0, y, x0 + largo, y, fill="#dddddd", tags=("ruler",))
-            if py % 3000 == 0:
+            if py % intervalo_etiqueta == 0:
                 self.canvas.create_text(x0 + 11, y + 2, text="%d in" % (py // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
 
     def _dibujar_guia_alineacion(self):
