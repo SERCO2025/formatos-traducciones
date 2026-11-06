@@ -70,6 +70,15 @@ class AlignmentGeometryTests(unittest.TestCase):
         ]
         self.assertLessEqual(max(gaps) - min(gaps), 1)
 
+    def test_distribution_requires_at_least_three_fields(self):
+        items = [campo(0, 0, 10, 10, 1), campo(30, 0, 10, 10, 2)]
+        before = [(item.position.x, item.position.y) for item in items]
+        self.assertFalse(distribuir_campos(items, "horizontal"))
+        self.assertEqual(
+            [(item.position.x, item.position.y) for item in items],
+            before,
+        )
+
     def test_distribution_refuses_overlap_without_changing_positions(self):
         items = [campo(0, 0, 60, 10, 1), campo(40, 0, 60, 10, 2)]
         before = [(item.position.x, item.position.y) for item in items]
