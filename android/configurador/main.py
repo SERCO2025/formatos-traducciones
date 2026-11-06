@@ -561,6 +561,7 @@ class CanvasEditor(StencilView):
         for widget in self.children:
             if isinstance(widget, CampoWidget):
                 widget.actualizar()
+        self.redibujar_reglas_y_guia()
 
     def refresh_field(self, campo):
         """Reconstruye únicamente el widget del campo indicado; crea el que falte."""
@@ -1011,6 +1012,8 @@ class ConfiguradorApp(App):
         self.alignment_bar = None
         self.alignment_mode = None
         self.alignment_multiselect_button = None
+        self.alignment_align_button = None
+        self.alignment_spacing_button = None
         self.estado = None
         self.estado_menu = None
         self.zoom_label = None
@@ -1207,10 +1210,12 @@ class ConfiguradorApp(App):
         self.alignment_bar.add_widget(trazar)
         self.alignment_multiselect_button = Button(text="Multiselección", size_hint_x=None, width=dp(112), on_release=lambda _: self.alternar_multiseleccion())
         self.alignment_bar.add_widget(self.alignment_multiselect_button)
-        self.alignment_bar.add_widget(Button(text="Alinear", size_hint_x=None, width=dp(76), on_release=lambda _: self.aplicar_alineacion()))
+        self.alignment_align_button = Button(text="Alinear", size_hint_x=None, width=dp(76), on_release=lambda _: self.aplicar_alineacion(), disabled=True)
+        self.alignment_bar.add_widget(self.alignment_align_button)
         self.alignment_mode = Spinner(text="Borde superior", values=("Borde superior", "Centro", "Borde inferior"), size_hint_x=None, width=dp(150))
         self.alignment_bar.add_widget(self.alignment_mode)
-        self.alignment_bar.add_widget(Button(text="Espaciado", size_hint_x=None, width=dp(100), on_release=lambda _: self.aplicar_distribucion()))
+        self.alignment_spacing_button = Button(text="Espaciado", size_hint_x=None, width=dp(100), on_release=lambda _: self.aplicar_distribucion(), disabled=True)
+        self.alignment_bar.add_widget(self.alignment_spacing_button)
         root.add_widget(self.alignment_bar)
 
         self.editor = CanvasEditor(self)
@@ -1524,6 +1529,7 @@ class ConfiguradorApp(App):
             FIELD_TYPE_NUMBER: "Número",
             FIELD_TYPE_IMAGE: "Imagen",
         }
+        self.actualizar_estado_botones_alineacion()
         self.estado.text = "Herramienta: " + nombres.get(tool, str(tool))
         self.estado_menu.text = nombres.get(tool, str(tool))
 
@@ -1551,6 +1557,7 @@ class ConfiguradorApp(App):
         if self.alignment_multiselect_button is not None:
             self.alignment_multiselect_button.background_color = (0.30, 0.30, 0.30, 1) if self.alignment_multiselect else (0, 0, 0, 0)
         self.estado.text = "Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada."
+        self.actualizar_estado_botones_alineacion()
 
     def alternar_campo_alineacion(self, campo):
         if campo.field_id in self.alignment_selected_ids:
@@ -1560,11 +1567,19 @@ class ConfiguradorApp(App):
         if self.editor:
             self.editor.refresh_field(campo)
         self.estado.text = "%d campo(s) seleccionado(s)." % len(self.alignment_selected_ids)
+        self.actualizar_estado_botones_alineacion()
 
     def campos_seleccionados_alineacion(self):
         if self.alignment_multiselect:
             return [c for c in (self.formato.fields if self.formato else []) if c.field_id in self.alignment_selected_ids]
         return [self.seleccionado] if self.seleccionado is not None else []
+
+    def actualizar_estado_botones_alineacion(self):
+        cantidad = len(self.campos_seleccionados_alineacion())
+        if self.alignment_align_button is not None:
+            self.alignment_align_button.disabled = cantidad < 1
+        if self.alignment_spacing_button is not None:
+            self.alignment_spacing_button.disabled = cantidad < 2
 
     def actualizar_modos_alineacion(self):
         if self.alignment_guide is None or self.alignment_mode is None:
@@ -2132,6 +2147,7 @@ class ConfiguradorApp(App):
                 self.editor.refresh_field(campo)
         if campo:
             self.estado.text = "Campo %d — %s" % (campo.order, campo.field_id)
+        self.actualizar_estado_botones_alineacion()
 
     def push_undo(self):
         if not self.formato:
