@@ -104,10 +104,6 @@ class Configurador:
 
         self.formato = None
         self.template_image = None
-        self.alignment_guide = None
-        self.alignment_tracing = False
-        self.alignment_multiselect = False
-        self.alignment_selected_ids.clear()
         self.template_tk = None
         self.canvas_image_id = None
         self.zoom = 1.0
@@ -1100,6 +1096,13 @@ class Configurador:
             return
         self.formato = None
         self.template_image = None
+        self.alignment_guide = None
+        self.alignment_tracing = False
+        self.alignment_multiselect = False
+        self.alignment_selected_ids.clear()
+        self._alignment_guide_dragging = False
+        if hasattr(self, "alignment_multiselect_button"):
+            self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
         self.current_fdt_path = None
         self.selected_field = None
         self.field_items.clear()
@@ -1128,6 +1131,13 @@ class Configurador:
         try:
             imagen = Image.open(ruta).convert("RGB")
             self.template_image = imagen.copy()
+            self.alignment_guide = None
+            self.alignment_tracing = False
+            self.alignment_multiselect = False
+            self.alignment_selected_ids.clear()
+            self._alignment_guide_dragging = False
+            if hasattr(self, "alignment_multiselect_button"):
+                self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(
