@@ -452,6 +452,7 @@ class CanvasEditor(StencilView):
         self.pan_template_pos = None
         self.start_touch = None
         self.start_touch_screen = None
+        self.alignment_guide_touch = None
         self.active_field_touch = None
         self.active_field = None
         self.active_handle = None
@@ -634,6 +635,7 @@ class CanvasEditor(StencilView):
         for px in range(0, ancho_doc + 1, paso):
             x = tw.x + px * escala
             largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
+            self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
             if px % (DPI_REGLA * 10) == 0:
                 etiqueta = CoreLabel(text="%d in" % (px // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
@@ -1220,17 +1222,19 @@ class ConfiguradorApp(App):
                                 on_release=lambda _: self.set_zoom(self.scale * 1.25)))
         root.add_widget(tools)
 
-        self.alignment_bar = BoxLayout(orientation="horizontal", size_hint_y=None, height=0, spacing=dp(4), padding=(dp(4), dp(2)))
+        self.alignment_bar = ScrollView(do_scroll_x=True, do_scroll_y=False, size_hint_y=None, height=0, bar_width=dp(2))
+        self.alignment_controls = BoxLayout(orientation="horizontal", size_hint=(None, 1), width=dp(538), spacing=dp(4), padding=(dp(4), dp(2)))
         trazar = Button(text="Trazar", size_hint_x=None, width=dp(76), on_release=lambda _: self.mostrar_opciones_guia())
-        self.alignment_bar.add_widget(trazar)
+        self.alignment_controls.add_widget(trazar)
         self.alignment_multiselect_button = Button(text="Multiselección", size_hint_x=None, width=dp(112), on_release=lambda _: self.alternar_multiseleccion())
-        self.alignment_bar.add_widget(self.alignment_multiselect_button)
+        self.alignment_controls.add_widget(self.alignment_multiselect_button)
         self.alignment_align_button = Button(text="Alinear", size_hint_x=None, width=dp(76), on_release=lambda _: self.aplicar_alineacion(), disabled=True)
-        self.alignment_bar.add_widget(self.alignment_align_button)
+        self.alignment_controls.add_widget(self.alignment_align_button)
         self.alignment_mode = Spinner(text="Borde superior", values=("Borde superior", "Centro", "Borde inferior"), size_hint_x=None, width=dp(150))
-        self.alignment_bar.add_widget(self.alignment_mode)
+        self.alignment_controls.add_widget(self.alignment_mode)
         self.alignment_spacing_button = Button(text="Espaciado", size_hint_x=None, width=dp(100), on_release=lambda _: self.aplicar_distribucion(), disabled=True)
-        self.alignment_bar.add_widget(self.alignment_spacing_button)
+        self.alignment_controls.add_widget(self.alignment_spacing_button)
+        self.alignment_bar.add_widget(self.alignment_controls)
         root.add_widget(self.alignment_bar)
 
         self.editor = CanvasEditor(self)
