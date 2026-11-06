@@ -2,7 +2,7 @@ name: Compilar APK - Formatos Traducidos
 on:
   workflow_dispatch:
   push:
-    branches: [desarrollo, 'fix/**']
+    branches: [desarrollo, 'fix/**', alineamiento-integracion]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
