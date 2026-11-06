@@ -1378,10 +1378,17 @@ class Configurador:
             "Borde izquierdo": "left", "Borde derecho": "right",
             "Centro": "center",
         }
-        self._push_undo()
-        if not alinear_campos(campos, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(modo)):
+        import copy
+        campos_prueba = copy.deepcopy(campos)
+        if not alinear_campos(campos_prueba, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(modo)):
             self._set_status("No se pudo aplicar la alineación.")
             return
+        self._push_undo()
+        posiciones = {c.field_id: c.position for c in campos_prueba}
+        for campo in campos:
+            posicion = posiciones[campo.field_id]
+            campo.position.x = posicion.x
+            campo.position.y = posicion.y
         self.unsaved = True
         self.redraw()
         self._set_status("Alineación aplicada a %d campo(s)." % len(campos))
