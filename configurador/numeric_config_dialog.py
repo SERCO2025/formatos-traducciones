@@ -95,10 +95,11 @@ def editar_configuracion_numerica(parent, configuracion):
             etiqueta(opciones, "Formato de fecha:").pack(
                 fill="x", pady=(2, 5)
             )
-            ttk.Combobox(
+            formato_combo = ttk.Combobox(
                 opciones, textvariable=valores["date_format"],
                 values=DATE_FORMATS, state="readonly",
-            ).pack(fill="x")
+            )
+            formato_combo.pack(fill="x")
             tk.Checkbutton(
                 opciones, text="Permitir únicamente fechas pasadas",
                 variable=valores["past_only"], bg="#202020", fg="white",
@@ -124,7 +125,6 @@ def editar_configuracion_numerica(parent, configuracion):
                 else:
                     fila_anio.pack_forget()
 
-            formato_combo = opciones.winfo_children()[1]
             formato_combo.bind("<<ComboboxSelected>>", actualizar_anio)
             actualizar_anio()
             return
