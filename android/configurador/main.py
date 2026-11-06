@@ -2396,7 +2396,6 @@ class ConfiguradorApp(App):
             text="Permitir únicamente fechas pasadas",
             halign="left", valign="middle",
         ))
-        fila_pasadas.children[0].bind(size=lambda obj, val: setattr(obj, "text_size", val))
         opciones.add_widget(fila_pasadas)
 
         anio_minimo = TextInput(
