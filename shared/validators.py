@@ -105,7 +105,7 @@ def _separar_respuesta_fecha(respuesta, date_format):
     patrones = [parte for parte in partes_formato if parte not in ("/", "-")]
     texto = str(respuesta or "")
 
-    if any(not (caracter.isdigit() or caracter in "/-") for caracter in texto):
+    if any(not (caracter.isdecimal() or caracter in "/-") for caracter in texto):
         return None
 
     separadores_usados = [caracter for caracter in texto if caracter in "/-"]
@@ -180,7 +180,7 @@ def _validar_fecha(respuesta, config, hoy=None):
     if segmentos is None:
         return False, "La fecha contiene caracteres o separadores no válidos."
 
-    if any(not valor.isdigit() for _, valor in segmentos):
+    if any(not valor.isdecimal() for _, valor in segmentos):
         return False, "La fecha debe contener únicamente números y los separadores del formato."
 
     if any(not valor for _, valor in segmentos):
@@ -225,7 +225,7 @@ def _validar_fecha(respuesta, config, hoy=None):
 
 def formatear_espaciado(respuesta, mascara):
     """Devuelve la representación visual; no modifica el dato numérico almacenado."""
-    digitos = "".join(caracter for caracter in str(respuesta or "") if caracter.isdigit())
+    digitos = "".join(caracter for caracter in str(respuesta or "") if caracter.isdecimal())
     if not digitos:
         return ""
 
@@ -330,12 +330,12 @@ def validar_respuesta(campo, respuesta, hoy=None):
         return True, ""
 
     if modo == "date":
-        if any(not (caracter.isdigit() or caracter in "/-") for caracter in respuesta):
+        if any(not (caracter.isdecimal() or caracter in "/-") for caracter in respuesta):
             return False, "La fecha solo permite números y los separadores configurados."
         return _validar_fecha(respuesta, config, hoy=hoy)
 
     if modo == "spacing":
-        if not respuesta.isdigit():
+        if not respuesta.isdecimal():
             return False, "Este campo permite únicamente números."
         _, posiciones, _ = _analizar_mascara_espaciado(config.spacing_mask)
         if len(respuesta) > posiciones:
