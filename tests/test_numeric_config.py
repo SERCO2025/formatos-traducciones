@@ -2,9 +2,15 @@
 import unittest
 
 from shared.models import (
+    DATE_FORMATS,
+    NUMERIC_MODES,
     FIELD_TYPE_NUMBER,
     Field,
     NumericConfig,
+)
+from android.capturador.shared.models import (
+    Field as AndroidField,
+    NumericConfig as AndroidNumericConfig,
 )
 
 
@@ -36,6 +42,34 @@ class NumericConfigModelTests(unittest.TestCase):
                 )
                 restored = Field.from_dict(original.to_dict())
                 self.assertEqual(restored.numeric_config, config)
+
+    def test_supported_modes_and_date_formats_are_exact(self):
+        self.assertEqual(NUMERIC_MODES, ("number", "limit", "date", "spacing"))
+        self.assertEqual(
+            DATE_FORMATS,
+            (
+                "dd/mm/aa", "dd/mm/aaaa",
+                "mm/dd/aa", "mm/dd/aaaa",
+                "dd-mm-aa", "dd-mm-aaaa",
+                "mm-dd-aa", "mm-dd-aaaa",
+                "aaaa", "mm", "dd",
+            ),
+        )
+
+    def test_android_capturador_model_round_trip(self):
+        config = AndroidNumericConfig(
+            mode="spacing",
+            spacing_mask="##(/)##(/)####",
+            spacing_required=True,
+        )
+        field = AndroidField(
+            field_id="fecha",
+            question="Fecha",
+            field_type="number",
+            numeric_config=config,
+        )
+        restored = AndroidField.from_dict(field.to_dict())
+        self.assertEqual(restored.numeric_config, config)
 
     def test_legacy_field_without_numeric_config_uses_number_mode(self):
         legacy = {
