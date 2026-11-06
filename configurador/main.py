@@ -2666,6 +2666,9 @@ class Configurador:
         self._redo_stack.append(self._snapshot())
         self.formato = self._undo_stack.pop()
         self.selected_field = None
+        ids_validos = {campo.field_id for campo in self.formato.fields}
+        self.alignment_selected_ids.intersection_update(ids_validos)
+        self._actualizar_botones_alineacion()
         self.unsaved = True
         self._redraw_fields_only()
         self._refresh_field_list()
@@ -2677,6 +2680,9 @@ class Configurador:
         self._undo_stack.append(self._snapshot())
         self.formato = self._redo_stack.pop()
         self.selected_field = None
+        ids_validos = {campo.field_id for campo in self.formato.fields}
+        self.alignment_selected_ids.intersection_update(ids_validos)
+        self._actualizar_botones_alineacion()
         self.unsaved = True
         self._redraw_fields_only()
         self._refresh_field_list()
