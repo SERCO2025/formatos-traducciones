@@ -260,7 +260,7 @@ class Configurador:
                     TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
                     TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
                     TOOL_IMAGE: "Imagen",
-                    TOOL_ZOOM: "Lupa",
+                    TOOL_ZOOM: "Lupa", TOOL_ALIGNMENT: "Alineación",
                 }.get(self.tool, self.tool)
             ))
 
