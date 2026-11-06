@@ -78,10 +78,10 @@ def distribuir_campos(campos, orientacion_guia):
     Se conservan fijos los bordes exteriores del conjunto. La dimensión de
     cada campo se descuenta antes de calcular el espacio libre entre bordes.
 
-    Devuelve False si no hay al menos dos campos, la orientación no es válida
+    Devuelve False si no hay al menos tres campos, la orientación no es válida
     o el conjunto no cabe en el intervalo sin superposición.
     """
-    if len(campos) < 2 or orientacion_guia not in ("horizontal", "vertical"):
+    if len(campos) < 3 or orientacion_guia not in ("horizontal", "vertical"):
         return False
 
     atributo = "x" if orientacion_guia == "horizontal" else "y"
