@@ -1357,7 +1357,7 @@ class Configurador:
         if hasattr(self, "alignment_align_button"):
             self.alignment_align_button.configure(state="normal" if len(campos) >= 1 else "disabled")
         if hasattr(self, "alignment_spacing_button"):
-            self.alignment_spacing_button.configure(state="normal" if len(campos) >= 2 else "disabled")
+            self.alignment_spacing_button.configure(state="normal" if len(campos) >= 3 else "disabled")
 
     def _actualizar_modos_alineacion(self):
         if self.alignment_guide is None:
@@ -1399,8 +1399,8 @@ class Configurador:
     def _aplicar_distribucion(self):
         from shared.alignment import distribuir_campos
         campos = self._campos_alineacion()
-        if len(campos) < 2 or self.alignment_guide is None:
-            self._set_status("Seleccione al menos dos campos y trace una guía.")
+        if len(campos) < 3 or self.alignment_guide is None:
+            self._set_status("Seleccione al menos tres campos y trace una guía.")
             return
         import copy
         campos_prueba = copy.deepcopy(campos)
