@@ -1611,7 +1611,7 @@ class ConfiguradorApp(App):
         if self.alignment_align_button is not None:
             self.alignment_align_button.disabled = cantidad < 1
         if self.alignment_spacing_button is not None:
-            self.alignment_spacing_button.disabled = cantidad < 2
+            self.alignment_spacing_button.disabled = cantidad < 3
 
     def actualizar_modos_alineacion(self):
         if self.alignment_guide is None or self.alignment_mode is None:
@@ -1649,8 +1649,8 @@ class ConfiguradorApp(App):
 
     def aplicar_distribucion(self):
         campos = self.campos_seleccionados_alineacion()
-        if len(campos) < 2 or self.alignment_guide is None:
-            self.estado.text = "Seleccione al menos dos campos y trace una guía."
+        if len(campos) < 3 or self.alignment_guide is None:
+            self.estado.text = "Seleccione al menos tres campos y trace una guía."
             return
         campos_prueba = copy.deepcopy(campos)
         if not distribuir_campos(campos_prueba, self.alignment_guide["orientation"]):
