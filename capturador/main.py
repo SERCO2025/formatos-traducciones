@@ -26,7 +26,11 @@ from shared.renderer import (
     renderizar_formato,
     renderizar_imagen,
 )
-from shared.validators import validar_respuesta, validar_todas_las_respuestas
+from shared.validators import (
+    normalizar_fecha_capturada,
+    validar_respuesta,
+    validar_todas_las_respuestas,
+)
 
 
 class CapturadorApp:
@@ -137,6 +141,8 @@ class CapturadorApp:
         )
         self.entrada.pack(fill="x", padx=24, pady=10)
         self.entrada.bind("<KeyRelease>", self._entrada_cambio)
+        self.entrada.bind("<KeyRelease>", self._filtrar_entrada_actual, add="+")
+        self.entrada.bind("<<Paste>>", lambda _event: self.root.after_idle(self._filtrar_entrada_actual), add="+")
 
         self.archivo_imagen = tk.Label(
             captura,
@@ -639,6 +645,44 @@ class CapturadorApp:
                 respuestas[campo.field_id] = self.entrada.get("1.0", "end-1c")
         return respuestas
 
+    def _filtrar_entrada_actual(self, event=None):
+        """Retira caracteres no admitidos por el modo numérico del campo actual."""
+        if not self.formato or not self.formato.fields:
+            return
+        campo = self.formato.fields[self.indice]
+        if campo.field_type != FIELD_TYPE_NUMBER or not campo.validation.numeric_only:
+            return
+        configuracion = getattr(campo, "numeric_config", None)
+        modo = str(getattr(configuracion, "mode", "number") or "number")
+        actual = self.entrada.get("1.0", "end-1c")
+        if modo == "number":
+            filtrada = "".join(caracter for caracter in actual if not caracter.isalpha())
+        elif modo in ("limit", "spacing"):
+            filtrada = "".join(caracter for caracter in actual if caracter.isdigit())
+        elif modo == "date":
+            separadores = {
+                caracter for caracter in str(getattr(configuracion, "date_format", ""))
+                if caracter in "/-"
+            }
+            filtrada = "".join(
+                caracter for caracter in actual
+                if caracter.isdigit() or caracter in separadores
+            )
+        else:
+            filtrada = actual
+        if filtrada != actual:
+            posicion = self.entrada.index("insert")
+            self.entrada.delete("1.0", "end")
+            self.entrada.insert("1.0", filtrada)
+            try:
+                indice = int(float(posicion.split(".")[0])) - 1
+                columna = int(posicion.split(".")[1])
+                nueva_columna = min(len(filtrada), max(0, columna))
+                self.entrada.mark_set("insert", "1.0+%dc" % nueva_columna)
+            except (ValueError, IndexError):
+                self.entrada.mark_set("insert", "end")
+            self._entrada_cambio()
+
     def _entrada_cambio(self, event=None):
         if self._preview_after_id is not None:
             try:
@@ -738,6 +782,18 @@ class CapturadorApp:
             return True
 
         respuesta = self.entrada.get("1.0", "end-1c")
+        configuracion_numerica = getattr(campo, "numeric_config", None)
+        if (
+            campo.field_type == FIELD_TYPE_NUMBER
+            and getattr(configuracion_numerica, "mode", "number") == "date"
+        ):
+            respuesta = normalizar_fecha_capturada(
+                respuesta,
+                configuracion_numerica.date_format,
+                confirmar=True,
+            )
+            self.entrada.delete("1.0", "end")
+            self.entrada.insert("1.0", respuesta)
         if getattr(campo, "uppercase", False):
             respuesta = respuesta.upper()
             self.entrada.delete("1.0", "end")
