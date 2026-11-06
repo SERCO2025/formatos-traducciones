@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import unittest
 import os
+import struct
 import tempfile
-
-from PIL import Image
+import zlib
 
 from shared.models import (
     DATE_FORMATS,
@@ -290,7 +290,23 @@ class NumericValidationTests(unittest.TestCase):
     def test_fdt_numeric_configuration_round_trips_between_windows_and_android(self):
         with tempfile.TemporaryDirectory() as temporal:
             plantilla = os.path.join(temporal, "plantilla.png")
-            Image.new("RGB", (100, 100), "white").save(plantilla)
+
+            def bloque_png(tipo, datos):
+                return (
+                    struct.pack(">I", len(datos))
+                    + tipo
+                    + datos
+                    + struct.pack(">I", zlib.crc32(tipo + datos) & 0xFFFFFFFF)
+                )
+
+            png = (
+                b"\\x89PNG\\r\\n\\x1a\\n"
+                + bloque_png(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+                + bloque_png(b"IDAT", zlib.compress(b"\\x00\\xff\\xff\\xff"))
+                + bloque_png(b"IEND", b"")
+            )
+            with open(plantilla, "wb") as archivo:
+                archivo.write(png)
             campo = self.crear_campo(NumericConfig(
                 mode="spacing",
                 spacing_mask="####(-)####",
