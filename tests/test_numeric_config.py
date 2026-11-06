@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 import unittest
+import os
+import tempfile
+
+from PIL import Image
 
 from shared.models import (
     DATE_FORMATS,
@@ -12,8 +16,16 @@ from shared.models import (
     TemplateInfo,
     Formato,
 )
-from shared.fdt import validar_fdt
-from android.capturador.shared.fdt import validar_fdt as validar_fdt_android
+from shared.fdt import (
+    cargar_fdt,
+    guardar_fdt,
+    validar_fdt,
+)
+from android.capturador.shared.fdt import (
+    cargar_fdt as cargar_fdt_android,
+    guardar_fdt as guardar_fdt_android,
+    validar_fdt as validar_fdt_android,
+)
 from shared.validators import (
     formatear_respuesta_campo,
     indicacion_captura_numerica,
@@ -219,6 +231,101 @@ class NumericValidationTests(unittest.TestCase):
         valido, mensaje = validar_respuesta(campo, "12345678")
         self.assertFalse(valido)
         self.assertIn("paréntesis", mensaje)
+
+    def test_numeric_modes_reject_non_decimal_numeric_characters(self):
+        limite = self.crear_campo(NumericConfig(
+            mode="limit", max_value="500"
+        ))
+        self.assertFalse(validar_respuesta(limite, "²")[0])
+
+        fecha = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aaaa", min_year="1900"
+        ))
+        self.assertFalse(validar_respuesta(fecha, "²1/01/2026")[0])
+
+        espaciado = self.crear_campo(NumericConfig(
+            mode="spacing", spacing_mask="####"
+        ))
+        self.assertFalse(validar_respuesta(espaciado, "12²4")[0])
+
+    def test_android_and_windows_validators_match_all_numeric_modes(self):
+        configuraciones = (
+            (NumericConfig(mode="number"), ("+52 664-123", "ABC")),
+            (NumericConfig(mode="limit", max_value="500"), ("500", "501")),
+            (
+                NumericConfig(
+                    mode="date", date_format="dd/mm/aaaa", min_year="1900"
+                ),
+                ("29/02/2024", "31/04/2024"),
+            ),
+            (
+                NumericConfig(
+                    mode="spacing", spacing_mask="####(-)####",
+                    spacing_required=True,
+                ),
+                ("12345678", "12345"),
+            ),
+        )
+        for config, (respuesta_valida, respuesta_invalida) in configuraciones:
+            with self.subTest(mode=config.mode):
+                campo_windows = self.crear_campo(config)
+                campo_android = AndroidField(
+                    field_id="dato",
+                    question="Dato",
+                    field_type="number",
+                    validation=AndroidValidation(numeric_only=True),
+                    numeric_config=AndroidNumericConfig.from_dict(config.to_dict()),
+                )
+                self.assertEqual(
+                    validar_respuesta(campo_windows, respuesta_valida)[0],
+                    validar_respuesta_android(campo_android, respuesta_valida)[0],
+                )
+                self.assertEqual(
+                    validar_respuesta(campo_windows, respuesta_invalida)[0],
+                    validar_respuesta_android(campo_android, respuesta_invalida)[0],
+                )
+                self.assertTrue(validar_respuesta(campo_windows, respuesta_valida)[0])
+                self.assertFalse(validar_respuesta(campo_windows, respuesta_invalida)[0])
+
+    def test_fdt_numeric_configuration_round_trips_between_windows_and_android(self):
+        with tempfile.TemporaryDirectory() as temporal:
+            plantilla = os.path.join(temporal, "plantilla.png")
+            Image.new("RGB", (100, 100), "white").save(plantilla)
+            campo = self.crear_campo(NumericConfig(
+                mode="spacing",
+                spacing_mask="####(-)####",
+                spacing_required=True,
+            ))
+            campo.order = 1
+            campo.position = Position(x=0, y=0, width=50, height=20)
+            formato = Formato(
+                name="Integración numérica",
+                template=TemplateInfo(
+                    path=plantilla, width=100, height=100, dpi=300, mode="RGB"
+                ),
+                fields=[campo],
+            )
+
+            ruta_windows = os.path.join(temporal, "windows.fdt")
+            guardar_fdt(formato, ruta_windows)
+            formato_android = cargar_fdt_android(ruta_windows)
+            self.assertEqual(
+                formato_android.fields[0].numeric_config.mode, "spacing"
+            )
+            self.assertEqual(
+                formato_android.fields[0].numeric_config.spacing_mask,
+                "####(-)####",
+            )
+
+            ruta_android = os.path.join(temporal, "android.fdt")
+            guardar_fdt_android(formato_android, ruta_android)
+            formato_windows = cargar_fdt(ruta_android)
+            self.assertEqual(
+                formato_windows.fields[0].numeric_config.mode, "spacing"
+            )
+            self.assertTrue(
+                formato_windows.fields[0].numeric_config.spacing_required
+            )
 
     def test_android_and_windows_validators_apply_same_limit_rules(self):
         config = AndroidNumericConfig(mode="limit", max_value="100")
