@@ -654,20 +654,20 @@ class CanvasEditor(StencilView):
             x = tw.x + px * escala
             largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
-            self._alignment_overlay.add(Line(points=(x, self.top - alto_regla, x, self.top - alto_regla - largo), width=1))
+            self._alignment_overlay.add(Line(points=(x, self.top - alto_regla, x, self.top - alto_regla + largo), width=1))
             if px % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (px // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
-                self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), self.top - alto_regla - textura.height - dp(2)), size=textura.size))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), self.top - alto_regla + dp(2)), size=textura.size))
         for py in range(0, alto_doc + 1, paso):
             y = tw.top - py * escala
             largo = dp(9) if py % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
-            self._alignment_overlay.add(Line(points=(self.x + ancho_regla, y, self.x + ancho_regla + largo, y), width=1))
+            self._alignment_overlay.add(Line(points=(self.x + ancho_regla - largo, y, self.x + ancho_regla, y), width=1))
             if py % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (py // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
-                self._alignment_overlay.add(Rectangle(texture=textura, pos=(self.x + ancho_regla + dp(2), y - textura.height / 2), size=textura.size))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(self.x + dp(2), y - textura.height / 2), size=textura.size))
         guia = self.app.alignment_guide
         if self.app.tool == "alignment" and guia is not None:
             self._alignment_overlay.add(Color(0.22, 1.0, 0.08, 1))
