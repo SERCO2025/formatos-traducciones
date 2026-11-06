@@ -160,9 +160,12 @@ def _anio_completo(anio, hoy):
         return int(anio)
     valor = int(anio)
     siglo_actual = (hoy.year // 100) * 100
-    if valor > hoy.year % 100:
-        return siglo_actual - 100 + valor
-    return siglo_actual + valor
+    candidatos = (
+        siglo_actual - 100 + valor,
+        siglo_actual + valor,
+        siglo_actual + 100 + valor,
+    )
+    return min(candidatos, key=lambda candidato: abs(candidato - hoy.year))
 
 
 def _validar_fecha(respuesta, config, hoy=None):
