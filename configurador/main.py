@@ -2342,7 +2342,7 @@ class Configurador:
         dialog.configure(bg="#202020")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("430x690")
+        dialog.geometry("460x730")
         dialog.resizable(False, False)
 
         def label(text):
