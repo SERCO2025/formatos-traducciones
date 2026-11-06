@@ -637,10 +637,10 @@ class CanvasEditor(StencilView):
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
             if px % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text="%d in" % (px // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta = CoreLabel(text="%d in" % (px // DPI_REGLA), font_size=dp(9))
                 etiqueta.refresh()
                 textura = etiqueta.texture
-                self._alignment_overlay.add(Color(1, 1, 1, 1))
+                self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), tw.top - dp(21)), size=textura.size))
         for py in range(0, alto_doc + 1, paso):
             y = tw.top - py * escala
@@ -648,10 +648,10 @@ class CanvasEditor(StencilView):
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
             if py % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text="%d in" % (py // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta = CoreLabel(text="%d in" % (py // DPI_REGLA), font_size=dp(9))
                 etiqueta.refresh()
                 textura = etiqueta.texture
-                self._alignment_overlay.add(Color(1, 1, 1, 1))
+                self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(tw.x + dp(11), y - textura.height / 2), size=textura.size))
         guia = self.app.alignment_guide
         if self.app.tool == "alignment" and guia is not None:
