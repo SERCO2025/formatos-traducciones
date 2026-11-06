@@ -1032,6 +1032,7 @@ class Configurador:
             pass
 
     def set_tool(self, tool):
+        herramienta_anterior = self.tool
         # Evitar que un gesto de desplazamiento anterior quede activo al
         # cambiar de herramienta mientras el ratón aún está presionado.
         self._pan_last = None
@@ -1062,7 +1063,7 @@ class Configurador:
         else:
             if self.alignment_toolbar.winfo_manager():
                 self.alignment_toolbar.pack_forget()
-            if self.tool != TOOL_ALIGNMENT and self.alignment_guide is not None:
+            if herramienta_anterior == TOOL_ALIGNMENT:
                 self.alignment_guide = None
                 self.alignment_tracing = False
                 self.alignment_multiselect = False
