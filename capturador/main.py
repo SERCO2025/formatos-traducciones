@@ -659,7 +659,7 @@ class CapturadorApp:
         if modo == "number":
             filtrada = "".join(
                 caracter for caracter in actual
-                if not caracter.isalpha() and caracter not in "\\r\\n\\t"
+                if not caracter.isalpha() and caracter not in "\r\n\t"
             )
         elif modo in ("limit", "spacing"):
             filtrada = "".join(caracter for caracter in actual if caracter.isdigit())
@@ -680,7 +680,7 @@ class CapturadorApp:
             if modo == "number":
                 antes_filtrado = "".join(
                     caracter for caracter in texto_antes_cursor
-                    if not caracter.isalpha() and caracter not in "\\r\\n\\t"
+                    if not caracter.isalpha() and caracter not in "\r\n\t"
                 )
             elif modo in ("limit", "spacing"):
                 antes_filtrado = "".join(
@@ -758,7 +758,7 @@ class CapturadorApp:
         texto_pregunta = campo.question.strip() or campo.field_id
         indicacion = indicacion_captura_numerica(campo)
         if indicacion:
-            texto_pregunta += "\\n\\n" + indicacion
+            texto_pregunta += "\n\n" + indicacion
         self.pregunta.config(text=texto_pregunta)
 
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
