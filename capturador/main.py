@@ -27,6 +27,7 @@ from shared.renderer import (
     renderizar_imagen,
 )
 from shared.validators import (
+    indicacion_captura_numerica,
     normalizar_fecha_capturada,
     validar_respuesta,
     validar_todas_las_respuestas,
@@ -752,6 +753,9 @@ class CapturadorApp:
         self.estado.config(text="Campo %d de %d" % (numero, total))
 
         texto_pregunta = campo.question.strip() or campo.field_id
+        indicacion = indicacion_captura_numerica(campo)
+        if indicacion:
+            texto_pregunta += "\\n\\n" + indicacion
         self.pregunta.config(text=texto_pregunta)
 
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
