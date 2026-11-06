@@ -1445,19 +1445,19 @@ class Configurador:
         for px in range(0, ancho + 1, paso):
             x = x0 + px * self.zoom
             largo = 9 if px % 3000 == 0 else 5
-            self.canvas.create_line(x, vy + 20, x, vy + 20 + largo,
+            self.canvas.create_line(x, vy + 20 - largo, x, vy + 20,
                                     fill="#dddddd", tags=("ruler",))
             if px % intervalo_etiqueta == 0:
-                self.canvas.create_text(x + 3, vy + 31, text="%d in" % (px // 300),
+                self.canvas.create_text(x + 3, vy + 2, text="%d in" % (px // 300),
                                         fill="#dddddd", anchor="nw",
                                         font=("Arial", 7), tags=("ruler",))
         for py in range(0, alto + 1, paso):
             y = y0 + py * self.zoom
             largo = 9 if py % 3000 == 0 else 5
-            self.canvas.create_line(vx + 20, y, vx + 20 + largo, y,
+            self.canvas.create_line(vx + 20 - largo, y, vx + 20, y,
                                     fill="#dddddd", tags=("ruler",))
             if py % intervalo_etiqueta == 0:
-                self.canvas.create_text(vx + 31, y + 2, text="%d in" % (py // 300),
+                self.canvas.create_text(vx + 2, y + 2, text="%d in" % (py // 300),
                                         fill="#dddddd", anchor="nw",
                                         font=("Arial", 7), tags=("ruler",))
 
