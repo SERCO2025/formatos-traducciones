@@ -161,7 +161,11 @@ from shared.ftc import (
 )
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import construir_nombre_archivo, renderizar_imagen
-from shared.validators import validar_respuesta, validar_todas_las_respuestas
+from shared.validators import (
+    normalizar_fecha_capturada,
+    validar_respuesta,
+    validar_todas_las_respuestas,
+)
 
 try:
     from jnius import autoclass, cast
@@ -845,6 +849,34 @@ class CapturadorApp(App):
         # No consumir el toque: los botones y demás controles deben funcionar.
         return False
 
+    def _filtro_entrada_numerica(self, texto, desde_deshacer=False):
+        """Filtra la entrada según el modo del campo numérico activo."""
+        if not self.formato or not self.formato.fields:
+            return texto
+        campo = self.formato.fields[self.indice]
+        if campo.field_type != "number" or not campo.validation.numeric_only:
+            return texto
+        configuracion = getattr(campo, "numeric_config", None)
+        modo = str(getattr(configuracion, "mode", "number") or "number")
+        if modo == "number":
+            return "".join(
+                caracter for caracter in texto
+                if not caracter.isalpha() and caracter not in "\\r\\n\\t"
+            )
+        if modo in ("limit", "spacing"):
+            return "".join(caracter for caracter in texto if caracter.isdigit())
+        if modo == "date":
+            separadores = {
+                caracter for caracter in str(
+                    getattr(configuracion, "date_format", "dd/mm/aaaa")
+                ) if caracter in "/-"
+            }
+            return "".join(
+                caracter for caracter in texto
+                if caracter.isdigit() or caracter in separadores
+            )
+        return texto
+
     def _entrada_cambio(self, *_):
         self._diagnostico("CALLBACK_ENTRADA_CAMBIO")
         if self._actualizando_entrada:
@@ -929,6 +961,21 @@ class CapturadorApp(App):
         if campo.field_type == FIELD_TYPE_IMAGE:
             return True
         respuesta = self.entrada.text
+        configuracion_numerica = getattr(campo, "numeric_config", None)
+        if (
+            campo.field_type == "number"
+            and getattr(configuracion_numerica, "mode", "number") == "date"
+        ):
+            respuesta = normalizar_fecha_capturada(
+                respuesta,
+                configuracion_numerica.date_format,
+                confirmar=True,
+            )
+            self._actualizando_entrada = True
+            try:
+                self.entrada.text = respuesta
+            finally:
+                self._actualizando_entrada = False
         if getattr(campo, "uppercase", False):
             respuesta = respuesta.upper()
             if self.entrada.text != respuesta:
@@ -961,6 +1008,11 @@ class CapturadorApp(App):
         self.pregunta.text = (campo.question or "").strip() or campo.field_id
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
+        self.entrada.input_filter = (
+            self._filtro_entrada_numerica
+            if campo.field_type == "number" and campo.validation.numeric_only
+            else None
+        )
         self._diagnostico("MOSTRAR_CAMPO_ANTES_RESPUESTA_TIPO_%s" % type(respuesta_guardada).__name__)
         # Retirar por UID únicamente el callback de lógica mientras se
         # restaura el texto. El observador de diagnóstico permanece enlazado.
