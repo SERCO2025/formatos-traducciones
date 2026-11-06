@@ -8,7 +8,12 @@ from shared.models import (
     Field,
     NumericConfig,
     Validation,
+    Position,
+    TemplateInfo,
+    Formato,
 )
+from shared.fdt import validar_fdt
+from android.capturador.shared.fdt import validar_fdt as validar_fdt_android
 from shared.validators import (
     formatear_espaciado,
     normalizar_fecha_capturada,
@@ -76,6 +81,7 @@ class NumericValidationTests(unittest.TestCase):
         hoy = datetime.date(2026, 6, 15)
         self.assertTrue(validar_respuesta(campo, "01/01/99", hoy=hoy)[0])
         self.assertFalse(validar_respuesta(campo, "16/06/26", hoy=hoy)[0])
+        self.assertFalse(validar_respuesta(campo, "01/01/27", hoy=hoy)[0])
         self.assertFalse(validar_respuesta(campo, "15/06/26", hoy=hoy)[0])
 
     def test_partial_date_fields_do_not_get_past_date_comparison(self):
@@ -200,6 +206,46 @@ class NumericConfigModelTests(unittest.TestCase):
         )
         restored = AndroidField.from_dict(field.to_dict())
         self.assertEqual(restored.numeric_config, config)
+
+
+    def test_fdt_rejects_invalid_numeric_configuration(self):
+        campo = self.crear_campo(NumericConfig(mode="limit", max_value=""))
+        campo.order = 1
+        campo.position = Position(x=0, y=0, width=10, height=10)
+        formato = Formato(
+            name="Prueba",
+            template=TemplateInfo(path="plantilla.png", width=100, height=100),
+            fields=[campo],
+        )
+        with self.assertRaises(ValueError):
+            validar_fdt(formato)
+
+    def test_android_fdt_rejects_invalid_numeric_configuration(self):
+        campo = AndroidField(
+            field_id="dato",
+            question="Dato",
+            field_type="number",
+            order=1,
+            validation=AndroidValidation(numeric_only=True),
+            position=__import__(
+                "android.capturador.shared.models",
+                fromlist=["Position"],
+            ).Position(x=0, y=0, width=10, height=10),
+            numeric_config=AndroidNumericConfig(mode="limit", max_value=""),
+        )
+        formato = __import__(
+            "android.capturador.shared.models",
+            fromlist=["Formato", "TemplateInfo"],
+        ).Formato(
+            name="Prueba",
+            template=__import__(
+                "android.capturador.shared.models",
+                fromlist=["TemplateInfo"],
+            ).TemplateInfo(path="plantilla.png", width=100, height=100),
+            fields=[campo],
+        )
+        with self.assertRaises(ValueError):
+            validar_fdt_android(formato)
 
     def test_legacy_field_without_numeric_config_uses_number_mode(self):
         legacy = {
