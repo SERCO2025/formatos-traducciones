@@ -1013,7 +1013,7 @@ class CapturadorApp(App):
         if indicacion:
             texto_pregunta += "\n\n" + indicacion
         self.pregunta.text = texto_pregunta
-        self.pregunta.height = dp(92) if indicacion else dp(68)
+        self.pregunta.height = dp(128) if indicacion else dp(68)
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self.entrada.input_filter = (
