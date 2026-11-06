@@ -787,13 +787,15 @@ class CapturadorApp:
             campo.field_type == FIELD_TYPE_NUMBER
             and getattr(configuracion_numerica, "mode", "number") == "date"
         ):
-            respuesta = normalizar_fecha_capturada(
+            respuesta_normalizada = normalizar_fecha_capturada(
                 respuesta,
                 configuracion_numerica.date_format,
                 confirmar=True,
             )
-            self.entrada.delete("1.0", "end")
-            self.entrada.insert("1.0", respuesta)
+            if respuesta_normalizada or not respuesta:
+                respuesta = respuesta_normalizada
+                self.entrada.delete("1.0", "end")
+                self.entrada.insert("1.0", respuesta)
         if getattr(campo, "uppercase", False):
             respuesta = respuesta.upper()
             self.entrada.delete("1.0", "end")
