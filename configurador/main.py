@@ -297,7 +297,7 @@ class Configurador:
         menu_trazar.add_command(label="Guía vertical", command=lambda: self._activar_trazado_guia("vertical"))
         trazar.configure(menu=menu_trazar)
         trazar.pack(side="left", padx=4, pady=4)
-        self.alignment_multiselect_button = tk.Button(self.alignment_toolbar, text="Multiselección", command=self._alternar_multiseleccion, bg="#303030", fg="white", relief="flat")
+        self.alignment_multiselect_button = tk.Button(self.alignment_toolbar, text="Multiselección", command=self._alternar_multiseleccion, bg="#707070", activebackground="#707070", fg="white", relief="flat")
         self.alignment_multiselect_button.pack(side="left", padx=4, pady=4)
         self.alignment_align_button = tk.Button(self.alignment_toolbar, text="Alinear", command=self._aplicar_alineacion, bg="#303030", fg="white", relief="flat")
         self.alignment_align_button.pack(side="left", padx=4, pady=4)
@@ -1066,7 +1066,7 @@ class Configurador:
                 self._alignment_guide_dragging = False
                 self.alignment_multiselect = False
                 self.alignment_selected_ids.clear()
-                self.alignment_multiselect_button.configure(bg="#303030")
+                self.alignment_multiselect_button.configure(bg="#707070")
                 if self.template_image is not None:
                     self.redraw()
 
@@ -1102,7 +1102,7 @@ class Configurador:
         self.alignment_selected_ids.clear()
         self._alignment_guide_dragging = False
         if hasattr(self, "alignment_multiselect_button"):
-            self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
+            self.alignment_multiselect_button.configure(bg="#707070", activebackground="#707070")
         self.current_fdt_path = None
         self.selected_field = None
         self.field_items.clear()
@@ -1137,7 +1137,7 @@ class Configurador:
             self.alignment_selected_ids.clear()
             self._alignment_guide_dragging = False
             if hasattr(self, "alignment_multiselect_button"):
-                self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
+                self.alignment_multiselect_button.configure(bg="#707070", activebackground="#707070")
             self.formato = Formato(
                 name=os.path.splitext(os.path.basename(ruta))[0],
                 template=TemplateInfo(
@@ -1208,7 +1208,7 @@ class Configurador:
             self.alignment_selected_ids.clear()
             self._alignment_guide_dragging = False
             if hasattr(self, "alignment_multiselect_button"):
-                self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
+                self.alignment_multiselect_button.configure(bg="#707070", activebackground="#707070")
             self.template_image = plantilla.copy()
             self.current_fdt_path = ruta
             self.selected_field = None
@@ -1512,6 +1512,8 @@ class Configurador:
     def _on_canvas_configure(self, event=None):
         self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
+        if self.template_image is not None:
+            self.root.after_idle(self._dibujar_reglas)
 
     def _refresh_visible_template_tiles(self):
         """Dibuja únicamente mosaicos de la plantilla que intersectan la vista."""
