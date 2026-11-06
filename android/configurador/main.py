@@ -639,6 +639,7 @@ class CanvasEditor(StencilView):
         alto_doc = self.app.formato.template.height
         escala = self.app.scale
         paso = DPI_REGLA if escala >= 0.25 else DPI_REGLA * 5
+        intervalo_etiqueta = DPI_REGLA if escala >= 0.5 else DPI_REGLA * 5
         self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
         self._alignment_overlay.add(Line(points=(tw.x, tw.top, tw.right, tw.top), width=1))
         self._alignment_overlay.add(Line(points=(tw.x, tw.y, tw.x, tw.top), width=1))
@@ -647,7 +648,7 @@ class CanvasEditor(StencilView):
             largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
-            if px % (DPI_REGLA * 10) == 0:
+            if px % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (px // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), tw.top - dp(21)), size=textura.size))
@@ -656,7 +657,7 @@ class CanvasEditor(StencilView):
             largo = dp(9) if py % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
-            if py % (DPI_REGLA * 10) == 0:
+            if py % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (py // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(tw.x + dp(11), y - textura.height / 2), size=textura.size))
