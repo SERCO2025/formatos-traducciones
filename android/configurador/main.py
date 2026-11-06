@@ -686,6 +686,8 @@ class CanvasEditor(StencilView):
         tool = self.app.tool
         if tool == "alignment":
             if self.app.alignment_tracing:
+                if not self._touch_inside_template(touch):
+                    return True
                 x, y = self._document_point(touch)
                 orientacion = self.app._alignment_guide_orientation
                 self.app.alignment_guide = {
