@@ -966,16 +966,18 @@ class CapturadorApp(App):
             campo.field_type == "number"
             and getattr(configuracion_numerica, "mode", "number") == "date"
         ):
-            respuesta = normalizar_fecha_capturada(
+            respuesta_normalizada = normalizar_fecha_capturada(
                 respuesta,
                 configuracion_numerica.date_format,
                 confirmar=True,
             )
-            self._actualizando_entrada = True
-            try:
-                self.entrada.text = respuesta
-            finally:
-                self._actualizando_entrada = False
+            if respuesta_normalizada or not respuesta:
+                respuesta = respuesta_normalizada
+                self._actualizando_entrada = True
+                try:
+                    self.entrada.text = respuesta
+                finally:
+                    self._actualizando_entrada = False
         if getattr(campo, "uppercase", False):
             respuesta = respuesta.upper()
             if self.entrada.text != respuesta:
