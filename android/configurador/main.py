@@ -329,6 +329,17 @@ class CampoWidget(FloatLayout):
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
         if self.editor.app.tool == "alignment":
+            guia = self.editor.app.alignment_guide
+            plantilla = self.editor.template_widget
+            if guia is not None and plantilla is not None:
+                if guia["orientation"] == "horizontal":
+                    posicion_guia = plantilla.top - guia["position"] * self.editor.scale
+                    cerca_guia = abs(touch.y - posicion_guia) <= dp(12)
+                else:
+                    posicion_guia = plantilla.x + guia["position"] * self.editor.scale
+                    cerca_guia = abs(touch.x - posicion_guia) <= dp(12)
+                if cerca_guia:
+                    return False
             if self.editor.app.alignment_multiselect and not self.editor.app.alignment_tracing:
                 self.editor.app.alternar_campo_alineacion(self.campo)
                 return True
@@ -625,7 +636,7 @@ class CanvasEditor(StencilView):
             largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
             if px % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text=str(px // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta = CoreLabel(text="%d in" % (px // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
                 etiqueta.refresh()
                 textura = etiqueta.texture
                 self._alignment_overlay.add(Color(1, 1, 1, 1))
@@ -636,7 +647,7 @@ class CanvasEditor(StencilView):
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
             if py % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text=str(py // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta = CoreLabel(text="%d in" % (py // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
                 etiqueta.refresh()
                 textura = etiqueta.texture
                 self._alignment_overlay.add(Color(1, 1, 1, 1))
