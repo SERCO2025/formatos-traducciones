@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 from PIL import Image, ImageDraw, ImageFont
-from .validators import formatear_espaciado, normalizar_fecha_capturada
+from .validators import formatear_respuesta_campo
 
 
 def _normalizar_nombre_fuente(valor):
@@ -207,31 +207,6 @@ def _renderizar_imagen(imagen, respuestas, campo):
          izquierda + posicion.width, arriba + posicion.height)
     )
     imagen.paste(foto, (posicion.x, posicion.y))
-
-
-def formatear_respuesta_campo(campo, respuesta):
-    """Prepara la representación visible sin alterar el valor almacenado."""
-    if respuesta is None:
-        return ""
-    texto = str(respuesta)
-    if not texto or campo.field_type != "number":
-        return texto
-
-    configuracion = getattr(campo, "numeric_config", None)
-    modo = str(getattr(configuracion, "mode", "number") or "number")
-    if modo == "spacing":
-        return formatear_espaciado(
-            texto,
-            getattr(configuracion, "spacing_mask", "####"),
-        )
-    if modo == "date":
-        normalizado = normalizar_fecha_capturada(
-            texto,
-            getattr(configuracion, "date_format", "dd/mm/aaaa"),
-            confirmar=False,
-        )
-        return normalizado if normalizado else texto
-    return texto
 
 
 def renderizar_imagen(formato, respuestas):
