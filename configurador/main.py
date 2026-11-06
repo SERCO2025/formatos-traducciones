@@ -24,7 +24,11 @@ from shared.models import (
     TemplateInfo,
     TextStyle,
     OutputNaming,
+    NumericConfig,
 )
+
+from configurador.numeric_config_dialog import editar_configuracion_numerica
+from shared.validators import validar_configuracion_numerica
 
 
 TOOL_SELECT = "select"
@@ -2370,6 +2374,50 @@ class Configurador:
                        bg="#202020", fg="white", selectcolor="#303030",
                        activebackground="#202020", activeforeground="white").pack(anchor="w", padx=16, pady=8)
 
+        numeric_config_holder = {
+            "value": NumericConfig.from_dict(
+                getattr(campo, "numeric_config", NumericConfig()).to_dict()
+            )
+        }
+        if campo.field_type == FIELD_TYPE_NUMBER:
+            numeric_row = tk.Frame(dialog, bg="#202020")
+            numeric_row.pack(fill="x", padx=16, pady=(0, 8))
+            numeric_summary = tk.Label(
+                numeric_row, text="Modo actual: Número",
+                bg="#202020", fg="#b8dce5", anchor="w",
+            )
+            numeric_summary.pack(side="left", fill="x", expand=True)
+
+            def actualizar_resumen_numerico():
+                config = numeric_config_holder["value"]
+                etiquetas_modo = {
+                    "number": "Número",
+                    "limit": "Límite",
+                    "date": "Fecha",
+                    "spacing": "Espaciado",
+                }
+                numeric_summary.config(
+                    text="Modo actual: %s" % etiquetas_modo.get(
+                        config.mode, "Número"
+                    )
+                )
+
+            def abrir_configuracion_numerica():
+                configuracion = editar_configuracion_numerica(
+                    dialog, numeric_config_holder["value"]
+                )
+                if configuracion is not None:
+                    numeric_config_holder["value"] = configuracion
+                    actualizar_resumen_numerico()
+
+            tk.Button(
+                numeric_row, text="Configurar modo...",
+                command=abrir_configuracion_numerica,
+                bg="#005f73", fg="white", activebackground="#087f8c",
+                activeforeground="white", relief="flat", padx=8,
+            ).pack(side="right")
+            actualizar_resumen_numerico()
+
         uppercase_var = tk.BooleanVar(value=bool(getattr(campo, "uppercase", False)))
         uppercase_row = tk.Frame(dialog, bg="#202020")
         uppercase_row.pack(fill="x", padx=16, pady=(0, 6))
@@ -2559,6 +2607,17 @@ class Configurador:
                 messagebox.showwarning("Propiedades", "Tamaño y área deben ser números positivos.", parent=dialog)
                 return
 
+            numeric_config_nueva = numeric_config_holder["value"]
+            if campo.field_type == FIELD_TYPE_NUMBER:
+                valido, mensaje = validar_configuracion_numerica(
+                    numeric_config_nueva
+                )
+                if not valido:
+                    messagebox.showwarning(
+                        "Configuración numérica", mensaje, parent=dialog
+                    )
+                    return
+
             indice_anterior = self.formato.fields.index(campo)
             id_anterior = campo.field_id
             cache_anterior = self._field_preview_cache.get(id_anterior)
@@ -2568,6 +2627,8 @@ class Configurador:
             campo.question = question.get("1.0", "end-1c").strip()
             campo.required = required_var.get()
             campo.uppercase = uppercase_var.get()
+            if campo.field_type == FIELD_TYPE_NUMBER:
+                campo.numeric_config = numeric_config_nueva
             familia_fuente = font_var.get().strip()
             campo.text_style.font_family = self._ruta_fuente_seleccionada(
                 familia_fuente, bold_var.get(), italic_var.get()
