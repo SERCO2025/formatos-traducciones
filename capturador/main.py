@@ -657,7 +657,10 @@ class CapturadorApp:
         modo = str(getattr(configuracion, "mode", "number") or "number")
         actual = self.entrada.get("1.0", "end-1c")
         if modo == "number":
-            filtrada = "".join(caracter for caracter in actual if not caracter.isalpha())
+            filtrada = "".join(
+                caracter for caracter in actual
+                if not caracter.isalpha() and caracter not in "\\r\\n\\t"
+            )
         elif modo in ("limit", "spacing"):
             filtrada = "".join(caracter for caracter in actual if caracter.isdigit())
         elif modo == "date":
@@ -677,7 +680,7 @@ class CapturadorApp:
             if modo == "number":
                 antes_filtrado = "".join(
                     caracter for caracter in texto_antes_cursor
-                    if not caracter.isalpha()
+                    if not caracter.isalpha() and caracter not in "\\r\\n\\t"
                 )
             elif modo in ("limit", "spacing"):
                 antes_filtrado = "".join(
