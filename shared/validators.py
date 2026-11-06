@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import calendar
 import datetime
 import re
 
@@ -100,62 +99,60 @@ def validar_configuracion_numerica(config):
     return True, ""
 
 
+def _separar_respuesta_fecha(respuesta, date_format):
+    partes_formato = _partes_formato_fecha(date_format)
+    separadores = [parte for parte in partes_formato if parte in ("/", "-")]
+    patrones = [parte for parte in partes_formato if parte not in ("/", "-")]
+    texto = str(respuesta or "")
+
+    if any(not (caracter.isdigit() or caracter in "/-") for caracter in texto):
+        return None
+
+    separadores_usados = [caracter for caracter in texto if caracter in "/-"]
+    if separadores_usados:
+        if not separadores or any(caracter != separadores[0] for caracter in separadores_usados):
+            return None
+        segmentos = texto.split(separadores[0])
+        if len(segmentos) > len(patrones):
+            return None
+    else:
+        digitos = texto
+        segmentos = []
+        cursor = 0
+        for patron in patrones:
+            segmentos.append(digitos[cursor:cursor + len(patron)])
+            cursor += len(segmentos[-1])
+        if cursor < len(digitos):
+            return None
+
+    if any(len(segmento) > len(patron) for segmento, patron in zip(segmentos, patrones)):
+        return None
+    segmentos.extend([""] * (len(patrones) - len(segmentos)))
+    return list(zip(patrones, segmentos)), separadores
+
+
 def normalizar_fecha_capturada(respuesta, date_format, confirmar=False):
     """Aplica separadores del formato y completa dd/mm de un solo dígito al confirmar."""
-    respuesta = "" if respuesta is None else str(respuesta)
-    segmentos_formato = _segmentos_fecha(date_format)
-    separadores = [
-        parte for parte in _partes_formato_fecha(date_format)
-        if parte in ("/", "-")
-    ]
-    digitos = "".join(caracter for caracter in respuesta if caracter.isdigit())
-
-    segmentos = []
-    cursor = 0
-    for patron in segmentos_formato:
-        longitud = len(patron)
-        segmento = digitos[cursor:cursor + longitud]
-        cursor += len(segmento)
-        if confirmar and patron in ("dd", "mm") and len(segmento) == 1:
-            segmento = "0" + segmento
-        segmentos.append(segmento)
+    analisis = _separar_respuesta_fecha(respuesta, date_format)
+    if analisis is None:
+        return ""
+    segmentos, separadores = analisis
 
     resultado = []
-    for indice, segmento in enumerate(segmentos):
+    for indice, (patron, valor) in enumerate(segmentos):
         if indice:
             resultado.append(separadores[indice - 1])
-        resultado.append(segmento)
+        if confirmar and patron in ("dd", "mm") and len(valor) == 1:
+            valor = "0" + valor
+        resultado.append(valor)
     return "".join(resultado)
 
 
 def _extraer_segmentos_fecha(respuesta, date_format):
-    partes_formato = _partes_formato_fecha(date_format)
-    separadores = [parte for parte in partes_formato if parte in ("/", "-")]
-    segmentos_formato = [parte for parte in partes_formato if parte not in ("/", "-")]
-
-    texto = str(respuesta or "")
-    if any(caracter.isalpha() for caracter in texto):
+    analisis = _separar_respuesta_fecha(respuesta, date_format)
+    if analisis is None:
         return None
-
-    digitos = "".join(caracter for caracter in texto if caracter.isdigit())
-    if len(digitos) != sum(len(parte) for parte in segmentos_formato):
-        # Se aceptan respuestas parciales; no se aceptan separadores distintos.
-        if any(c not in "0123456789/-" for c in texto):
-            return None
-        if any(c in texto for c in ("/", "-")):
-            esperado = separadores[0] if separadores else None
-            if esperado and any(c in texto and c != esperado for c in ("/", "-")):
-                return None
-        if len(digitos) > sum(len(parte) for parte in segmentos_formato):
-            return None
-
-    segmentos = []
-    cursor = 0
-    for patron in segmentos_formato:
-        segmento = digitos[cursor:cursor + len(patron)]
-        cursor += len(segmento)
-        segmentos.append((patron, segmento))
-    return segmentos
+    return analisis[0]
 
 
 def _anio_completo(anio, hoy):
