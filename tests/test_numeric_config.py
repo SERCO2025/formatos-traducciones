@@ -16,6 +16,7 @@ from shared.fdt import validar_fdt
 from android.capturador.shared.fdt import validar_fdt as validar_fdt_android
 from shared.validators import (
     formatear_respuesta_campo,
+    indicacion_captura_numerica,
     formatear_espaciado,
     normalizar_fecha_capturada,
     validar_configuracion_numerica,
@@ -149,6 +150,34 @@ class NumericValidationTests(unittest.TestCase):
         self.assertEqual(
             formatear_respuesta_campo(campo, "1/2/2026"),
             "1/2/2026",
+        )
+
+    def test_capture_instruction_shows_only_relevant_guidance(self):
+        limite = self.crear_campo(NumericConfig(
+            mode="limit", max_value="500"
+        ))
+        self.assertEqual(
+            indicacion_captura_numerica(limite),
+            "Máximo permitido: 500.",
+        )
+
+        fecha = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aaaa",
+            min_year="1900", past_only=True,
+        ))
+        self.assertEqual(
+            indicacion_captura_numerica(fecha),
+            "Formato esperado: dd/mm/aaaa. Año mínimo: 1900. "
+            "Solo se permiten fechas anteriores a hoy.",
+        )
+
+        espaciado = self.crear_campo(NumericConfig(
+            mode="spacing", spacing_mask="####(-)####",
+            spacing_required=True,
+        ))
+        self.assertEqual(
+            indicacion_captura_numerica(espaciado),
+            "Estructura: ####(-)####. Complete todas las posiciones numéricas.",
         )
 
     def test_spacing_mode_checks_capacity_and_required_positions(self):
