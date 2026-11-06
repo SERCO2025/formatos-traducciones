@@ -106,6 +106,10 @@ class NumericValidationTests(unittest.TestCase):
             normalizar_fecha_capturada("26", "aa", confirmar=True),
             "26",
         )
+        self.assertEqual(
+            normalizar_fecha_capturada("0102", "dd/mm/aaaa", confirmar=True),
+            "01/02",
+        )
 
     def test_spacing_mask_renders_literals_and_nested_parentheses(self):
         self.assertEqual(
