@@ -7,11 +7,141 @@ from shared.models import (
     FIELD_TYPE_NUMBER,
     Field,
     NumericConfig,
+    Validation,
+)
+from shared.validators import (
+    formatear_espaciado,
+    normalizar_fecha_capturada,
+    validar_configuracion_numerica,
+    validar_respuesta,
+)
+from android.capturador.shared.validators import (
+    validar_respuesta as validar_respuesta_android,
 )
 from android.capturador.shared.models import (
     Field as AndroidField,
     NumericConfig as AndroidNumericConfig,
+    Validation as AndroidValidation,
 )
+
+
+
+class NumericValidationTests(unittest.TestCase):
+    def crear_campo(self, config, required=False):
+        return Field(
+            field_id="dato",
+            question="Dato",
+            field_type=FIELD_TYPE_NUMBER,
+            required=required,
+            validation=Validation(numeric_only=True),
+            numeric_config=config,
+        )
+
+    def test_number_mode_keeps_legacy_symbols_and_spaces_behavior(self):
+        campo = self.crear_campo(NumericConfig(mode="number"))
+        self.assertEqual(validar_respuesta(campo, "+52 664-123"), (True, ""))
+        self.assertFalse(validar_respuesta(campo, "ABC")[0])
+
+    def test_limit_mode_checks_digits_and_maximum(self):
+        campo = self.crear_campo(NumericConfig(mode="limit", max_value="500"))
+        self.assertTrue(validar_respuesta(campo, "500")[0])
+        self.assertFalse(validar_respuesta(campo, "501")[0])
+        self.assertFalse(validar_respuesta(campo, "50A")[0])
+
+    def test_limit_configuration_must_have_numeric_maximum(self):
+        config = NumericConfig(mode="limit", max_value="")
+        self.assertFalse(validar_configuracion_numerica(config)[0])
+
+    def test_date_configuration_requires_minimum_year_when_year_is_present(self):
+        config = NumericConfig(mode="date", date_format="dd/mm/aaaa", min_year="")
+        self.assertFalse(validar_configuracion_numerica(config)[0])
+        config.min_year = "1900"
+        self.assertTrue(validar_configuracion_numerica(config)[0])
+
+    def test_date_checks_calendar_ranges_leap_year_and_minimum_year(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aaaa", min_year="1900"
+        ))
+        self.assertTrue(validar_respuesta(campo, "29/02/2024")[0])
+        self.assertFalse(validar_respuesta(campo, "29/02/2023")[0])
+        self.assertFalse(validar_respuesta(campo, "31/04/2024")[0])
+        self.assertFalse(validar_respuesta(campo, "01/01/1899")[0])
+
+    def test_past_only_uses_device_date_without_rewriting_two_digit_year(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aa",
+            min_year="1900", past_only=True,
+        ))
+        import datetime
+        hoy = datetime.date(2026, 6, 15)
+        self.assertTrue(validar_respuesta(campo, "01/01/99", hoy=hoy)[0])
+        self.assertFalse(validar_respuesta(campo, "16/06/26", hoy=hoy)[0])
+        self.assertFalse(validar_respuesta(campo, "15/06/26", hoy=hoy)[0])
+
+    def test_partial_date_fields_do_not_get_past_date_comparison(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="date", date_format="aaaa", min_year="1900", past_only=True
+        ))
+        self.assertTrue(validar_respuesta(campo, "2026")[0])
+
+    def test_date_normalization_pads_single_digit_day_and_month_only_on_confirm(self):
+        self.assertEqual(
+            normalizar_fecha_capturada("1/2/2026", "dd/mm/aaaa", confirmar=False),
+            "1/2/2026",
+        )
+        self.assertEqual(
+            normalizar_fecha_capturada("1/2/2026", "dd/mm/aaaa", confirmar=True),
+            "01/02/2026",
+        )
+        self.assertEqual(
+            normalizar_fecha_capturada("26", "aa", confirmar=True),
+            "26",
+        )
+
+    def test_spacing_mask_renders_literals_and_nested_parentheses(self):
+        self.assertEqual(
+            formatear_espaciado("12345678", "####(-)####"),
+            "1234-5678",
+        )
+        self.assertEqual(
+            formatear_espaciado("12345678", "####(( ))####"),
+            "1234( )5678",
+        )
+        self.assertEqual(
+            formatear_espaciado("12345", "####(-)####"),
+            "1234-5   ",
+        )
+        self.assertEqual(formatear_espaciado("", "####(-)####"), "")
+
+    def test_spacing_mode_checks_capacity_and_required_positions(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="spacing", spacing_mask="####(-)####", spacing_required=False
+        ))
+        self.assertTrue(validar_respuesta(campo, "12345")[0])
+        self.assertFalse(validar_respuesta(campo, "123456789")[0])
+        campo.numeric_config.spacing_required = True
+        self.assertFalse(validar_respuesta(campo, "12345")[0])
+        self.assertTrue(validar_respuesta(campo, "12345678")[0])
+
+    def test_spacing_mask_rejects_literals_outside_parentheses(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="spacing", spacing_mask="####-####"
+        ))
+        valido, mensaje = validar_respuesta(campo, "12345678")
+        self.assertFalse(valido)
+        self.assertIn("paréntesis", mensaje)
+
+    def test_android_and_windows_validators_apply_same_limit_rules(self):
+        config = AndroidNumericConfig(mode="limit", max_value="100")
+        campo = AndroidField(
+            field_id="dato",
+            question="Dato",
+            field_type="number",
+            validation=AndroidValidation(numeric_only=True),
+            numeric_config=config,
+        )
+        self.assertTrue(validar_respuesta_android(campo, "100")[0])
+        self.assertFalse(validar_respuesta_android(campo, "101")[0])
 
 
 class NumericConfigModelTests(unittest.TestCase):
