@@ -89,6 +89,28 @@ class NumericValidationTests(unittest.TestCase):
         self.assertFalse(validar_respuesta(campo, "01/01/27", hoy=hoy)[0])
         self.assertFalse(validar_respuesta(campo, "15/06/26", hoy=hoy)[0])
 
+    def test_date_requires_complete_segments_and_exact_year_width(self):
+        fecha_completa = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aaaa", min_year="1900"
+        ))
+        self.assertTrue(validar_respuesta(fecha_completa, "1/2/2026")[0])
+        self.assertFalse(validar_respuesta(fecha_completa, "01/02")[0])
+        self.assertFalse(validar_respuesta(fecha_completa, "01/02/26")[0])
+
+        anio = self.crear_campo(NumericConfig(
+            mode="date", date_format="aaaa", min_year="1900"
+        ))
+        self.assertTrue(validar_respuesta(anio, "2026")[0])
+        self.assertFalse(validar_respuesta(anio, "26")[0])
+
+    def test_standalone_day_and_month_allow_single_digit_for_confirmation_padding(self):
+        dia = self.crear_campo(NumericConfig(mode="date", date_format="dd"))
+        mes = self.crear_campo(NumericConfig(mode="date", date_format="mm"))
+        self.assertTrue(validar_respuesta(dia, "1")[0])
+        self.assertTrue(validar_respuesta(mes, "2")[0])
+        self.assertEqual(normalizar_fecha_capturada("1", "dd", confirmar=True), "01")
+        self.assertEqual(normalizar_fecha_capturada("2", "mm", confirmar=True), "02")
+
     def test_partial_date_fields_do_not_get_past_date_comparison(self):
         campo = self.crear_campo(NumericConfig(
             mode="date", date_format="aaaa", min_year="1900", past_only=True
