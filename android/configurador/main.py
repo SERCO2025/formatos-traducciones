@@ -11,6 +11,7 @@ from math import hypot
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.text import Label as CoreLabel
 from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, Rectangle, InstructionGroup
@@ -40,6 +41,7 @@ except Exception:
     ANDROID_AVAILABLE = False
 
 from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt, limpiar_fdt_temporales
+from shared.alignment import DPI_REGLA, alinear_campos, distribuir_campos
 from shared.models import (
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
@@ -183,6 +185,11 @@ class CampoWidget(FloatLayout):
                 self._seleccion_linea = Line(
                     rectangle=(self.x, self.y, self.width, self.height), width=3.0
                 )
+            elif self.campo.field_id in self.editor.app.alignment_selected_ids:
+                Color(0.22, 1.0, 0.08, 1)
+                self._seleccion_linea = Line(
+                    rectangle=(self.x, self.y, self.width, self.height), width=3.0
+                )
 
         self.canvas.after.clear()
         self._manijas_rectangulos = []
@@ -321,6 +328,11 @@ class CampoWidget(FloatLayout):
         local_x, local_y = touch.x - self.x, touch.y - self.y
         if not (0 <= local_x <= self.width and 0 <= local_y <= self.height):
             return super().on_touch_down(touch)
+        if self.editor.app.tool == "alignment":
+            if self.editor.app.alignment_multiselect and not self.editor.app.alignment_tracing:
+                self.editor.app.alternar_campo_alineacion(self.campo)
+                return True
+            return False
         if self.editor.app.tool != "select":
             # Los widgets de campo son solo una capa visual fuera de Selección.
             # Dejar que el gesto llegue a CanvasEditor (dibujar/desplazar/pellizcar).
@@ -372,6 +384,9 @@ class CanvasEditor(StencilView):
         self._pinch_last_distance = 0.0
         self._pinch_last_midpoint = None
         self._pinch_start_midpoint = None
+        self.alignment_guide_touch = None
+        self._alignment_overlay = InstructionGroup()
+        self.canvas.after.add(self._alignment_overlay)
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
     @property
@@ -588,6 +603,50 @@ class CanvasEditor(StencilView):
         for widget in self.children:
             if isinstance(widget, CampoWidget):
                 widget.actualizar_posicion()
+        self.redibujar_reglas_y_guia()
+
+    def redibujar_reglas_y_guia(self):
+        self._alignment_overlay.clear()
+        tw = self.template_widget
+        if tw is None or not self.app.formato:
+            return
+        ancho_doc = self.app.formato.template.width
+        alto_doc = self.app.formato.template.height
+        escala = self.app.scale
+        paso = DPI_REGLA if escala >= 0.25 else DPI_REGLA * 5
+        self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
+        self._alignment_overlay.add(Line(points=(tw.x, tw.top, tw.right, tw.top), width=1))
+        self._alignment_overlay.add(Line(points=(tw.x, tw.y, tw.x, tw.top), width=1))
+        for px in range(0, ancho_doc + 1, paso):
+            x = tw.x + px * escala
+            largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
+            self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
+            if px % (DPI_REGLA * 10) == 0:
+                etiqueta = CoreLabel(text=str(px // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta.refresh()
+                textura = etiqueta.texture
+                self._alignment_overlay.add(Color(1, 1, 1, 1))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), tw.top - dp(21)), size=textura.size))
+        for py in range(0, alto_doc + 1, paso):
+            y = tw.top - py * escala
+            largo = dp(9) if py % (DPI_REGLA * 10) == 0 else dp(5)
+            self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
+            self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
+            if py % (DPI_REGLA * 10) == 0:
+                etiqueta = CoreLabel(text=str(py // DPI_REGLA), font_size=dp(9), color=(0.9, 0.9, 0.9, 1))
+                etiqueta.refresh()
+                textura = etiqueta.texture
+                self._alignment_overlay.add(Color(1, 1, 1, 1))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(tw.x + dp(11), y - textura.height / 2), size=textura.size))
+        guia = self.app.alignment_guide
+        if self.app.tool == "alignment" and guia is not None:
+            self._alignment_overlay.add(Color(0.22, 1.0, 0.08, 1))
+            if guia["orientation"] == "horizontal":
+                y = tw.top - guia["position"] * escala
+                self._alignment_overlay.add(Line(points=(tw.x, y, tw.right, y), width=dp(2), dash_length=dp(7), dash_offset=dp(4)))
+            else:
+                x = tw.x + guia["position"] * escala
+                self._alignment_overlay.add(Line(points=(x, tw.y, x, tw.top), width=dp(2), dash_length=dp(7), dash_offset=dp(4)))
 
     def _document_point(self, touch):
         """Convierte un toque de ventana a píxeles del documento (origen arriba-izquierda)."""
@@ -622,6 +681,32 @@ class CanvasEditor(StencilView):
             return True
 
         tool = self.app.tool
+        if tool == "alignment":
+            if self.app.alignment_tracing:
+                x, y = self._document_point(touch)
+                orientacion = self.app._alignment_guide_orientation
+                self.app.alignment_guide = {
+                    "orientation": orientacion,
+                    "position": y if orientacion == "horizontal" else x,
+                }
+                self.app.alignment_tracing = False
+                self.app.actualizar_modos_alineacion()
+                self.redibujar_reglas_y_guia()
+                self.app.estado.text = "Guía colocada. Arrástrela para ajustar su posición."
+                return True
+            guia = self.app.alignment_guide
+            if guia is not None and self.template_widget is not None:
+                if guia["orientation"] == "horizontal":
+                    y_guia = self.template_widget.top - guia["position"] * self.app.scale
+                    cerca = abs(touch.y - y_guia) <= dp(12)
+                else:
+                    x_guia = self.template_widget.x + guia["position"] * self.app.scale
+                    cerca = abs(touch.x - x_guia) <= dp(12)
+                if cerca:
+                    self.alignment_guide_touch = touch
+                    return True
+            return True
+
 
         if tool == "zoom":
             if touch.button in ("scrollup", "scrollright"):
@@ -671,6 +756,15 @@ class CanvasEditor(StencilView):
             self._pinch_last_distance = 0.0
             self._pinch_last_midpoint = None
 
+        if self.alignment_guide_touch is touch and self.app.alignment_guide is not None:
+            x, y = self._document_point(touch)
+            guia = self.app.alignment_guide
+            guia["position"] = y if guia["orientation"] == "horizontal" else x
+            limite = self.app.formato.template.height if guia["orientation"] == "horizontal" else self.app.formato.template.width
+            guia["position"] = max(0, min(limite, guia["position"]))
+            self.redibujar_reglas_y_guia()
+            return True
+
         if self.pan_start and self.app.tool == "hand" and self.template_widget:
             # Arrastre incremental en el mismo sistema local del lienzo.
             # Cada desplazamiento del dedo mueve la plantilla 1:1.
@@ -705,6 +799,10 @@ class CanvasEditor(StencilView):
                 self._pinch_last_distance = 0.0
                 self._pinch_last_midpoint = None
                 self.app.estado.text = "Gesto de dos dedos terminado."
+            return True
+
+        if self.alignment_guide_touch is touch:
+            self.alignment_guide_touch = None
             return True
 
         if self.pan_start:
@@ -905,6 +1003,14 @@ class ConfiguradorApp(App):
         self.scale = 1.0
         self.editor = None
         self.seleccionado = None
+        self.alignment_guide = None
+        self.alignment_tracing = False
+        self.alignment_multiselect = False
+        self._alignment_guide_orientation = "horizontal"
+        self.alignment_selected_ids = set()
+        self.alignment_bar = None
+        self.alignment_mode = None
+        self.alignment_multiselect_button = None
         self.estado = None
         self.estado_menu = None
         self.zoom_label = None
@@ -1096,6 +1202,17 @@ class ConfiguradorApp(App):
                                 on_release=lambda _: self.set_zoom(self.scale * 1.25)))
         root.add_widget(tools)
 
+        self.alignment_bar = BoxLayout(orientation="horizontal", size_hint_y=None, height=0, spacing=dp(4), padding=(dp(4), dp(2)))
+        trazar = Button(text="Trazar", size_hint_x=None, width=dp(76), on_release=lambda _: self.mostrar_opciones_guia())
+        self.alignment_bar.add_widget(trazar)
+        self.alignment_multiselect_button = Button(text="Multiselección", size_hint_x=None, width=dp(112), on_release=lambda _: self.alternar_multiseleccion())
+        self.alignment_bar.add_widget(self.alignment_multiselect_button)
+        self.alignment_bar.add_widget(Button(text="Alinear", size_hint_x=None, width=dp(76), on_release=lambda _: self.aplicar_alineacion()))
+        self.alignment_mode = Spinner(text="Borde superior", values=("Borde superior", "Centro", "Borde inferior"), size_hint_x=None, width=dp(150))
+        self.alignment_bar.add_widget(self.alignment_mode)
+        self.alignment_bar.add_widget(Button(text="Espaciado", size_hint_x=None, width=dp(100), on_release=lambda _: self.aplicar_distribucion()))
+        root.add_widget(self.alignment_bar)
+
         self.editor = CanvasEditor(self)
         self._aplicar_gradiente(self.editor, "horizontal")
         root.add_widget(self.editor)
@@ -1182,6 +1299,7 @@ class ConfiguradorApp(App):
         opcion("Número", lambda: self.set_tool(FIELD_TYPE_NUMBER))
         opcion("Imagen", lambda: self.set_tool(FIELD_TYPE_IMAGE))
         opcion("Lupa", lambda: self.set_tool("zoom"))
+        opcion("Alineación", lambda: self.set_tool("alignment"))
         opcion("Lista de campos", self.mostrar_lista_campos)
         opcion("Archivo terminado", self.editar_salida)
 
@@ -1374,9 +1492,25 @@ class ConfiguradorApp(App):
         self._mouse_cursor_rect.pos = (posicion[0], posicion[1] - alto)
 
     def set_tool(self, tool):
+        herramienta_anterior = self.tool
         if self.editor is not None:
             self.editor.cancel_active_gestures()
         self.tool = tool
+        if tool == "alignment":
+            if self.alignment_bar is not None:
+                self.alignment_bar.height = dp(44)
+        else:
+            if self.alignment_bar is not None:
+                self.alignment_bar.height = 0
+            if herramienta_anterior == "alignment":
+                self.alignment_guide = None
+                self.alignment_tracing = False
+                self.alignment_multiselect = False
+                self.alignment_selected_ids.clear()
+                if self.alignment_multiselect_button is not None:
+                    self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
+                if self.editor is not None:
+                    self.editor.redibujar_reglas_y_guia()
         for herramienta, boton in getattr(self, "tool_buttons", {}).items():
             boton.background_color = (0.30, 0.30, 0.30, 1) if herramienta == tool else (0, 0, 0, 0)
         if self._mouse_cursor_active:
@@ -1385,12 +1519,115 @@ class ConfiguradorApp(App):
             "select": "Seleccionar",
             "hand": "Desplazar",
             "zoom": "Lupa",
+            "alignment": "Alineación",
             FIELD_TYPE_TEXT: "Texto",
             FIELD_TYPE_NUMBER: "Número",
             FIELD_TYPE_IMAGE: "Imagen",
         }
         self.estado.text = "Herramienta: " + nombres.get(tool, str(tool))
         self.estado_menu.text = nombres.get(tool, str(tool))
+
+    def mostrar_opciones_guia(self):
+        contenido = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+        popup = Popup(title="Orientación de la guía", content=contenido, size_hint=(0.82, 0.34))
+        def elegir(orientacion):
+            self._alignment_guide_orientation = orientacion
+            self.alignment_tracing = True
+            popup.dismiss()
+            self.estado.text = "Toque la plantilla para colocar la guía " + ("horizontal." if orientacion == "horizontal" else "vertical")
+        contenido.add_widget(Button(text="Horizontal", on_release=lambda _: elegir("horizontal")))
+        contenido.add_widget(Button(text="Vertical", on_release=lambda _: elegir("vertical")))
+        popup.open()
+
+    def alternar_multiseleccion(self):
+        self.alignment_multiselect = not self.alignment_multiselect
+        if not self.alignment_multiselect:
+            ids = set(self.alignment_selected_ids)
+            self.alignment_selected_ids.clear()
+            if self.formato and self.editor:
+                for campo in self.formato.fields:
+                    if campo.field_id in ids:
+                        self.editor.refresh_field(campo)
+        if self.alignment_multiselect_button is not None:
+            self.alignment_multiselect_button.background_color = (0.30, 0.30, 0.30, 1) if self.alignment_multiselect else (0, 0, 0, 0)
+        self.estado.text = "Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada."
+
+    def alternar_campo_alineacion(self, campo):
+        if campo.field_id in self.alignment_selected_ids:
+            self.alignment_selected_ids.remove(campo.field_id)
+        else:
+            self.alignment_selected_ids.add(campo.field_id)
+        if self.editor:
+            self.editor.refresh_field(campo)
+        self.estado.text = "%d campo(s) seleccionado(s)." % len(self.alignment_selected_ids)
+
+    def campos_seleccionados_alineacion(self):
+        if self.alignment_multiselect:
+            return [c for c in (self.formato.fields if self.formato else []) if c.field_id in self.alignment_selected_ids]
+        return [self.seleccionado] if self.seleccionado is not None else []
+
+    def actualizar_modos_alineacion(self):
+        if self.alignment_guide is None or self.alignment_mode is None:
+            return
+        if self.alignment_guide["orientation"] == "horizontal":
+            valores = ("Borde superior", "Centro", "Borde inferior")
+        else:
+            valores = ("Borde izquierdo", "Centro", "Borde derecho")
+        self.alignment_mode.values = valores
+        self.alignment_mode.text = valores[0]
+
+    def aplicar_alineacion(self):
+        campos = self.campos_seleccionados_alineacion()
+        if not campos or self.alignment_guide is None:
+            self.estado.text = "Seleccione al menos un campo y trace una guía."
+            return
+        equivalencias = {
+            "Borde superior": "top", "Borde inferior": "bottom",
+            "Borde izquierdo": "left", "Borde derecho": "right", "Centro": "center",
+        }
+        self.push_undo()
+        if not alinear_campos(campos, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(self.alignment_mode.text)):
+            self.estado.text = "No se pudo aplicar la alineación."
+            return
+        if self.editor:
+            self.editor.refresh_fields()
+            self.editor.redibujar_reglas_y_guia()
+        self.estado.text = "Alineación aplicada a %d campo(s)." % len(campos)
+
+    def aplicar_distribucion(self):
+        campos = self.campos_seleccionados_alineacion()
+        if len(campos) < 2 or self.alignment_guide is None:
+            self.estado.text = "Seleccione al menos dos campos y trace una guía."
+            return
+        self._alignment_before = {c.field_id: copy.deepcopy(c.position) for c in campos}
+        if not distribuir_campos(campos, self.alignment_guide["orientation"]):
+            self.estado.text = "No hay espacio suficiente para distribuir sin superposición."
+            return
+        self.push_undo_from_alignment()
+        self._alignment_before = {}
+        if self.editor:
+            self.editor.refresh_fields()
+            self.editor.redibujar_reglas_y_guia()
+        self.estado.text = "Espaciado uniforme aplicado."
+
+    def push_undo_from_alignment(self):
+        # El historial debe conservar las coordenadas anteriores a la operación.
+        # Se usa una copia previa porque la distribución ya modificó el modelo.
+        if not self.formato:
+            return
+        actual = copy.deepcopy(self.formato)
+        campos = {c.field_id: c for c in self.formato.fields}
+        for copia in actual.fields:
+            original = campos.get(copia.field_id)
+            if original is not None:
+                # El llamador conserva las posiciones previas en _alignment_before.
+                posicion = self._alignment_before.get(copia.field_id) if hasattr(self, "_alignment_before") else None
+                if posicion is not None:
+                    copia.position = copy.deepcopy(posicion)
+        self._undo.append(actual)
+        if len(self._undo) > 30:
+            self._undo.pop(0)
+        self._redo = []
 
     def template_position(self):
         # Las coordenadas son relativas al CanvasEditor (StencilView).
