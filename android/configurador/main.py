@@ -2351,6 +2351,10 @@ class ConfiguradorApp(App):
         contenido = BoxLayout(
             orientation="vertical", padding=dp(12), spacing=dp(8)
         )
+        # Mantener Cancelar/Aceptar arriba: el teclado virtual puede cubrir
+        # la parte inferior del Popup en pantallas Android pequeñas.
+        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        contenido.add_widget(botones)
         fila_modo = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         fila_modo.add_widget(Label(text="Modo de captura", size_hint_x=0.42))
         nombres = {
@@ -2460,8 +2464,6 @@ class ConfiguradorApp(App):
         formato.bind(text=actualizar_modo)
         actualizar_modo()
 
-        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
-        contenido.add_widget(botones)
         popup = Popup(
             title="Configuración del campo numérico",
             content=contenido,
