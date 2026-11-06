@@ -139,7 +139,13 @@ def normalizar_fecha_capturada(respuesta, date_format, confirmar=False):
     segmentos, separadores = analisis
 
     resultado = []
+    ultimo_segmento = max(
+        (indice for indice, (_, valor) in enumerate(segmentos) if valor),
+        default=-1,
+    )
     for indice, (patron, valor) in enumerate(segmentos):
+        if indice > ultimo_segmento:
+            break
         if indice:
             resultado.append(separadores[indice - 1])
         if confirmar and patron in ("dd", "mm") and len(valor) == 1:
