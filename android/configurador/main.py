@@ -11,6 +11,7 @@ from math import hypot
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, Rectangle, InstructionGroup
 from kivy.metrics import dp
@@ -1007,10 +1008,15 @@ class ConfiguradorApp(App):
                     size_hint_y=1,
                 )
                 contenido.add_widget(texto)
-                contenido.add_widget(Button(
-                    text="Cerrar diagnóstico", size_hint_y=None, height=dp(46),
+                botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+                botones.add_widget(Button(
+                    text="Copiar informe", on_release=lambda _b: self._copiar_informe_diagnostico(previo),
+                ))
+                botones.add_widget(Button(
+                    text="Cerrar diagnóstico",
                     on_release=lambda _b: popup.dismiss(),
                 ))
+                contenido.add_widget(botones)
                 popup = Popup(
                     title="Diagnóstico del cierre anterior",
                     content=contenido, size_hint=(0.96, 0.92),
@@ -2877,8 +2883,17 @@ class ConfiguradorApp(App):
         # Los widgets Kivy deben crearse/abrirse en el hilo principal.
         Clock.schedule_once(lambda _dt: self._abrir_popup_error_tecnico(titulo, texto), 0)
 
+    def _copiar_informe_diagnostico(self, texto):
+        """Copia el informe técnico completo al portapapeles del dispositivo."""
+        try:
+            Clipboard.copy(str(texto))
+            self.estado.text = "Informe de diagnóstico copiado."
+        except Exception as exc:
+            self.estado.text = "No se pudo copiar el informe: %s" % exc
+
     def _abrir_popup_error_tecnico(self, titulo, texto):
-        contenido = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        contenido = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         etiqueta = Label(
             text=texto,
             halign="left",
@@ -2889,7 +2904,14 @@ class ConfiguradorApp(App):
         )
         etiqueta.bind(width=lambda inst, value: setattr(inst, "text_size", (max(dp(260), value), None)))
         etiqueta.bind(texture_size=lambda inst, value: setattr(inst, "height", value[1] + dp(20)))
-        contenido.add_widget(etiqueta)
+        scroll.add_widget(etiqueta)
+        contenido.add_widget(scroll)
+        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        botones.add_widget(Button(
+            text="Copiar informe",
+            on_release=lambda _b: self._copiar_informe_diagnostico(texto),
+        ))
+        contenido.add_widget(botones)
         Popup(
             title="DIAGNÓSTICO DE ERROR",
             content=contenido,
