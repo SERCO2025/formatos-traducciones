@@ -2203,6 +2203,9 @@ class ConfiguradorApp(App):
     def _restore(self, formato):
         self.formato = copy.deepcopy(formato)
         self.seleccionado = None
+        ids_validos = {campo.field_id for campo in self.formato.fields}
+        self.alignment_selected_ids.intersection_update(ids_validos)
+        self.actualizar_estado_botones_alineacion()
         self.editor.scale = self.scale
         if self._visual_template_path and self.formato:
             self.editor.cargar_plantilla(self._visual_template_path)
