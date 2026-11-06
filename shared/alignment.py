@@ -109,12 +109,16 @@ def distribuir_campos(campos, orientacion_guia):
     if espacio_libre < 0:
         return False
 
-    separacion = espacio_libre / float(len(ordenados) - 1)
-    cursor = float(inicio)
+    intervalos = len(ordenados) - 1
+    separacion_base, sobrante = divmod(int(espacio_libre), intervalos)
+    cursor = int(inicio)
     for indice, campo in enumerate(ordenados):
         posicion = campo.position
-        setattr(posicion, atributo, int(round(cursor)))
+        setattr(posicion, atributo, cursor)
         cursor += getattr(posicion, dimension)
-        if indice < len(ordenados) - 1:
-            cursor += separacion
+        if indice < intervalos:
+            # Repartir los píxeles sobrantes entre los primeros intervalos.
+            # Así los espacios difieren como máximo 1 px y el último borde
+            # coincide exactamente con el extremo exterior original.
+            cursor += separacion_base + (1 if indice < sobrante else 0)
     return True
