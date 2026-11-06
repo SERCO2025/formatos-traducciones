@@ -264,6 +264,12 @@ class Configurador:
                 }.get(self.tool, self.tool)
             ))
 
+        alignment_tool_button = tk.Button(self.toolbar_host, text="Alineación", command=lambda: self.set_tool(TOOL_ALIGNMENT), bg="#262626", fg="white", activebackground="#444444", activeforeground="white", relief="flat", padx=7, pady=5, bd=0)
+        alignment_tool_button._tool_id = TOOL_ALIGNMENT
+        alignment_tool_button.pack(side="left", padx=2, pady=5)
+        self._tool_buttons.append(alignment_tool_button)
+        ToolTip(alignment_tool_button, "Herramientas de alineación y distribución")
+
         zoom_frame = tk.Frame(self.toolbar_host, bg="#000000")
         zoom_frame.pack(side="right", padx=6)
         for icon, command in (
@@ -1365,10 +1371,17 @@ class Configurador:
         if len(campos) < 2 or self.alignment_guide is None:
             self._set_status("Seleccione al menos dos campos y trace una guía.")
             return
-        self._push_undo()
-        if not distribuir_campos(campos, self.alignment_guide["orientation"]):
+        import copy
+        campos_prueba = copy.deepcopy(campos)
+        if not distribuir_campos(campos_prueba, self.alignment_guide["orientation"]):
             self._set_status("No hay espacio suficiente para distribuir los campos sin superposición.")
             return
+        self._push_undo()
+        posiciones = {c.field_id: c.position for c in campos_prueba}
+        for campo in campos:
+            posicion = posiciones[campo.field_id]
+            campo.position.x = posicion.x
+            campo.position.y = posicion.y
         self.unsaved = True
         self.redraw()
         self._set_status("Espaciado uniforme aplicado.")
