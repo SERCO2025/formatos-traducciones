@@ -55,6 +55,21 @@ class AlignmentGeometryTests(unittest.TestCase):
         self.assertTrue(distribuir_campos(items, "vertical"))
         self.assertEqual([item.position.y for item in items], [10, 50, 100])
 
+    def test_distribution_preserves_last_edge_when_gap_has_remainder(self):
+        items = [
+            campo(0, 0, 1, 10, 1),
+            campo(2, 0, 1, 10, 2),
+            campo(3, 0, 1, 10, 3),
+        ]
+        self.assertTrue(distribuir_campos(items, "horizontal"))
+        self.assertEqual([item.position.x for item in items], [0, 2, 3])
+        self.assertEqual(items[-1].position.x + items[-1].position.width, 4)
+        gaps = [
+            items[1].position.x - (items[0].position.x + items[0].position.width),
+            items[2].position.x - (items[1].position.x + items[1].position.width),
+        ]
+        self.assertLessEqual(max(gaps) - min(gaps), 1)
+
     def test_distribution_refuses_overlap_without_changing_positions(self):
         items = [campo(0, 0, 60, 10, 1), campo(40, 0, 60, 10, 2)]
         before = [(item.position.x, item.position.y) for item in items]
