@@ -1619,10 +1619,16 @@ class ConfiguradorApp(App):
             "Borde superior": "top", "Borde inferior": "bottom",
             "Borde izquierdo": "left", "Borde derecho": "right", "Centro": "center",
         }
-        self.push_undo()
-        if not alinear_campos(campos, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(self.alignment_mode.text)):
+        campos_prueba = copy.deepcopy(campos)
+        if not alinear_campos(campos_prueba, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(self.alignment_mode.text)):
             self.estado.text = "No se pudo aplicar la alineación."
             return
+        self.push_undo()
+        posiciones = {c.field_id: c.position for c in campos_prueba}
+        for campo in campos:
+            posicion = posiciones[campo.field_id]
+            campo.position.x = posicion.x
+            campo.position.y = posicion.y
         if self.editor:
             self.editor.refresh_fields()
             self.editor.redibujar_reglas_y_guia()
@@ -1633,35 +1639,20 @@ class ConfiguradorApp(App):
         if len(campos) < 2 or self.alignment_guide is None:
             self.estado.text = "Seleccione al menos dos campos y trace una guía."
             return
-        self._alignment_before = {c.field_id: copy.deepcopy(c.position) for c in campos}
-        if not distribuir_campos(campos, self.alignment_guide["orientation"]):
+        campos_prueba = copy.deepcopy(campos)
+        if not distribuir_campos(campos_prueba, self.alignment_guide["orientation"]):
             self.estado.text = "No hay espacio suficiente para distribuir sin superposición."
             return
-        self.push_undo_from_alignment()
-        self._alignment_before = {}
+        self.push_undo()
+        posiciones = {c.field_id: c.position for c in campos_prueba}
+        for campo in campos:
+            posicion = posiciones[campo.field_id]
+            campo.position.x = posicion.x
+            campo.position.y = posicion.y
         if self.editor:
             self.editor.refresh_fields()
             self.editor.redibujar_reglas_y_guia()
         self.estado.text = "Espaciado uniforme aplicado."
-
-    def push_undo_from_alignment(self):
-        # El historial debe conservar las coordenadas anteriores a la operación.
-        # Se usa una copia previa porque la distribución ya modificó el modelo.
-        if not self.formato:
-            return
-        actual = copy.deepcopy(self.formato)
-        campos = {c.field_id: c for c in self.formato.fields}
-        for copia in actual.fields:
-            original = campos.get(copia.field_id)
-            if original is not None:
-                # El llamador conserva las posiciones previas en _alignment_before.
-                posicion = self._alignment_before.get(copia.field_id) if hasattr(self, "_alignment_before") else None
-                if posicion is not None:
-                    copia.position = copy.deepcopy(posicion)
-        self._undo.append(actual)
-        if len(self._undo) > 30:
-            self._undo.pop(0)
-        self._redo = []
 
     def template_position(self):
         # Las coordenadas son relativas al CanvasEditor (StencilView).
