@@ -33,6 +33,7 @@ TOOL_NUMBER = FIELD_TYPE_NUMBER
 TOOL_IMAGE = FIELD_TYPE_IMAGE
 TOOL_ZOOM = "zoom"
 TOOL_HAND = "hand"
+TOOL_ALIGNMENT = "alignment"
 
 
 class ToolTip:
@@ -108,6 +109,11 @@ class Configurador:
         self.zoom = 1.0
         self.tool = TOOL_SELECT
         self.selected_field = None
+        self.alignment_guide = None
+        self.alignment_tracing = False
+        self.alignment_multiselect = False
+        self.alignment_selected_ids = set()
+        self._alignment_guide_dragging = False
         self.field_items = {}
         self.drag_start = None
         self._draw_start_canvas = None
@@ -179,6 +185,8 @@ class Configurador:
         herramientas.add_command(label="Número", command=lambda: self.set_tool(TOOL_NUMBER), accelerator="Q")
         herramientas.add_command(label="Imagen", command=lambda: self.set_tool(TOOL_IMAGE), accelerator="W")
         herramientas.add_command(label="Lupa", command=lambda: self.set_tool(TOOL_ZOOM), accelerator="Z")
+        herramientas.add_separator()
+        herramientas.add_command(label="Alineación", command=lambda: self.set_tool(TOOL_ALIGNMENT))
         herramientas.add_separator()
         herramientas.add_command(label="Lista de campos", command=self.toggle_field_panel, accelerator="L")
         herramientas.add_command(label="Archivo terminado", command=self.configurar_archivo_terminado, accelerator="T")
@@ -276,8 +284,25 @@ class Configurador:
         b.pack(side="left", padx=2, pady=4)
         ToolTip(b, "Acercar (+)")
 
+        self.alignment_toolbar = tk.Frame(self.root, bg="#202020")
+        trazar = tk.Menubutton(self.alignment_toolbar, text="Trazar", bg="#303030", fg="white", relief="flat")
+        menu_trazar = tk.Menu(trazar, tearoff=0)
+        menu_trazar.add_command(label="Guía horizontal", command=lambda: self._activar_trazado_guia("horizontal"))
+        menu_trazar.add_command(label="Guía vertical", command=lambda: self._activar_trazado_guia("vertical"))
+        trazar.configure(menu=menu_trazar)
+        trazar.pack(side="left", padx=4, pady=4)
+        self.alignment_multiselect_button = tk.Button(self.alignment_toolbar, text="Multiselección", command=self._alternar_multiseleccion, bg="#303030", fg="white", relief="flat")
+        self.alignment_multiselect_button.pack(side="left", padx=4, pady=4)
+        tk.Button(self.alignment_toolbar, text="Alinear", command=self._aplicar_alineacion, bg="#303030", fg="white", relief="flat").pack(side="left", padx=4, pady=4)
+        self.alignment_mode = ttk.Combobox(self.alignment_toolbar, state="readonly", width=18, values=("Borde superior", "Centro", "Borde inferior"))
+        self.alignment_mode.current(0)
+        self.alignment_mode.pack(side="left", padx=4, pady=4)
+        tk.Button(self.alignment_toolbar, text="Espaciado", command=self._aplicar_distribucion, bg="#303030", fg="white", relief="flat").pack(side="left", padx=4, pady=4)
+        self.alignment_toolbar.pack_forget()
+
         body = tk.Frame(self.root, bg="black")
         body.pack(fill="both", expand=True)
+        self.body = body
 
         self.canvas = tk.Canvas(
             body, bg="black", highlightthickness=0,
@@ -1017,11 +1042,26 @@ class Configurador:
             color = "#707070" if activa else "#262626"
             button.configure(bg=color, activebackground=color)
 
+        if tool == TOOL_ALIGNMENT:
+            if not self.alignment_toolbar.winfo_manager():
+                self.alignment_toolbar.pack(fill="x", before=self.body)
+        else:
+            if self.alignment_toolbar.winfo_manager():
+                self.alignment_toolbar.pack_forget()
+            if self.tool != TOOL_ALIGNMENT and self.alignment_guide is not None:
+                self.alignment_guide = None
+                self.alignment_tracing = False
+                self.alignment_multiselect = False
+                self.alignment_selected_ids.clear()
+                self.alignment_multiselect_button.configure(bg="#303030")
+                if self.template_image is not None:
+                    self.redraw()
+
         nombres = {
             TOOL_SELECT: "Selección", TOOL_HAND: "Desplazar",
             TOOL_TEXT: "Texto", TOOL_NUMBER: "Número",
-            TOOL_IMAGE: "Imagen",
-            TOOL_ZOOM: "Lupa",
+            TOOL_IMAGE: "Imagen", TOOL_ZOOM: "Lupa",
+            TOOL_ALIGNMENT: "Alineación",
         }
         if tool != TOOL_ZOOM:
             self._ocultar_lupa()
@@ -1224,6 +1264,7 @@ class Configurador:
         self.canvas.configure(scrollregion=(0, 0, w + 40, h + 40))
         self._refresh_visible_template_tiles()
 
+        self._dibujar_reglas()
         if self.formato:
             ids_validos = {campo.field_id for campo in self.formato.fields}
             self._field_preview_cache = {
@@ -1233,7 +1274,123 @@ class Configurador:
             for campo in self.formato.fields:
                 self._draw_field(campo)
 
+        self._dibujar_guia_alineacion()
         self._update_zoom_label()
+
+    def _activar_trazado_guia(self, orientacion):
+        if orientacion not in ("horizontal", "vertical") or self.template_image is None:
+            self._set_status("Primero importe una plantilla.")
+            return
+        self._alignment_guide_orientation = orientacion
+        self.alignment_tracing = True
+        self._set_status("Haga clic en la plantilla para colocar la guía " + ("horizontal." if orientacion == "horizontal" else "vertical"))
+
+    def _alternar_multiseleccion(self):
+        self.alignment_multiselect = not self.alignment_multiselect
+        if not self.alignment_multiselect:
+            ids_anteriores = set(self.alignment_selected_ids)
+            self.alignment_selected_ids.clear()
+            for campo in (self.formato.fields if self.formato else []):
+                if campo.field_id in ids_anteriores:
+                    self._redraw_single_field(campo)
+        self.alignment_multiselect_button.configure(
+            bg="#707070" if self.alignment_multiselect else "#303030",
+            activebackground="#707070" if self.alignment_multiselect else "#303030",
+        )
+        self._set_status("Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada.")
+
+    def _alternar_campo_multiseleccion(self, campo):
+        if campo.field_id in self.alignment_selected_ids:
+            self.alignment_selected_ids.remove(campo.field_id)
+        else:
+            self.alignment_selected_ids.add(campo.field_id)
+        self._redraw_single_field(campo)
+        self._actualizar_estado_alineacion()
+
+    def _campos_alineacion(self):
+        if self.alignment_multiselect:
+            return [c for c in (self.formato.fields if self.formato else []) if c.field_id in self.alignment_selected_ids]
+        return [self.selected_field] if self.selected_field is not None else []
+
+    def _actualizar_estado_alineacion(self):
+        cantidad = len(self._campos_alineacion())
+        self._set_status("%d campo(s) seleccionado(s) para alineación." % cantidad)
+
+    def _actualizar_modos_alineacion(self):
+        if self.alignment_guide is None:
+            return
+        if self.alignment_guide["orientation"] == "horizontal":
+            valores = ("Borde superior", "Centro", "Borde inferior")
+        else:
+            valores = ("Borde izquierdo", "Centro", "Borde derecho")
+        self.alignment_mode.configure(values=valores)
+        self.alignment_mode.current(0)
+
+    def _aplicar_alineacion(self):
+        from shared.alignment import alinear_campos
+        campos = self._campos_alineacion()
+        if not campos or self.alignment_guide is None:
+            self._set_status("Seleccione al menos un campo y trace una guía.")
+            return
+        modo = self.alignment_mode.get()
+        equivalencias = {
+            "Borde superior": "top", "Borde inferior": "bottom",
+            "Borde izquierdo": "left", "Borde derecho": "right",
+            "Centro": "center",
+        }
+        self._push_undo()
+        if not alinear_campos(campos, self.alignment_guide["orientation"], self.alignment_guide["position"], equivalencias.get(modo)):
+            self._set_status("No se pudo aplicar la alineación.")
+            return
+        self.unsaved = True
+        self.redraw()
+        self._set_status("Alineación aplicada a %d campo(s)." % len(campos))
+
+    def _aplicar_distribucion(self):
+        from shared.alignment import distribuir_campos
+        campos = self._campos_alineacion()
+        if len(campos) < 2 or self.alignment_guide is None:
+            self._set_status("Seleccione al menos dos campos y trace una guía.")
+            return
+        self._push_undo()
+        if not distribuir_campos(campos, self.alignment_guide["orientation"]):
+            self._set_status("No hay espacio suficiente para distribuir los campos sin superposición.")
+            return
+        self.unsaved = True
+        self.redraw()
+        self._set_status("Espaciado uniforme aplicado.")
+
+    def _dibujar_reglas(self):
+        if self.template_image is None:
+            return
+        ancho = self.template_image.width
+        alto = self.template_image.height
+        x0, y0 = 20, 20
+        paso = 300 if self.zoom >= 0.25 else 1500
+        self.canvas.create_line(x0, y0, x0 + ancho * self.zoom, y0, fill="#aaaaaa", width=1, tags=("ruler",))
+        self.canvas.create_line(x0, y0, x0, y0 + alto * self.zoom, fill="#aaaaaa", width=1, tags=("ruler",))
+        for px in range(0, ancho + 1, paso):
+            x = x0 + px * self.zoom
+            largo = 9 if px % 3000 == 0 else 5
+            self.canvas.create_line(x, y0, x, y0 + largo, fill="#dddddd", tags=("ruler",))
+            if px % 3000 == 0:
+                self.canvas.create_text(x + 3, y0 + 11, text=str(px // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+        for py in range(0, alto + 1, paso):
+            y = y0 + py * self.zoom
+            largo = 9 if py % 3000 == 0 else 5
+            self.canvas.create_line(x0, y, x0 + largo, y, fill="#dddddd", tags=("ruler",))
+            if py % 3000 == 0:
+                self.canvas.create_text(x0 + 11, y + 2, text=str(py // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+
+    def _dibujar_guia_alineacion(self):
+        self.canvas.delete("alignment_guide")
+        if self.tool != TOOL_ALIGNMENT or self.alignment_guide is None or self.template_image is None:
+            return
+        posicion = 20 + self.alignment_guide["position"] * self.zoom
+        if self.alignment_guide["orientation"] == "horizontal":
+            self.canvas.create_line(20, posicion, 20 + self.template_image.width * self.zoom, posicion, fill="#39ff14", width=2, dash=(6, 4), tags=("alignment_guide",))
+        else:
+            self.canvas.create_line(posicion, 20, posicion, 20 + self.template_image.height * self.zoom, fill="#39ff14", width=2, dash=(6, 4), tags=("alignment_guide",))
 
     def _actualizar_gradiente_barra(self, event=None):
         if not hasattr(self, "toolbar_host") or not hasattr(self, "_toolbar_gradient_label"): return
@@ -1442,7 +1599,7 @@ class Configurador:
         x2 = x1 + p.width * self.zoom
         y2 = y1 + p.height * self.zoom
 
-        color = "#00d7ff" if campo is self.selected_field else "#ffcc00"
+        color = "#39ff14" if campo.field_id in self.alignment_selected_ids else ("#00d7ff" if campo is self.selected_field else "#ffcc00")
         # Sin muestra rasterizada, el propio rectángulo vectorial permanece visible.
         entrada = self._field_preview_cache.get(campo.field_id)
         firma = self._field_preview_signature(campo)
@@ -1611,6 +1768,28 @@ class Configurador:
         cx, cy = self._event_to_canvas(event)
         self._move_changed = False
 
+        if self.tool == TOOL_ALIGNMENT:
+            dx, dy = self._canvas_to_document(cx, cy)
+            if self.alignment_tracing:
+                self.alignment_guide = {"orientation": self._alignment_guide_orientation, "position": dy if self._alignment_guide_orientation == "horizontal" else dx}
+                self.alignment_tracing = False
+                self._dibujar_guia_alineacion()
+                self._actualizar_modos_alineacion()
+                self._set_status("Guía colocada. Puede arrastrarla para ajustar su posición.")
+                return
+            if self.alignment_guide is not None:
+                posicion_canvas = 20 + self.alignment_guide["position"] * self.zoom
+                diferencia = abs((cy if self.alignment_guide["orientation"] == "horizontal" else cx) - posicion_canvas)
+                if diferencia <= max(6, 8 * self.zoom):
+                    self._alignment_guide_dragging = True
+                    return
+            if self.alignment_multiselect:
+                campo = self._find_field_at(cx, cy)
+                if campo is not None:
+                    self._alternar_campo_multiseleccion(campo)
+                return
+            return
+
         if self.tool == TOOL_ZOOM:
             self.cambiar_zoom(1.25, event=event)
             return
@@ -1669,6 +1848,13 @@ class Configurador:
 
     def on_mouse_move(self, event):
         cx, cy = self._event_to_canvas(event)
+        if self.tool == TOOL_ALIGNMENT and self._alignment_guide_dragging and self.alignment_guide is not None:
+            dx, dy = self._canvas_to_document(cx, cy)
+            self.alignment_guide["position"] = dy if self.alignment_guide["orientation"] == "horizontal" else dx
+            limite = self.template_image.height if self.alignment_guide["orientation"] == "horizontal" else self.template_image.width
+            self.alignment_guide["position"] = max(0, min(limite, self.alignment_guide["position"]))
+            self._dibujar_guia_alineacion()
+            return
         if self.tool == TOOL_ZOOM:
             self._mostrar_lupa(event)
         elif self._magnifier_label is not None:
@@ -1723,6 +1909,9 @@ class Configurador:
             )
 
     def on_mouse_up(self, event):
+        if self.tool == TOOL_ALIGNMENT:
+            self._alignment_guide_dragging = False
+            return
         if self.tool == TOOL_HAND:
             self._pan_last = None
             return
