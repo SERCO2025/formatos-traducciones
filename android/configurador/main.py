@@ -730,6 +730,11 @@ class CanvasEditor(StencilView):
                 if cerca:
                     self.alignment_guide_touch = touch
                     return True
+            # La selección múltiple se procesa en CampoWidget. No consumir aquí
+            # el toque: debe propagarse a los campos hijos para alternar su ID.
+            if self.app.alignment_multiselect:
+                if super().on_touch_down(touch):
+                    return True
             return True
 
 
