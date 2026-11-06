@@ -1408,13 +1408,13 @@ class Configurador:
             largo = 9 if px % 3000 == 0 else 5
             self.canvas.create_line(x, y0, x, y0 + largo, fill="#dddddd", tags=("ruler",))
             if px % 3000 == 0:
-                self.canvas.create_text(x + 3, y0 + 11, text=str(px // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+                self.canvas.create_text(x + 3, y0 + 11, text="%d in" % (px // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
         for py in range(0, alto + 1, paso):
             y = y0 + py * self.zoom
             largo = 9 if py % 3000 == 0 else 5
             self.canvas.create_line(x0, y, x0 + largo, y, fill="#dddddd", tags=("ruler",))
             if py % 3000 == 0:
-                self.canvas.create_text(x0 + 11, y + 2, text=str(py // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+                self.canvas.create_text(x0 + 11, y + 2, text="%d in" % (py // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
 
     def _dibujar_guia_alineacion(self):
         self.canvas.delete("alignment_guide")
