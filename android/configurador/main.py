@@ -452,7 +452,6 @@ class CanvasEditor(StencilView):
         self.start_touch = None
         self.start_touch_screen = None
         self.alignment_guide_touch = None
-        self.alignment_guide_touch = None
         self.active_field_touch = None
         self.active_field = None
         self.active_handle = None
@@ -1967,6 +1966,8 @@ class ConfiguradorApp(App):
             self.alignment_tracing = False
             self.alignment_multiselect = False
             self.alignment_selected_ids.clear()
+            if self.alignment_multiselect_button is not None:
+                self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
@@ -1996,6 +1997,8 @@ class ConfiguradorApp(App):
             self.alignment_tracing = False
             self.alignment_multiselect = False
             self.alignment_selected_ids.clear()
+            if self.alignment_multiselect_button is not None:
+                self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
