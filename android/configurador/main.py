@@ -396,7 +396,6 @@ class CanvasEditor(StencilView):
         self._pinch_last_distance = 0.0
         self._pinch_last_midpoint = None
         self._pinch_start_midpoint = None
-        self.alignment_guide_touch = None
         self._alignment_overlay = InstructionGroup()
         self.canvas.after.add(self._alignment_overlay)
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
@@ -452,6 +451,7 @@ class CanvasEditor(StencilView):
         self.pan_template_pos = None
         self.start_touch = None
         self.start_touch_screen = None
+        self.alignment_guide_touch = None
         self.alignment_guide_touch = None
         self.active_field_touch = None
         self.active_field = None
@@ -1695,6 +1695,8 @@ class ConfiguradorApp(App):
         self.alignment_tracing = False
         self.alignment_multiselect = False
         self.alignment_selected_ids.clear()
+        if self.alignment_multiselect_button is not None:
+            self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
         self._visual_template_path = None
         self._undo = []
         self._redo = []
@@ -1990,6 +1992,10 @@ class ConfiguradorApp(App):
             self._visual_template_path = self._crear_imagen_visual(formato.template.path, imagen)
             self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
             self.seleccionado = None
+            self.alignment_guide = None
+            self.alignment_tracing = False
+            self.alignment_multiselect = False
+            self.alignment_selected_ids.clear()
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
