@@ -293,11 +293,14 @@ class Configurador:
         trazar.pack(side="left", padx=4, pady=4)
         self.alignment_multiselect_button = tk.Button(self.alignment_toolbar, text="Multiselección", command=self._alternar_multiseleccion, bg="#303030", fg="white", relief="flat")
         self.alignment_multiselect_button.pack(side="left", padx=4, pady=4)
-        tk.Button(self.alignment_toolbar, text="Alinear", command=self._aplicar_alineacion, bg="#303030", fg="white", relief="flat").pack(side="left", padx=4, pady=4)
+        self.alignment_align_button = tk.Button(self.alignment_toolbar, text="Alinear", command=self._aplicar_alineacion, bg="#303030", fg="white", relief="flat")
+        self.alignment_align_button.pack(side="left", padx=4, pady=4)
         self.alignment_mode = ttk.Combobox(self.alignment_toolbar, state="readonly", width=18, values=("Borde superior", "Centro", "Borde inferior"))
         self.alignment_mode.current(0)
         self.alignment_mode.pack(side="left", padx=4, pady=4)
-        tk.Button(self.alignment_toolbar, text="Espaciado", command=self._aplicar_distribucion, bg="#303030", fg="white", relief="flat").pack(side="left", padx=4, pady=4)
+        self.alignment_spacing_button = tk.Button(self.alignment_toolbar, text="Espaciado", command=self._aplicar_distribucion, bg="#303030", fg="white", relief="flat")
+        self.alignment_spacing_button.pack(side="left", padx=4, pady=4)
+        self._actualizar_botones_alineacion()
         self.alignment_toolbar.pack_forget()
 
         body = tk.Frame(self.root, bg="black")
@@ -1043,6 +1046,7 @@ class Configurador:
             button.configure(bg=color, activebackground=color)
 
         if tool == TOOL_ALIGNMENT:
+            self._actualizar_botones_alineacion()
             if not self.alignment_toolbar.winfo_manager():
                 self.alignment_toolbar.pack(fill="x", before=self.body)
         else:
@@ -1298,6 +1302,7 @@ class Configurador:
             activebackground="#707070" if self.alignment_multiselect else "#303030",
         )
         self._set_status("Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada.")
+        self._actualizar_botones_alineacion()
 
     def _alternar_campo_multiseleccion(self, campo):
         if campo.field_id in self.alignment_selected_ids:
@@ -1306,6 +1311,7 @@ class Configurador:
             self.alignment_selected_ids.add(campo.field_id)
         self._redraw_single_field(campo)
         self._actualizar_estado_alineacion()
+        self._actualizar_botones_alineacion()
 
     def _campos_alineacion(self):
         if self.alignment_multiselect:
@@ -1315,6 +1321,13 @@ class Configurador:
     def _actualizar_estado_alineacion(self):
         cantidad = len(self._campos_alineacion())
         self._set_status("%d campo(s) seleccionado(s) para alineación." % cantidad)
+
+    def _actualizar_botones_alineacion(self):
+        campos = self._campos_alineacion()
+        if hasattr(self, "alignment_align_button"):
+            self.alignment_align_button.configure(state="normal" if len(campos) >= 1 else "disabled")
+        if hasattr(self, "alignment_spacing_button"):
+            self.alignment_spacing_button.configure(state="normal" if len(campos) >= 2 else "disabled")
 
     def _actualizar_modos_alineacion(self):
         if self.alignment_guide is None:
