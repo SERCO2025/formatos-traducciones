@@ -372,6 +372,7 @@ class CanvasEditor(StencilView):
         self._template_core_image = None
         self.start_touch = None
         self.start_touch_screen = None
+        self.alignment_guide_touch = None
         self.active_field_touch = None
         self.active_field = None
         self.active_handle = None
@@ -551,6 +552,7 @@ class CanvasEditor(StencilView):
 
         for campo in sorted(self.app.formato.fields, key=lambda c: c.order):
             self.add_widget(CampoWidget(campo, self))
+        self.redibujar_reglas_y_guia()
 
         if self.start_touch:
             self.start_touch = None
@@ -1515,6 +1517,7 @@ class ConfiguradorApp(App):
                 if self.alignment_multiselect_button is not None:
                     self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
                 if self.editor is not None:
+                    self.editor.refresh_fields()
                     self.editor.redibujar_reglas_y_guia()
         for herramienta, boton in getattr(self, "tool_buttons", {}).items():
             boton.background_color = (0.30, 0.30, 0.30, 1) if herramienta == tool else (0, 0, 0, 0)
@@ -1671,6 +1674,10 @@ class ConfiguradorApp(App):
         self.formato = None
         self._fdt_uri = None
         self.seleccionado = None
+        self.alignment_guide = None
+        self.alignment_tracing = False
+        self.alignment_multiselect = False
+        self.alignment_selected_ids.clear()
         self._visual_template_path = None
         self._undo = []
         self._redo = []
@@ -1937,6 +1944,10 @@ class ConfiguradorApp(App):
             self.scale = self._calcular_zoom_inicial(imagen.width, imagen.height)
             self._visual_template_path = ruta
             self.seleccionado = None
+            self.alignment_guide = None
+            self.alignment_tracing = False
+            self.alignment_multiselect = False
+            self.alignment_selected_ids.clear()
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
