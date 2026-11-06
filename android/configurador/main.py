@@ -640,27 +640,34 @@ class CanvasEditor(StencilView):
         escala = self.app.scale
         paso = DPI_REGLA if escala >= 0.25 else DPI_REGLA * 5
         intervalo_etiqueta = DPI_REGLA if escala >= 0.5 else DPI_REGLA * 5
+        # Bandas fijas en el viewport; la posición de cada marca y etiqueta
+        # procede de las coordenadas del documento y acompaña al paneo.
+        alto_regla = dp(22)
+        ancho_regla = dp(24)
+        self._alignment_overlay.add(Color(0.10, 0.10, 0.10, 1))
+        self._alignment_overlay.add(Rectangle(pos=(self.x, self.top - alto_regla), size=(self.width, alto_regla)))
+        self._alignment_overlay.add(Rectangle(pos=(self.x, self.y), size=(ancho_regla, self.height)))
         self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
-        self._alignment_overlay.add(Line(points=(tw.x, tw.top, tw.right, tw.top), width=1))
-        self._alignment_overlay.add(Line(points=(tw.x, tw.y, tw.x, tw.top), width=1))
+        self._alignment_overlay.add(Line(points=(self.x + ancho_regla, self.top - alto_regla, self.right, self.top - alto_regla), width=1))
+        self._alignment_overlay.add(Line(points=(self.x + ancho_regla, self.y, self.x + ancho_regla, self.top - alto_regla), width=1))
         for px in range(0, ancho_doc + 1, paso):
             x = tw.x + px * escala
             largo = dp(9) if px % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
-            self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
+            self._alignment_overlay.add(Line(points=(x, self.top - alto_regla, x, self.top - alto_regla - largo), width=1))
             if px % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (px // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
-                self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), tw.top - dp(21)), size=textura.size))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), self.top - alto_regla - textura.height - dp(2)), size=textura.size))
         for py in range(0, alto_doc + 1, paso):
             y = tw.top - py * escala
             largo = dp(9) if py % (DPI_REGLA * 10) == 0 else dp(5)
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
-            self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
+            self._alignment_overlay.add(Line(points=(self.x + ancho_regla, y, self.x + ancho_regla + largo, y), width=1))
             if py % intervalo_etiqueta == 0:
                 textura = self._textura_etiqueta_regla("%d in" % (py // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
-                self._alignment_overlay.add(Rectangle(texture=textura, pos=(tw.x + dp(11), y - textura.height / 2), size=textura.size))
+                self._alignment_overlay.add(Rectangle(texture=textura, pos=(self.x + ancho_regla + dp(2), y - textura.height / 2), size=textura.size))
         guia = self.app.alignment_guide
         if self.app.tool == "alignment" and guia is not None:
             self._alignment_overlay.add(Color(0.22, 1.0, 0.08, 1))
@@ -1238,7 +1245,7 @@ class ConfiguradorApp(App):
         self.alignment_controls = BoxLayout(orientation="horizontal", size_hint=(None, 1), width=dp(538), spacing=dp(4), padding=(dp(4), dp(2)))
         trazar = Button(text="Trazar", size_hint_x=None, width=dp(76), on_release=lambda _: self.mostrar_opciones_guia())
         self.alignment_controls.add_widget(trazar)
-        self.alignment_multiselect_button = Button(text="Multiselección", size_hint_x=None, width=dp(112), on_release=lambda _: self.alternar_multiseleccion())
+        self.alignment_multiselect_button = Button(text="Multiselección", size_hint_x=None, width=dp(112), background_normal="", background_down="", background_color=(0.44, 0.44, 0.44, 1), on_release=lambda _: self.alternar_multiseleccion())
         self.alignment_controls.add_widget(self.alignment_multiselect_button)
         self.alignment_align_button = Button(text="Alinear", size_hint_x=None, width=dp(76), on_release=lambda _: self.aplicar_alineacion(), disabled=True)
         self.alignment_controls.add_widget(self.alignment_align_button)
@@ -1544,7 +1551,7 @@ class ConfiguradorApp(App):
                 self.alignment_multiselect = False
                 self.alignment_selected_ids.clear()
                 if self.alignment_multiselect_button is not None:
-                    self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
+                    self.alignment_multiselect_button.background_color = (0.44, 0.44, 0.44, 1)
                 if self.editor is not None:
                     self.editor.refresh_fields()
                     self.editor.redibujar_reglas_y_guia()
@@ -1587,7 +1594,7 @@ class ConfiguradorApp(App):
                     if campo.field_id in ids:
                         self.editor.refresh_field(campo)
         if self.alignment_multiselect_button is not None:
-            self.alignment_multiselect_button.background_color = (0.30, 0.30, 0.30, 1) if self.alignment_multiselect else (0, 0, 0, 0)
+            self.alignment_multiselect_button.background_color = (0, 0, 0, 1) if self.alignment_multiselect else (0.44, 0.44, 0.44, 1)
         self.estado.text = "Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada."
         self.actualizar_estado_botones_alineacion()
 
