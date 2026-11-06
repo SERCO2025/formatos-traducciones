@@ -27,7 +27,7 @@ class AlignmentGeometryTests(unittest.TestCase):
             self.assertEqual(item.position.y, expected_y)
 
     def test_vertical_guide_aligns_left_center_and_right(self):
-        for mode, expected_x in (("left", 100), ("center", 90), ("right", 80)):
+        for mode, expected_x in (("left", 100), ("center", 80), ("right", 60)):
             item = campo(5, 10, 40, 20)
             self.assertTrue(alinear_campos([item], "vertical", 100, mode))
             self.assertEqual(item.position.x, expected_x)
