@@ -114,6 +114,22 @@ class TextStyle:
         )
 
 
+NUMERIC_MODES = ("number", "limit", "date", "spacing")
+DATE_FORMATS = (
+    "dd/mm/aa",
+    "dd/mm/aaaa",
+    "mm/dd/aa",
+    "mm/dd/aaaa",
+    "dd-mm-aa",
+    "dd-mm-aaaa",
+    "mm-dd-aa",
+    "mm-dd-aaaa",
+    "aaaa",
+    "mm",
+    "dd",
+)
+
+
 @dataclass
 class NumericConfig:
     """Configuración persistente de los cuatro modos del campo numérico."""
