@@ -1,30 +1,289 @@
 # -*- coding: utf-8 -*-
+import calendar
+import datetime
+import re
+
+from .models import DATE_FORMATS, NUMERIC_MODES
 
 
-def validar_respuesta(campo, respuesta):
+def _configuracion_numerica(campo):
+    return getattr(campo, "numeric_config", None)
+
+
+def _partes_formato_fecha(date_format):
+    partes = re.split(r"([/-])", str(date_format or ""))
+    return [parte for parte in partes if parte]
+
+
+def _segmentos_fecha(date_format):
+    return [parte for parte in _partes_formato_fecha(date_format) if parte not in ("/", "-")]
+
+
+def _contiene_anio(date_format):
+    return "aa" in _segmentos_fecha(date_format) or "aaaa" in _segmentos_fecha(date_format)
+
+
+def _analizar_mascara_espaciado(mascara):
+    tokens = []
+    posiciones = 0
+    profundidad = 0
+    literal = []
+
+    for caracter in str(mascara or ""):
+        if caracter == "(":
+            if profundidad == 0:
+                if literal:
+                    return None, 0, "El texto literal debe estar dentro de paréntesis."
+            else:
+                literal.append("(")
+            profundidad += 1
+            continue
+
+        if caracter == ")":
+            if profundidad == 0:
+                return None, 0, "La máscara contiene un paréntesis de cierre sin apertura."
+            profundidad -= 1
+            if profundidad == 0:
+                tokens.append(("literal", "".join(literal)))
+                literal = []
+            else:
+                literal.append(")")
+            continue
+
+        if profundidad:
+            literal.append(caracter)
+        elif caracter == "#":
+            tokens.append(("digit", ""))
+            posiciones += 1
+        else:
+            return None, 0, "Fuera de paréntesis solo se permite el símbolo #."
+
+    if profundidad:
+        return None, 0, "La máscara contiene paréntesis sin cerrar."
+    if posiciones <= 0:
+        return None, 0, "La máscara debe contener al menos una posición #."
+
+    return tokens, posiciones, ""
+
+
+def validar_configuracion_numerica(config):
+    if config is None:
+        return True, ""
+
+    modo = str(getattr(config, "mode", "number") or "number")
+    if modo not in NUMERIC_MODES:
+        return False, "El modo numérico configurado no es válido."
+
+    if modo == "limit":
+        maximo = str(getattr(config, "max_value", "") or "")
+        if not maximo.isdigit():
+            return False, "El límite máximo debe contener únicamente números."
+        return True, ""
+
+    if modo == "date":
+        date_format = str(getattr(config, "date_format", "") or "")
+        if date_format not in DATE_FORMATS:
+            return False, "El formato de fecha configurado no es válido."
+        if _contiene_anio(date_format):
+            minimo = str(getattr(config, "min_year", "") or "")
+            if not minimo.isdigit():
+                return False, "El año mínimo es obligatorio y debe contener únicamente números."
+        return True, ""
+
+    if modo == "spacing":
+        _, _, error = _analizar_mascara_espaciado(
+            getattr(config, "spacing_mask", "")
+        )
+        if error:
+            return False, error
+
+    return True, ""
+
+
+def normalizar_fecha_capturada(respuesta, date_format, confirmar=False):
+    """Aplica separadores del formato y completa dd/mm de un solo dígito al confirmar."""
+    respuesta = "" if respuesta is None else str(respuesta)
+    segmentos_formato = _segmentos_fecha(date_format)
+    separadores = [
+        parte for parte in _partes_formato_fecha(date_format)
+        if parte in ("/", "-")
+    ]
+    digitos = "".join(caracter for caracter in respuesta if caracter.isdigit())
+
+    segmentos = []
+    cursor = 0
+    for patron in segmentos_formato:
+        longitud = len(patron)
+        segmento = digitos[cursor:cursor + longitud]
+        cursor += len(segmento)
+        if confirmar and patron in ("dd", "mm") and len(segmento) == 1:
+            segmento = "0" + segmento
+        segmentos.append(segmento)
+
+    resultado = []
+    for indice, segmento in enumerate(segmentos):
+        if indice:
+            resultado.append(separadores[indice - 1])
+        resultado.append(segmento)
+    return "".join(resultado)
+
+
+def _extraer_segmentos_fecha(respuesta, date_format):
+    partes_formato = _partes_formato_fecha(date_format)
+    separadores = [parte for parte in partes_formato if parte in ("/", "-")]
+    segmentos_formato = [parte for parte in partes_formato if parte not in ("/", "-")]
+
+    texto = str(respuesta or "")
+    if any(caracter.isalpha() for caracter in texto):
+        return None
+
+    digitos = "".join(caracter for caracter in texto if caracter.isdigit())
+    if len(digitos) != sum(len(parte) for parte in segmentos_formato):
+        # Se aceptan respuestas parciales; no se aceptan separadores distintos.
+        if any(c not in "0123456789/-" for c in texto):
+            return None
+        if any(c in texto for c in ("/", "-")):
+            esperado = separadores[0] if separadores else None
+            if esperado and any(c in texto and c != esperado for c in ("/", "-")):
+                return None
+        if len(digitos) > sum(len(parte) for parte in segmentos_formato):
+            return None
+
+    segmentos = []
+    cursor = 0
+    for patron in segmentos_formato:
+        segmento = digitos[cursor:cursor + len(patron)]
+        cursor += len(segmento)
+        segmentos.append((patron, segmento))
+    return segmentos
+
+
+def _anio_completo(anio, hoy):
+    if len(anio) == 4:
+        return int(anio)
+    valor = int(anio)
+    siglo_actual = (hoy.year // 100) * 100
+    if valor > hoy.year % 100:
+        return siglo_actual - 100 + valor
+    return siglo_actual + valor
+
+
+def _validar_fecha(respuesta, config, hoy=None):
+    date_format = str(config.date_format)
+    segmentos = _extraer_segmentos_fecha(respuesta, date_format)
+    if segmentos is None:
+        return False, "La fecha contiene caracteres o separadores no válidos."
+
+    if any(not valor.isdigit() for _, valor in segmentos):
+        return False, "La fecha debe contener únicamente números y los separadores del formato."
+
+    for patron, valor in segmentos:
+        if not valor:
+            continue
+        if patron == "dd" and (int(valor) < 1 or int(valor) > 31):
+            return False, "El día debe estar entre 01 y 31."
+        if patron == "mm" and (int(valor) < 1 or int(valor) > 12):
+            return False, "El mes debe estar entre 01 y 12."
+        if patron == "aaaa" and len(valor) == 4:
+            if int(valor) < int(config.min_year):
+                return False, "El año no puede ser anterior al año mínimo configurado."
+        if patron == "aa" and len(valor) == 2 and config.min_year:
+            referencia = hoy or datetime.date.today()
+            if _anio_completo(valor, referencia) < int(config.min_year):
+                return False, "El año no puede ser anterior al año mínimo configurado."
+
+    valores = {patron: valor for patron, valor in segmentos}
+    formato_completo = all(valores.get(patron, "") for patron, _ in segmentos)
+    if formato_completo and "dd" in valores and "mm" in valores and ("aaaa" in valores or "aa" in valores):
+        referencia = hoy or datetime.date.today()
+        anio_texto = valores.get("aaaa") or valores.get("aa")
+        anio = _anio_completo(anio_texto, referencia) if len(anio_texto) == 2 else int(anio_texto)
+        try:
+            fecha = datetime.date(anio, int(valores["mm"]), int(valores["dd"]))
+        except ValueError:
+            return False, "La fecha indicada no existe."
+        if config.past_only and fecha >= referencia:
+            return False, "Solo se permiten fechas anteriores a la fecha actual."
+
+    return True, ""
+
+
+def formatear_espaciado(respuesta, mascara):
+    """Devuelve la representación visual; no modifica el dato numérico almacenado."""
+    digitos = "".join(caracter for caracter in str(respuesta or "") if caracter.isdigit())
+    if not digitos:
+        return ""
+
+    tokens, _, error = _analizar_mascara_espaciado(mascara)
+    if error:
+        return ""
+
+    resultado = []
+    indice = 0
+    for tipo, valor in tokens:
+        if tipo == "digit":
+            resultado.append(digitos[indice] if indice < len(digitos) else " ")
+            indice += 1
+        else:
+            resultado.append(valor)
+    return "".join(resultado)
+
+
+def validar_respuesta(campo, respuesta, hoy=None):
     respuesta = "" if respuesta is None else str(respuesta)
 
     if campo.required and not respuesta.strip():
         return False, "Este campo es obligatorio."
 
-    # Los campos numéricos aceptan dígitos, espacios y símbolos (por ejemplo:
-    # 123-45, +52 664, 10/12/2026). Se rechazan únicamente las letras.
-    if campo.validation.numeric_only and respuesta.strip():
+    if not respuesta.strip():
+        return True, ""
+
+    if not campo.validation.numeric_only:
+        return True, ""
+
+    config = _configuracion_numerica(campo)
+    modo = str(getattr(config, "mode", "number") or "number")
+
+    if modo == "number":
         if any(caracter.isalpha() for caracter in respuesta):
             return False, "Este campo permite números, espacios y símbolos, pero no letras."
+        return True, ""
 
-    # Los campos alfanuméricos y de texto aceptan letras, números, espacios
-    # y símbolos sin restricciones adicionales.
+    valido, mensaje = validar_configuracion_numerica(config)
+    if not valido:
+        return False, mensaje
 
-    return True, ""
+    if modo == "limit":
+        if not respuesta.isdigit():
+            return False, "Este campo permite únicamente números."
+        if int(respuesta) > int(config.max_value):
+            return False, "La cantidad no puede superar el límite de %s." % config.max_value
+        return True, ""
+
+    if modo == "date":
+        if any(not (caracter.isdigit() or caracter in "/-") for caracter in respuesta):
+            return False, "La fecha solo permite números y los separadores configurados."
+        return _validar_fecha(respuesta, config, hoy=hoy)
+
+    if modo == "spacing":
+        if not respuesta.isdigit():
+            return False, "Este campo permite únicamente números."
+        _, posiciones, _ = _analizar_mascara_espaciado(config.spacing_mask)
+        if len(respuesta) > posiciones:
+            return False, "La respuesta supera las %s posiciones numéricas disponibles." % posiciones
+        if config.spacing_required and len(respuesta) != posiciones:
+            return False, "Debe completar las %s posiciones numéricas." % posiciones
+        return True, ""
+
+    return False, "El modo numérico configurado no es válido."
 
 
-def validar_todas_las_respuestas(formato, respuestas):
+def validar_todas_las_respuestas(formato, respuestas, hoy=None):
     errores = {}
 
     for campo in formato.fields:
         respuesta = respuestas.get(campo.field_id, "")
-        valido, mensaje = validar_respuesta(campo, respuesta)
+        valido, mensaje = validar_respuesta(campo, respuesta, hoy=hoy)
 
         if not valido:
             errores[campo.field_id] = mensaje
