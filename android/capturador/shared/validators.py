@@ -260,6 +260,35 @@ def formatear_respuesta_campo(campo, respuesta):
     return texto
 
 
+def indicacion_captura_numerica(campo):
+    """Devuelve solo la instrucción necesaria para capturar un campo numérico."""
+    if campo.field_type != "number":
+        return ""
+    configuracion = getattr(campo, "numeric_config", None)
+    modo = str(getattr(configuracion, "mode", "number") or "number")
+    if modo == "limit":
+        return "Máximo permitido: %s." % getattr(configuracion, "max_value", "")
+    if modo == "date":
+        formato = str(getattr(configuracion, "date_format", "dd/mm/aaaa"))
+        partes = re.split(r"([/-])", formato)
+        tiene_anio = "aa" in partes or "aaaa" in partes
+        texto = "Formato esperado: %s." % formato
+        if tiene_anio:
+            texto += " Año mínimo: %s." % getattr(configuracion, "min_year", "")
+        if (
+            getattr(configuracion, "past_only", False)
+            and "dd" in partes and "mm" in partes and tiene_anio
+        ):
+            texto += " Solo se permiten fechas anteriores a hoy."
+        return texto
+    if modo == "spacing":
+        texto = "Estructura: %s." % getattr(configuracion, "spacing_mask", "####")
+        if getattr(configuracion, "spacing_required", False):
+            texto += " Complete todas las posiciones numéricas."
+        return texto
+    return ""
+
+
 def validar_respuesta(campo, respuesta, hoy=None):
     respuesta = "" if respuesta is None else str(respuesta)
 
