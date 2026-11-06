@@ -162,6 +162,7 @@ from shared.ftc import (
 from shared.models import FIELD_TYPE_IMAGE
 from shared.renderer import construir_nombre_archivo, renderizar_imagen
 from shared.validators import (
+    indicacion_captura_numerica,
     normalizar_fecha_capturada,
     validar_respuesta,
     validar_todas_las_respuestas,
@@ -1007,7 +1008,12 @@ class CapturadorApp(App):
         self.estado.text = "%s — Campo %d de %d" % (self.formato.name, self.indice + 1, total)
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_ESTADO")
         self._diagnostico("MOSTRAR_CAMPO_ANTES_PREGUNTA_TIPO_%s" % type(campo.question).__name__)
-        self.pregunta.text = (campo.question or "").strip() or campo.field_id
+        texto_pregunta = (campo.question or "").strip() or campo.field_id
+        indicacion = indicacion_captura_numerica(campo)
+        if indicacion:
+            texto_pregunta += "\\n\\n" + indicacion
+        self.pregunta.text = texto_pregunta
+        self.pregunta.height = dp(92) if indicacion else dp(68)
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
         respuesta_guardada = self.respuestas.get(campo.field_id, "")
         self.entrada.input_filter = (
