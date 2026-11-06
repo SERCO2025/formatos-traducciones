@@ -8,11 +8,6 @@ from shared.models import DATE_FORMATS, NumericConfig
 from shared.validators import validar_configuracion_numerica
 
 
-_DATE_FORMATS_WITH_YEAR = tuple(
-    value for value in DATE_FORMATS if "aa" in value
-)
-
-
 def editar_configuracion_numerica(parent, configuracion):
     """Abre el diálogo y devuelve una NumericConfig o None si se cancela."""
     if isinstance(configuracion, NumericConfig):
@@ -129,7 +124,8 @@ def editar_configuracion_numerica(parent, configuracion):
                 else:
                     fila_anio.pack_forget()
 
-            valores["date_format"].trace_add("write", actualizar_anio)
+            formato_combo = opciones.winfo_children()[1]
+            formato_combo.bind("<<ComboboxSelected>>", actualizar_anio)
             actualizar_anio()
             return
 
