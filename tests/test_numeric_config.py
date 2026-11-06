@@ -27,6 +27,9 @@ from android.capturador.shared.models import (
     Field as AndroidField,
     NumericConfig as AndroidNumericConfig,
     Validation as AndroidValidation,
+    Position as AndroidPosition,
+    TemplateInfo as AndroidTemplateInfo,
+    Formato as AndroidFormato,
 )
 
 
@@ -149,6 +152,38 @@ class NumericValidationTests(unittest.TestCase):
         self.assertTrue(validar_respuesta_android(campo, "100")[0])
         self.assertFalse(validar_respuesta_android(campo, "101")[0])
 
+    def test_fdt_rejects_invalid_numeric_configuration(self):
+        campo = self.crear_campo(NumericConfig(mode="limit", max_value=""))
+        campo.order = 1
+        campo.position = Position(x=0, y=0, width=10, height=10)
+        formato = Formato(
+            name="Prueba",
+            template=TemplateInfo(path="plantilla.png", width=100, height=100),
+            fields=[campo],
+        )
+        with self.assertRaises(ValueError):
+            validar_fdt(formato)
+
+    def test_android_fdt_rejects_invalid_numeric_configuration(self):
+        campo = AndroidField(
+            field_id="dato",
+            question="Dato",
+            field_type="number",
+            order=1,
+            validation=AndroidValidation(numeric_only=True),
+            position=AndroidPosition(x=0, y=0, width=10, height=10),
+            numeric_config=AndroidNumericConfig(mode="limit", max_value=""),
+        )
+        formato = AndroidFormato(
+            name="Prueba",
+            template=AndroidTemplateInfo(
+                path="plantilla.png", width=100, height=100
+            ),
+            fields=[campo],
+        )
+        with self.assertRaises(ValueError):
+            validar_fdt_android(formato)
+
 
 class NumericConfigModelTests(unittest.TestCase):
     def test_four_modes_round_trip_without_losing_settings(self):
@@ -207,45 +242,6 @@ class NumericConfigModelTests(unittest.TestCase):
         restored = AndroidField.from_dict(field.to_dict())
         self.assertEqual(restored.numeric_config, config)
 
-
-    def test_fdt_rejects_invalid_numeric_configuration(self):
-        campo = self.crear_campo(NumericConfig(mode="limit", max_value=""))
-        campo.order = 1
-        campo.position = Position(x=0, y=0, width=10, height=10)
-        formato = Formato(
-            name="Prueba",
-            template=TemplateInfo(path="plantilla.png", width=100, height=100),
-            fields=[campo],
-        )
-        with self.assertRaises(ValueError):
-            validar_fdt(formato)
-
-    def test_android_fdt_rejects_invalid_numeric_configuration(self):
-        campo = AndroidField(
-            field_id="dato",
-            question="Dato",
-            field_type="number",
-            order=1,
-            validation=AndroidValidation(numeric_only=True),
-            position=__import__(
-                "android.capturador.shared.models",
-                fromlist=["Position"],
-            ).Position(x=0, y=0, width=10, height=10),
-            numeric_config=AndroidNumericConfig(mode="limit", max_value=""),
-        )
-        formato = __import__(
-            "android.capturador.shared.models",
-            fromlist=["Formato", "TemplateInfo"],
-        ).Formato(
-            name="Prueba",
-            template=__import__(
-                "android.capturador.shared.models",
-                fromlist=["TemplateInfo"],
-            ).TemplateInfo(path="plantilla.png", width=100, height=100),
-            fields=[campo],
-        )
-        with self.assertRaises(ValueError):
-            validar_fdt_android(formato)
 
     def test_legacy_field_without_numeric_config_uses_number_mode(self):
         legacy = {
