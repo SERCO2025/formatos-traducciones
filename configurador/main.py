@@ -1328,8 +1328,8 @@ class Configurador:
                 if campo.field_id in ids_anteriores:
                     self._redraw_single_field(campo)
         self.alignment_multiselect_button.configure(
-            bg="#707070" if self.alignment_multiselect else "#303030",
-            activebackground="#707070" if self.alignment_multiselect else "#303030",
+            bg="#303030" if self.alignment_multiselect else "#707070",
+            activebackground="#303030" if self.alignment_multiselect else "#707070",
         )
         self._set_status("Multiselección activada." if self.alignment_multiselect else "Multiselección desactivada.")
         self._actualizar_botones_alineacion()
@@ -1419,26 +1419,47 @@ class Configurador:
 
     def _dibujar_reglas(self):
         if self.template_image is None:
+            self.canvas.delete("ruler")
             return
         ancho = self.template_image.width
         alto = self.template_image.height
+        # Las bandas de las reglas permanecen ancladas al origen visible del
+        # viewport; las marcas se calculan con las coordenadas desplazadas de
+        # la plantilla para que la escala siga al documento al hacer paneo.
+        vx = self.canvas.canvasx(0)
+        vy = self.canvas.canvasy(0)
         x0, y0 = 20, 20
         paso = 300 if self.zoom >= 0.25 else 1500
         intervalo_etiqueta = 300 if self.zoom >= 0.5 else 1500
-        self.canvas.create_line(x0, y0, x0 + ancho * self.zoom, y0, fill="#aaaaaa", width=1, tags=("ruler",))
-        self.canvas.create_line(x0, y0, x0, y0 + alto * self.zoom, fill="#aaaaaa", width=1, tags=("ruler",))
+        ancho_vista = max(1, self.canvas.winfo_width())
+        alto_vista = max(1, self.canvas.winfo_height())
+        self.canvas.delete("ruler")
+        self.canvas.create_rectangle(vx, vy, vx + ancho_vista, vy + 20,
+                                     fill="#202020", outline="", tags=("ruler",))
+        self.canvas.create_rectangle(vx, vy, vx + 20, vy + alto_vista,
+                                     fill="#202020", outline="", tags=("ruler",))
+        self.canvas.create_line(vx + 20, vy + 20, vx + ancho_vista, vy + 20,
+                                fill="#aaaaaa", tags=("ruler",))
+        self.canvas.create_line(vx + 20, vy + 20, vx + 20, vy + alto_vista,
+                                fill="#aaaaaa", tags=("ruler",))
         for px in range(0, ancho + 1, paso):
             x = x0 + px * self.zoom
             largo = 9 if px % 3000 == 0 else 5
-            self.canvas.create_line(x, y0, x, y0 + largo, fill="#dddddd", tags=("ruler",))
+            self.canvas.create_line(x, vy + 20, x, vy + 20 + largo,
+                                    fill="#dddddd", tags=("ruler",))
             if px % intervalo_etiqueta == 0:
-                self.canvas.create_text(x + 3, y0 + 11, text="%d in" % (px // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+                self.canvas.create_text(x + 3, vy + 31, text="%d in" % (px // 300),
+                                        fill="#dddddd", anchor="nw",
+                                        font=("Arial", 7), tags=("ruler",))
         for py in range(0, alto + 1, paso):
             y = y0 + py * self.zoom
             largo = 9 if py % 3000 == 0 else 5
-            self.canvas.create_line(x0, y, x0 + largo, y, fill="#dddddd", tags=("ruler",))
+            self.canvas.create_line(vx + 20, y, vx + 20 + largo, y,
+                                    fill="#dddddd", tags=("ruler",))
             if py % intervalo_etiqueta == 0:
-                self.canvas.create_text(x0 + 11, y + 2, text="%d in" % (py // 300), fill="#dddddd", anchor="nw", font=("Arial", 7), tags=("ruler",))
+                self.canvas.create_text(vx + 31, y + 2, text="%d in" % (py // 300),
+                                        fill="#dddddd", anchor="nw",
+                                        font=("Arial", 7), tags=("ruler",))
 
     def _dibujar_guia_alineacion(self):
         self.canvas.delete("alignment_guide")
@@ -1478,11 +1499,15 @@ class Configurador:
         self.hbar.set(first, last)
         self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
+        if self.template_image is not None:
+            self._dibujar_reglas()
 
     def _on_canvas_yscroll(self, first, last):
         self.vbar.set(first, last)
         self.root.after_idle(self._actualizar_gradiente_area)
         self.root.after_idle(self._refresh_visible_template_tiles)
+        if self.template_image is not None:
+            self._dibujar_reglas()
 
     def _on_canvas_configure(self, event=None):
         self.root.after_idle(self._actualizar_gradiente_area)
