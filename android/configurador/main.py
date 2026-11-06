@@ -1590,7 +1590,7 @@ class ConfiguradorApp(App):
         self.actualizar_estado_botones_alineacion()
 
     def campos_seleccionados_alineacion(self):
-        if self.alignment_multiselect:
+        if self.alignment_multiselect and self.alignment_selected_ids:
             return [c for c in (self.formato.fields if self.formato else []) if c.field_id in self.alignment_selected_ids]
         return [self.seleccionado] if self.seleccionado is not None else []
 
