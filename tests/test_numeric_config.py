@@ -14,8 +14,8 @@ from shared.models import (
 )
 from shared.fdt import validar_fdt
 from android.capturador.shared.fdt import validar_fdt as validar_fdt_android
-from shared.renderer import formatear_respuesta_campo
 from shared.validators import (
+    formatear_respuesta_campo,
     formatear_espaciado,
     normalizar_fecha_capturada,
     validar_configuracion_numerica,
