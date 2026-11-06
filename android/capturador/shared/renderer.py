@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 
 from PIL import Image, ImageDraw, ImageFont
+from .validators import formatear_respuesta_campo
 
 
 def _normalizar_nombre_fuente(valor):
@@ -230,7 +231,9 @@ def renderizar_imagen(formato, respuestas):
         if texto is None or str(texto) == "":
             continue
 
-        texto = str(texto)
+        texto = formatear_respuesta_campo(campo, texto)
+        if not texto:
+            continue
         if getattr(campo, "uppercase", False):
             texto = texto.upper()
         estilo = campo.text_style
