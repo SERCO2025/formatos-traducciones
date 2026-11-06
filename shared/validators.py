@@ -235,6 +235,31 @@ def formatear_espaciado(respuesta, mascara):
     return "".join(resultado)
 
 
+def formatear_respuesta_campo(campo, respuesta):
+    """Prepara la representación visible sin alterar el valor almacenado."""
+    if respuesta is None:
+        return ""
+    texto = str(respuesta)
+    if not texto or campo.field_type != "number":
+        return texto
+
+    configuracion = getattr(campo, "numeric_config", None)
+    modo = str(getattr(configuracion, "mode", "number") or "number")
+    if modo == "spacing":
+        return formatear_espaciado(
+            texto,
+            getattr(configuracion, "spacing_mask", "####"),
+        )
+    if modo == "date":
+        normalizado = normalizar_fecha_capturada(
+            texto,
+            getattr(configuracion, "date_format", "dd/mm/aaaa"),
+            confirmar=False,
+        )
+        return normalizado if normalizado else texto
+    return texto
+
+
 def validar_respuesta(campo, respuesta, hoy=None):
     respuesta = "" if respuesta is None else str(respuesta)
 
