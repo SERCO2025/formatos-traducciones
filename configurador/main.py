@@ -1036,6 +1036,7 @@ class Configurador:
         # Evitar que un gesto de desplazamiento anterior quede activo al
         # cambiar de herramienta mientras el ratón aún está presionado.
         self._pan_last = None
+        self._alignment_guide_dragging = False
         self.tool = tool
         # Desplazar usa la mano estándar; con Lupa se oculta la flecha
         # del sistema para que el indicador dibujado sea el único puntero visible.
@@ -1066,6 +1067,7 @@ class Configurador:
             if herramienta_anterior == TOOL_ALIGNMENT:
                 self.alignment_guide = None
                 self.alignment_tracing = False
+                self._alignment_guide_dragging = False
                 self.alignment_multiselect = False
                 self.alignment_selected_ids.clear()
                 self.alignment_multiselect_button.configure(bg="#303030")
