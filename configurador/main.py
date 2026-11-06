@@ -1206,6 +1206,9 @@ class Configurador:
             self.alignment_tracing = False
             self.alignment_multiselect = False
             self.alignment_selected_ids.clear()
+            self._alignment_guide_dragging = False
+            if hasattr(self, "alignment_multiselect_button"):
+                self.alignment_multiselect_button.configure(bg="#303030", activebackground="#303030")
             self.template_image = plantilla.copy()
             self.current_fdt_path = ruta
             self.selected_field = None
