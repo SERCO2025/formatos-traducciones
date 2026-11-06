@@ -300,9 +300,9 @@ class NumericValidationTests(unittest.TestCase):
                 )
 
             png = (
-                b"\\x89PNG\\r\\n\\x1a\\n"
+                b"\x89PNG\r\n\x1a\n"
                 + bloque_png(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
-                + bloque_png(b"IDAT", zlib.compress(b"\\x00\\xff\\xff\\xff"))
+                + bloque_png(b"IDAT", zlib.compress(b"\x00\xff\xff\xff"))
                 + bloque_png(b"IEND", b"")
             )
             with open(plantilla, "wb") as archivo:
