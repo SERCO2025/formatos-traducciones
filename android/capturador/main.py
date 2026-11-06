@@ -862,7 +862,7 @@ class CapturadorApp(App):
         if modo == "number":
             return "".join(
                 caracter for caracter in texto
-                if not caracter.isalpha() and caracter not in "\\r\\n\\t"
+                if not caracter.isalpha() and caracter not in "\r\n\t"
             )
         if modo in ("limit", "spacing"):
             return "".join(caracter for caracter in texto if caracter.isdigit())
@@ -1011,7 +1011,7 @@ class CapturadorApp(App):
         texto_pregunta = (campo.question or "").strip() or campo.field_id
         indicacion = indicacion_captura_numerica(campo)
         if indicacion:
-            texto_pregunta += "\\n\\n" + indicacion
+            texto_pregunta += "\n\n" + indicacion
         self.pregunta.text = texto_pregunta
         self.pregunta.height = dp(92) if indicacion else dp(68)
         self._diagnostico("MOSTRAR_CAMPO_DESPUES_PREGUNTA")
