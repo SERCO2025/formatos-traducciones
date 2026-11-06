@@ -183,9 +183,18 @@ def _validar_fecha(respuesta, config, hoy=None):
     if any(not valor.isdigit() for _, valor in segmentos):
         return False, "La fecha debe contener únicamente números y los separadores del formato."
 
+    if any(not valor for _, valor in segmentos):
+        return False, "Complete todos los segmentos del formato de fecha."
+
     for patron, valor in segmentos:
-        if not valor:
-            continue
+        longitud_valida = (
+            len(valor) in (1, 2) if patron in ("dd", "mm")
+            else len(valor) == len(patron)
+        )
+        if not longitud_valida:
+            return False, "El segmento %s debe contener %d dígito(s)." % (
+                patron, len(patron)
+            )
         if patron == "dd" and (int(valor) < 1 or int(valor) > 31):
             return False, "El día debe estar entre 01 y 31."
         if patron == "mm" and (int(valor) < 1 or int(valor) > 12):
