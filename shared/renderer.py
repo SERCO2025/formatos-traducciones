@@ -209,6 +209,31 @@ def _renderizar_imagen(imagen, respuestas, campo):
     imagen.paste(foto, (posicion.x, posicion.y))
 
 
+def formatear_respuesta_campo(campo, respuesta):
+    """Prepara la representación visible sin alterar el valor almacenado."""
+    if respuesta is None:
+        return ""
+    texto = str(respuesta)
+    if not texto or campo.field_type != "number":
+        return texto
+
+    configuracion = getattr(campo, "numeric_config", None)
+    modo = str(getattr(configuracion, "mode", "number") or "number")
+    if modo == "spacing":
+        return formatear_espaciado(
+            texto,
+            getattr(configuracion, "spacing_mask", "####"),
+        )
+    if modo == "date":
+        normalizado = normalizar_fecha_capturada(
+            texto,
+            getattr(configuracion, "date_format", "dd/mm/aaaa"),
+            confirmar=False,
+        )
+        return normalizado if normalizado else texto
+    return texto
+
+
 def renderizar_imagen(formato, respuestas):
     plantilla_path = Path(formato.template.path)
     if not plantilla_path.exists():
@@ -231,25 +256,7 @@ def renderizar_imagen(formato, respuestas):
         if texto is None or str(texto) == "":
             continue
 
-        texto = str(texto)
-        if campo.field_type == "number":
-            configuracion_numerica = getattr(campo, "numeric_config", None)
-            modo_numerico = str(
-                getattr(configuracion_numerica, "mode", "number") or "number"
-            )
-            if modo_numerico == "spacing":
-                texto = formatear_espaciado(
-                    texto,
-                    getattr(configuracion_numerica, "spacing_mask", "####"),
-                )
-            elif modo_numerico == "date":
-                texto_formateado = normalizar_fecha_capturada(
-                    texto,
-                    getattr(configuracion_numerica, "date_format", "dd/mm/aaaa"),
-                    confirmar=False,
-                )
-                if texto_formateado:
-                    texto = texto_formateado
+        texto = formatear_respuesta_campo(campo, texto)
         if not texto:
             continue
         if getattr(campo, "uppercase", False):
