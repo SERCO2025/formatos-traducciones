@@ -42,10 +42,13 @@ except Exception:
 
 from shared.fdt import cargar_fdt, guardar_fdt, validar_fdt, limpiar_fdt_temporales
 from shared.alignment import DPI_REGLA, alinear_campos, distribuir_campos
+from shared.validators import validar_configuracion_numerica
 from shared.models import (
     FIELD_TYPE_IMAGE,
     FIELD_TYPE_NUMBER,
     FIELD_TYPE_TEXT,
+    DATE_FORMATS,
+    NumericConfig,
     Color as FieldColor,
     Field,
     Formato,
@@ -2337,6 +2340,158 @@ class ConfiguradorApp(App):
             fuentes.insert(0, actual)
         return fuentes
 
+    def _editar_configuracion_numerica(self, configuracion, al_aceptar):
+        """Muestra los cuatro modos numéricos con controles nativos de Kivy."""
+        if isinstance(configuracion, NumericConfig):
+            inicial = NumericConfig.from_dict(configuracion.to_dict())
+        else:
+            inicial = NumericConfig()
+
+        contenido = BoxLayout(
+            orientation="vertical", padding=dp(12), spacing=dp(8)
+        )
+        fila_modo = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        fila_modo.add_widget(Label(text="Modo de captura", size_hint_x=0.42))
+        nombres = {
+            "Número": "number",
+            "Límite": "limit",
+            "Fecha": "date",
+            "Espaciado": "spacing",
+        }
+        inversos = {valor: clave for clave, valor in nombres.items()}
+        modo = Spinner(
+            text=inversos.get(inicial.mode, "Número"),
+            values=tuple(nombres.keys()),
+            size_hint_x=0.58,
+        )
+        fila_modo.add_widget(modo)
+        contenido.add_widget(fila_modo)
+
+        opciones = BoxLayout(orientation="vertical", spacing=dp(7))
+        contenido.add_widget(opciones)
+
+        def crear_fila(etiqueta, widget, alto=44):
+            fila = BoxLayout(size_hint_y=None, height=dp(alto), spacing=dp(8))
+            fila.add_widget(Label(text=etiqueta, size_hint_x=0.48, halign="left"))
+            fila.add_widget(widget)
+            opciones.add_widget(fila)
+            return fila
+
+        maximo = TextInput(
+            text=inicial.max_value, multiline=False, input_filter="int",
+            size_hint_y=None, height=dp(42), hint_text="Solo números",
+        )
+        fila_maximo = crear_fila("Cantidad máxima", maximo)
+
+        formato = Spinner(
+            text=inicial.date_format if inicial.date_format in DATE_FORMATS else "dd/mm/aaaa",
+            values=DATE_FORMATS,
+        )
+        fila_formato = crear_fila("Formato de fecha", formato)
+
+        fila_pasadas = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        solo_pasadas = CheckBox(active=bool(inicial.past_only), size_hint_x=None, width=dp(42))
+        fila_pasadas.add_widget(solo_pasadas)
+        fila_pasadas.add_widget(Label(
+            text="Permitir únicamente fechas pasadas",
+            halign="left", valign="middle",
+        ))
+        fila_pasadas.children[0].bind(size=lambda obj, val: setattr(obj, "text_size", val))
+        opciones.add_widget(fila_pasadas)
+
+        anio_minimo = TextInput(
+            text=inicial.min_year, multiline=False, input_filter="int",
+            size_hint_y=None, height=dp(42), hint_text="Solo números",
+        )
+        fila_anio = crear_fila("Año mínimo", anio_minimo)
+
+        mascara = TextInput(
+            text=inicial.spacing_mask, multiline=False,
+            size_hint_y=None, height=dp(42),
+            hint_text="Ejemplo: ####(-)####",
+        )
+        fila_mascara = crear_fila("Máscara de espaciado", mascara)
+
+        fila_completo = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        todas = CheckBox(
+            active=bool(inicial.spacing_required),
+            size_hint_x=None, width=dp(42),
+        )
+        fila_completo.add_widget(todas)
+        fila_completo.add_widget(Label(
+            text="Exigir todas las posiciones numéricas",
+            halign="left", valign="middle",
+        ))
+        opciones.add_widget(fila_completo)
+
+        ayuda = Label(
+            text="Número acepta dígitos, espacios y símbolos, pero no letras.",
+            size_hint_y=None, height=dp(58),
+            halign="left", valign="middle",
+        )
+        ayuda.bind(size=lambda obj, val: setattr(obj, "text_size", val))
+        contenido.add_widget(ayuda)
+
+        def mostrar_fila(fila, visible, alto=44):
+            fila.height = dp(alto) if visible else 0
+            fila.opacity = 1 if visible else 0
+            fila.disabled = not visible
+
+        def actualizar_modo(*_):
+            valor = nombres.get(modo.text, "number")
+            mostrar_fila(fila_maximo, valor == "limit")
+            mostrar_fila(fila_formato, valor == "date")
+            mostrar_fila(fila_pasadas, valor == "date")
+            contiene_anio = "aa" in formato.text
+            mostrar_fila(fila_anio, valor == "date" and contiene_anio)
+            mostrar_fila(fila_mascara, valor == "spacing")
+            mostrar_fila(fila_completo, valor == "spacing")
+            ayuda.text = (
+                "Número acepta dígitos, espacios y símbolos, pero no letras."
+                if valor == "number" else
+                "El capturador no permitirá superar el máximo configurado."
+                if valor == "limit" else
+                "El año mínimo solo aplica a formatos que incluyen año."
+                if valor == "date" else
+                "Usa # para posiciones y paréntesis para separadores o texto literal."
+            )
+
+        modo.bind(text=actualizar_modo)
+        formato.bind(text=actualizar_modo)
+        actualizar_modo()
+
+        botones = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        contenido.add_widget(botones)
+        popup = Popup(
+            title="Configuración del campo numérico",
+            content=contenido,
+            size_hint=(0.96, 0.78),
+            auto_dismiss=False,
+        )
+        botones.add_widget(Button(
+            text="Cancelar", on_release=lambda *_: popup.dismiss()
+        ))
+
+        def aceptar(_boton):
+            nueva = NumericConfig(
+                mode=nombres.get(modo.text, "number"),
+                max_value=maximo.text.strip(),
+                date_format=formato.text,
+                past_only=bool(solo_pasadas.active),
+                min_year=anio_minimo.text.strip(),
+                spacing_mask=mascara.text,
+                spacing_required=bool(todas.active),
+            )
+            valido, mensaje = validar_configuracion_numerica(nueva)
+            if not valido:
+                self._aviso(mensaje)
+                return
+            al_aceptar(nueva)
+            popup.dismiss()
+
+        botones.add_widget(Button(text="Aceptar", on_release=aceptar))
+        popup.open()
+
     def mostrar_propiedades(
         self, campo, es_nuevo=False, undo_antes=None, redo_antes=None,
         seleccionado_antes=None,
@@ -2797,6 +2952,42 @@ class ConfiguradorApp(App):
         fila_requerido.add_widget(requerido)
         form.add_widget(fila_requerido)
 
+        numeric_config_holder = {
+            "value": NumericConfig.from_dict(
+                getattr(campo, "numeric_config", NumericConfig()).to_dict()
+            )
+        }
+        if campo.field_type == FIELD_TYPE_NUMBER:
+            fila_modo_numerico = BoxLayout(
+                size_hint_y=None, height=dp(44), spacing=dp(8)
+            )
+            resumen_modo = Label(
+                text="Modo actual: %s" % {
+                    "number": "Número", "limit": "Límite",
+                    "date": "Fecha", "spacing": "Espaciado",
+                }.get(numeric_config_holder["value"].mode, "Número"),
+                halign="left", valign="middle",
+            )
+            resumen_modo.bind(
+                size=lambda obj, val: setattr(obj, "text_size", val)
+            )
+            fila_modo_numerico.add_widget(resumen_modo)
+            def abrir_modos_numericos(_boton):
+                def aplicar_configuracion(nueva):
+                    numeric_config_holder["value"] = nueva
+                    resumen_modo.text = "Modo actual: %s" % {
+                        "number": "Número", "limit": "Límite",
+                        "date": "Fecha", "spacing": "Espaciado",
+                    }.get(nueva.mode, "Número")
+                self._editar_configuracion_numerica(
+                    numeric_config_holder["value"], aplicar_configuracion
+                )
+            fila_modo_numerico.add_widget(Button(
+                text="Configurar modo...", size_hint_x=None, width=dp(172),
+                on_release=abrir_modos_numericos,
+            ))
+            form.add_widget(fila_modo_numerico)
+
         scroll.add_widget(form)
         contenido.add_widget(scroll)
 
@@ -2818,6 +3009,13 @@ class ConfiguradorApp(App):
                 if any(c is not campo and c.field_id == nuevo_id for c in self.formato.fields):
                     self._aviso("El identificador del campo ya existe.")
                     return
+                if campo.field_type == FIELD_TYPE_NUMBER:
+                    valido, mensaje = validar_configuracion_numerica(
+                        numeric_config_holder["value"]
+                    )
+                    if not valido:
+                        self._aviso(mensaje)
+                        return
                 # La creación ya guardó el estado anterior en el historial.
                 # Solo la edición de un campo existente necesita otro snapshot.
                 if not es_nuevo:
@@ -2835,6 +3033,9 @@ class ConfiguradorApp(App):
                 if campo.field_type == FIELD_TYPE_NUMBER:
                     from shared.models import Validation
                     campo.validation = Validation(numeric_only=True, alphanumeric_only=False)
+                    campo.numeric_config = NumericConfig.from_dict(
+                        numeric_config_holder["value"].to_dict()
+                    )
 
                 if not es_imagen:
                     seleccion_fuente = fuente_spinner.text
