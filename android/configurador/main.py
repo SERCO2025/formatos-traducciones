@@ -1706,7 +1706,7 @@ class ConfiguradorApp(App):
         self.alignment_multiselect = False
         self.alignment_selected_ids.clear()
         if self.alignment_multiselect_button is not None:
-            self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
+            self.alignment_multiselect_button.background_color = (0.44, 0.44, 0.44, 1)
         self._visual_template_path = None
         self._undo = []
         self._redo = []
@@ -1980,7 +1980,7 @@ class ConfiguradorApp(App):
             self.alignment_multiselect = False
             self.alignment_selected_ids.clear()
             if self.alignment_multiselect_button is not None:
-                self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
+                self.alignment_multiselect_button.background_color = (0.44, 0.44, 0.44, 1)
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
@@ -2011,7 +2011,7 @@ class ConfiguradorApp(App):
             self.alignment_multiselect = False
             self.alignment_selected_ids.clear()
             if self.alignment_multiselect_button is not None:
-                self.alignment_multiselect_button.background_color = (0, 0, 0, 0)
+                self.alignment_multiselect_button.background_color = (0.44, 0.44, 0.44, 1)
             self._undo = []
             self._redo = []
             self.editor.scale = self.scale
