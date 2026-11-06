@@ -1699,6 +1699,8 @@ class ConfiguradorApp(App):
         self._visual_template_path = None
         self._undo = []
         self._redo = []
+        if self.editor is not None:
+            self.editor.redibujar_reglas_y_guia()
         self.estado.text = "Nuevo formato."
         self.estado_menu.text = "Nuevo"
 
