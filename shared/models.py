@@ -115,6 +115,43 @@ class TextStyle:
 
 
 @dataclass
+class NumericConfig:
+    """Configuración persistente de los cuatro modos del campo numérico."""
+
+    mode: str = "number"
+    max_value: str = ""
+    date_format: str = "dd/mm/aaaa"
+    past_only: bool = False
+    min_year: str = ""
+    spacing_mask: str = "####"
+    spacing_required: bool = False
+
+    def to_dict(self):
+        return {
+            "mode": self.mode,
+            "max_value": self.max_value,
+            "date_format": self.date_format,
+            "past_only": self.past_only,
+            "min_year": self.min_year,
+            "spacing_mask": self.spacing_mask,
+            "spacing_required": self.spacing_required,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        data = data or {}
+        return cls(
+            mode=str(data.get("mode", "number")),
+            max_value=str(data.get("max_value", "")),
+            date_format=str(data.get("date_format", "dd/mm/aaaa")),
+            past_only=bool(data.get("past_only", False)),
+            min_year=str(data.get("min_year", "")),
+            spacing_mask=str(data.get("spacing_mask", "####")),
+            spacing_required=bool(data.get("spacing_required", False)),
+        )
+
+
+@dataclass
 class Field:
     field_id: str
     question: str
@@ -126,6 +163,7 @@ class Field:
     text_style: TextStyle = field(default_factory=TextStyle)
     text: str = ""
     uppercase: bool = False
+    numeric_config: NumericConfig = field(default_factory=NumericConfig)
 
     def to_dict(self):
         return {
@@ -139,6 +177,7 @@ class Field:
             "text_style": self.text_style.to_dict(),
             "text": self.text,
             "uppercase": self.uppercase,
+            "numeric_config": self.numeric_config.to_dict(),
         }
 
     @classmethod
@@ -155,6 +194,7 @@ class Field:
             text_style=TextStyle.from_dict(data.get("text_style", {})),
             text=str(data.get("text", "")),
             uppercase=bool(data.get("uppercase", False)),
+            numeric_config=NumericConfig.from_dict(data.get("numeric_config", {})),
         )
 
 
