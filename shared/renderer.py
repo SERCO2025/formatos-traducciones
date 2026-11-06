@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 
 from PIL import Image, ImageDraw, ImageFont
+from .validators import formatear_espaciado, normalizar_fecha_capturada
 
 
 def _normalizar_nombre_fuente(valor):
@@ -231,6 +232,26 @@ def renderizar_imagen(formato, respuestas):
             continue
 
         texto = str(texto)
+        if campo.field_type == "number":
+            configuracion_numerica = getattr(campo, "numeric_config", None)
+            modo_numerico = str(
+                getattr(configuracion_numerica, "mode", "number") or "number"
+            )
+            if modo_numerico == "spacing":
+                texto = formatear_espaciado(
+                    texto,
+                    getattr(configuracion_numerica, "spacing_mask", "####"),
+                )
+            elif modo_numerico == "date":
+                texto_formateado = normalizar_fecha_capturada(
+                    texto,
+                    getattr(configuracion_numerica, "date_format", "dd/mm/aaaa"),
+                    confirmar=False,
+                )
+                if texto_formateado:
+                    texto = texto_formateado
+        if not texto:
+            continue
         if getattr(campo, "uppercase", False):
             texto = texto.upper()
         estilo = campo.text_style
