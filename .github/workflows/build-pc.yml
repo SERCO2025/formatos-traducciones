@@ -2,7 +2,7 @@ name: Compilar EXE - Formatos Traducidos
 on:
   workflow_dispatch:
   push:
-    branches: [desarrollo, 'fix/**', diagnostico-atajos-numlock]
+    branches: [desarrollo, 'fix/**', diagnostico-atajos-numlock, alineamiento-integracion]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -38,7 +38,7 @@ jobs:
           python -m pip install -r requirements-pc.txt
 
       - name: Verificar sintaxis
-        run: python -m compileall shared configurador capturador android/capturador tests
+        run: python -m compileall shared configurador capturador android/configurador android/capturador tests
 
       - name: Ejecutar pruebas FDT y FTC
         run: python -m unittest discover -s tests -v
