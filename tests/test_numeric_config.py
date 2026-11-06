@@ -14,6 +14,7 @@ from shared.models import (
 )
 from shared.fdt import validar_fdt
 from android.capturador.shared.fdt import validar_fdt as validar_fdt_android
+from shared.renderer import formatear_respuesta_campo
 from shared.validators import (
     formatear_espaciado,
     normalizar_fecha_capturada,
@@ -125,6 +126,30 @@ class NumericValidationTests(unittest.TestCase):
             "1234-5   ",
         )
         self.assertEqual(formatear_espaciado("", "####(-)####"), "")
+
+    def test_renderer_formats_spacing_without_changing_stored_digits(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="spacing", spacing_mask="####(-)####"
+        ))
+        respuesta_almacenada = "12345"
+        self.assertEqual(
+            formatear_respuesta_campo(campo, respuesta_almacenada),
+            "1234-5   ",
+        )
+        self.assertEqual(respuesta_almacenada, "12345")
+
+    def test_renderer_formats_date_separators_without_padding_while_typing(self):
+        campo = self.crear_campo(NumericConfig(
+            mode="date", date_format="dd/mm/aaaa", min_year="1900"
+        ))
+        self.assertEqual(
+            formatear_respuesta_campo(campo, "12052026"),
+            "12/05/2026",
+        )
+        self.assertEqual(
+            formatear_respuesta_campo(campo, "1/2/2026"),
+            "1/2/2026",
+        )
 
     def test_spacing_mode_checks_capacity_and_required_positions(self):
         campo = self.crear_campo(NumericConfig(
