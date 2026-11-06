@@ -104,6 +104,10 @@ class Configurador:
 
         self.formato = None
         self.template_image = None
+        self.alignment_guide = None
+        self.alignment_tracing = False
+        self.alignment_multiselect = False
+        self.alignment_selected_ids.clear()
         self.template_tk = None
         self.canvas_image_id = None
         self.zoom = 1.0
@@ -1185,6 +1189,10 @@ class Configurador:
             if plantilla.size != (formato.template.width, formato.template.height):
                 raise ValueError("Las dimensiones de la plantilla no coinciden con el FDT.")
             self.formato = formato
+            self.alignment_guide = None
+            self.alignment_tracing = False
+            self.alignment_multiselect = False
+            self.alignment_selected_ids.clear()
             self.template_image = plantilla.copy()
             self.current_fdt_path = ruta
             self.selected_field = None
@@ -1795,9 +1803,13 @@ class Configurador:
         self._move_changed = False
 
         if self.tool == TOOL_ALIGNMENT:
-            dx, dy = self._canvas_to_document(cx, cy)
             if self.alignment_tracing:
-                self.alignment_guide = {"orientation": self._alignment_guide_orientation, "position": dy if self._alignment_guide_orientation == "horizontal" else dx}
+                if not (20 <= cx <= 20 + self.template_image.width * self.zoom and 20 <= cy <= 20 + self.template_image.height * self.zoom):
+                    return
+                dx, dy = self._canvas_to_document(cx, cy)
+                limite = self.template_image.height if self._alignment_guide_orientation == "horizontal" else self.template_image.width
+                posicion = dy if self._alignment_guide_orientation == "horizontal" else dx
+                self.alignment_guide = {"orientation": self._alignment_guide_orientation, "position": max(0, min(limite, posicion))}
                 self.alignment_tracing = False
                 self._dibujar_guia_alineacion()
                 self._actualizar_modos_alineacion()
