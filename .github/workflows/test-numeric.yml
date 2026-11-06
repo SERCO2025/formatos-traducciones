@@ -1,0 +1,22 @@
+name: Pruebas unitarias - modos numericos
+
+on:
+  push:
+    branches: [alineamiento-integracion]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ejecutar pruebas de modos numéricos
+        run: python -m unittest discover -s tests -p "test_numeric_config.py" -v
