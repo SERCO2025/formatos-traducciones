@@ -397,6 +397,7 @@ class CanvasEditor(StencilView):
         self._pinch_last_midpoint = None
         self._pinch_start_midpoint = None
         self._alignment_overlay = InstructionGroup()
+        self._ruler_label_textures = {}
         self.canvas.after.add(self._alignment_overlay)
         self.bind(pos=self._viewport_changed, size=self._viewport_changed)
 
@@ -619,6 +620,16 @@ class CanvasEditor(StencilView):
                 widget.actualizar_posicion()
         self.redibujar_reglas_y_guia()
 
+    def _textura_etiqueta_regla(self, texto):
+        clave = (str(texto), int(dp(9)))
+        textura = self._ruler_label_textures.get(clave)
+        if textura is None:
+            etiqueta = CoreLabel(text=str(texto), font_size=dp(9))
+            etiqueta.refresh()
+            textura = etiqueta.texture
+            self._ruler_label_textures[clave] = textura
+        return textura
+
     def redibujar_reglas_y_guia(self):
         self._alignment_overlay.clear()
         tw = self.template_widget
@@ -637,9 +648,7 @@ class CanvasEditor(StencilView):
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(x, tw.top, x, tw.top - largo), width=1))
             if px % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text="%d in" % (px // DPI_REGLA), font_size=dp(9))
-                etiqueta.refresh()
-                textura = etiqueta.texture
+                textura = self._textura_etiqueta_regla("%d in" % (px // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(x + dp(2), tw.top - dp(21)), size=textura.size))
         for py in range(0, alto_doc + 1, paso):
@@ -648,9 +657,7 @@ class CanvasEditor(StencilView):
             self._alignment_overlay.add(Color(0.72, 0.72, 0.72, 0.95))
             self._alignment_overlay.add(Line(points=(tw.x, y, tw.x + largo, y), width=1))
             if py % (DPI_REGLA * 10) == 0:
-                etiqueta = CoreLabel(text="%d in" % (py // DPI_REGLA), font_size=dp(9))
-                etiqueta.refresh()
-                textura = etiqueta.texture
+                textura = self._textura_etiqueta_regla("%d in" % (py // DPI_REGLA))
                 self._alignment_overlay.add(Color(0.9, 0.9, 0.9, 1))
                 self._alignment_overlay.add(Rectangle(texture=textura, pos=(tw.x + dp(11), y - textura.height / 2), size=textura.size))
         guia = self.app.alignment_guide
