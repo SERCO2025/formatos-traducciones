@@ -75,7 +75,7 @@ def validar_configuracion_numerica(config):
 
     if modo == "limit":
         maximo = str(getattr(config, "max_value", "") or "")
-        if not maximo.isdigit():
+        if not maximo.isdecimal():
             return False, "El límite máximo debe contener únicamente números."
         return True, ""
 
@@ -85,7 +85,7 @@ def validar_configuracion_numerica(config):
             return False, "El formato de fecha configurado no es válido."
         if _contiene_anio(date_format):
             minimo = str(getattr(config, "min_year", "") or "")
-            if not minimo.isdigit():
+            if not minimo.isdecimal():
                 return False, "El año mínimo es obligatorio y debe contener únicamente números."
         return True, ""
 
@@ -323,7 +323,7 @@ def validar_respuesta(campo, respuesta, hoy=None):
         return False, mensaje
 
     if modo == "limit":
-        if not respuesta.isdigit():
+        if not respuesta.isdecimal():
             return False, "Este campo permite únicamente números."
         if int(respuesta) > int(config.max_value):
             return False, "La cantidad no puede superar el límite de %s." % config.max_value
