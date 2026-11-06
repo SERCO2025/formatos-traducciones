@@ -672,15 +672,29 @@ class CapturadorApp:
             filtrada = actual
         if filtrada != actual:
             posicion = self.entrada.index("insert")
+            texto_antes_cursor = self.entrada.get("1.0", posicion)
+            if modo == "number":
+                antes_filtrado = "".join(
+                    caracter for caracter in texto_antes_cursor
+                    if not caracter.isalpha()
+                )
+            elif modo in ("limit", "spacing"):
+                antes_filtrado = "".join(
+                    caracter for caracter in texto_antes_cursor
+                    if caracter.isdigit()
+                )
+            elif modo == "date":
+                antes_filtrado = "".join(
+                    caracter for caracter in texto_antes_cursor
+                    if caracter.isdigit() or caracter in separadores
+                )
+            else:
+                antes_filtrado = texto_antes_cursor
             self.entrada.delete("1.0", "end")
             self.entrada.insert("1.0", filtrada)
-            try:
-                indice = int(float(posicion.split(".")[0])) - 1
-                columna = int(posicion.split(".")[1])
-                nueva_columna = min(len(filtrada), max(0, columna))
-                self.entrada.mark_set("insert", "1.0+%dc" % nueva_columna)
-            except (ValueError, IndexError):
-                self.entrada.mark_set("insert", "end")
+            self.entrada.mark_set(
+                "insert", "1.0+%dc" % min(len(filtrada), len(antes_filtrado))
+            )
             self._entrada_cambio()
 
     def _entrada_cambio(self, event=None):
