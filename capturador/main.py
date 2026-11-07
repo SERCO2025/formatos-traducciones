@@ -21,7 +21,7 @@ from shared.ftc import (
     validar_campo_imagen_ftc,
     validar_entradas_ftc,
 )
-from shared.models import FIELD_TYPE_IMAGE
+from shared.models import FIELD_TYPE_IMAGE, FIELD_TYPE_NUMBER
 from shared.renderer import (
     construir_nombre_archivo,
     renderizar_formato,
