@@ -6,6 +6,7 @@ import re
 import tempfile
 import time
 import tkinter as tk
+import traceback
 import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -61,6 +62,7 @@ class CapturadorApp:
 
         self._crear_interfaz()
         self._mostrar_inicio()
+        self._registrar_diagnostico_navegacion("Aplicación iniciada.")
         self.root.after(1500, self._limpiar_archivos_vencidos)
 
     def _crear_interfaz(self):
@@ -822,6 +824,10 @@ class CapturadorApp:
             self.entrada.delete("1.0", "end")
             self.entrada.insert("1.0", respuesta)
         valido, mensaje = validar_respuesta(campo, respuesta)
+        self._registrar_diagnostico_navegacion(
+            "Validación de respuesta: indice=%s campo=%s tipo=%s longitud=%s valido=%s motivo=%s"
+            % (self.indice, campo.field_id, campo.field_type, len(respuesta), valido, mensaje)
+        )
 
         if not valido:
             messagebox.showwarning("Respuesta no válida", mensaje)
@@ -845,28 +851,79 @@ class CapturadorApp:
             self.archivo_imagen.config(text="Imagen seleccionada: " + ruta)
             self._actualizar_preview()
 
+    def _registrar_diagnostico_navegacion(self, mensaje):
+        """Registra temporalmente el recorrido de Continuar sin guardar respuestas."""
+        try:
+            self._settings_dir.mkdir(parents=True, exist_ok=True)
+            ruta = self._settings_dir / "capturador_navigation.log"
+            with open(ruta, "a", encoding="utf-8") as archivo:
+                archivo.write("[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), mensaje))
+        except Exception:
+            # El diagnóstico nunca debe impedir la captura si no puede escribirse.
+            pass
+
     def siguiente(self):
-        if not self._guardar_respuesta_actual():
-            return
+        indice_inicial = self.indice
+        campo_actual = (
+            self.formato.fields[indice_inicial]
+            if self.formato and self.formato.fields and 0 <= indice_inicial < len(self.formato.fields)
+            else None
+        )
+        self._registrar_diagnostico_navegacion(
+            "CONTINUAR pulsado: indice=%s total=%s campo=%s tipo=%s"
+            % (
+                indice_inicial,
+                len(self.formato.fields) if self.formato else 0,
+                getattr(campo_actual, "field_id", "(sin campo)"),
+                getattr(campo_actual, "field_type", "(sin tipo)"),
+            )
+        )
+        try:
+            if not self._guardar_respuesta_actual():
+                self._registrar_diagnostico_navegacion(
+                    "BLOQUEO: _guardar_respuesta_actual devolvió False; indice=%s" % self.indice
+                )
+                return
 
-        if self.indice < len(self.formato.fields) - 1:
-            self.indice += 1
-            self._mostrar_campo()
-            return
+            self._registrar_diagnostico_navegacion(
+                "Respuesta guardada; indice=%s" % self.indice
+            )
+            if self.indice < len(self.formato.fields) - 1:
+                self.indice += 1
+                self._registrar_diagnostico_navegacion(
+                    "Indice incrementado: %s -> %s" % (indice_inicial, self.indice)
+                )
+                self._mostrar_campo()
+                self._registrar_diagnostico_navegacion(
+                    "Siguiente campo mostrado correctamente; indice=%s" % self.indice
+                )
+                return
 
-        errores = validar_todas_las_respuestas(self.formato, self.respuestas)
-        if errores:
-            mensajes = []
-            for campo in self.formato.fields:
-                if campo.field_id in errores:
-                    mensajes.append(
-                        "%s: %s"
-                        % (campo.question or campo.field_id, errores[campo.field_id])
-                    )
-            messagebox.showwarning("Revisar respuestas", "\n".join(mensajes))
-            return
+            errores = validar_todas_las_respuestas(self.formato, self.respuestas)
+            if errores:
+                self._registrar_diagnostico_navegacion(
+                    "Validación final con errores: %s" % ", ".join(sorted(errores.keys()))
+                )
+                mensajes = []
+                for campo in self.formato.fields:
+                    if campo.field_id in errores:
+                        mensajes.append(
+                            "%s: %s"
+                            % (campo.question or campo.field_id, errores[campo.field_id])
+                        )
+                messagebox.showwarning("Revisar respuestas", "\n".join(mensajes))
+                return
 
-        self._mostrar_previsualizacion_final()
+            self._registrar_diagnostico_navegacion("Validación final correcta; abriendo previsualización.")
+            self._mostrar_previsualizacion_final()
+        except Exception:
+            detalle = traceback.format_exc()
+            self._registrar_diagnostico_navegacion("EXCEPCIÓN en Continuar:\n" + detalle)
+            messagebox.showerror(
+                "Error al continuar",
+                "Se produjo un error al avanzar. El diagnóstico se guardó en:\n%s\n\n%s"
+                % (self._settings_dir / "capturador_navigation.log", detalle),
+            )
 
     def anterior(self):
         if not self.formato or self.indice <= 0:
