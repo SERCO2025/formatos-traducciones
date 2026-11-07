@@ -451,7 +451,7 @@ class CapturadorApp:
         try:
             formato = cargar_fdt(ruta)
         except Exception as exc:
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo abrir el formato",
                 "El archivo .fdt no pudo cargarse correctamente.\n\n%s" % exc,
             )
@@ -551,7 +551,7 @@ class CapturadorApp:
                 limpiar_fdt_temporales(keep_path=ruta_activa)
             except Exception:
                 pass
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo abrir el avance",
                 "El archivo FTC no pudo cargarse correctamente.\\n\\n%s" % exc,
             )
@@ -636,7 +636,7 @@ class CapturadorApp:
                     os.remove(ruta_temporal)
             except OSError:
                 pass
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo guardar el avance",
                 "Ocurrió un error al guardar el archivo FTC.\\n\\n%s" % exc,
             )
@@ -1015,7 +1015,7 @@ class CapturadorApp:
         try:
             imagen = renderizar_imagen(self.formato, self.respuestas)
         except Exception as exc:
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo generar la previsualización",
                 "Ocurrió un error al generar el documento.\n\n%s" % exc,
             )
@@ -1222,7 +1222,7 @@ class CapturadorApp:
             renderizar_formato(self.formato, self.respuestas, salida)
             self._registrar_jpeg_generado(salida)
         except Exception as exc:
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo guardar",
                 "Ocurrió un error al guardar el documento.\n\n%s" % exc,
                 parent=dialog,
@@ -1299,7 +1299,7 @@ class CapturadorApp:
         try:
             papel, ruta = self._crear_archivo_para_impresion(imagen)
         except Exception as exc:
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo preparar la impresión",
                 "Ocurrió un error al preparar la hoja.\n\n%s" % exc,
             )
@@ -1322,7 +1322,7 @@ class CapturadorApp:
                     "La impresión directa está disponible en Windows."
                 )
         except Exception as exc:
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "No se pudo iniciar la impresión",
                 "Windows no pudo enviar el archivo a la impresora.\n\n%s" % exc,
             )
