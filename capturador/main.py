@@ -852,6 +852,43 @@ class CapturadorApp:
             self.archivo_imagen.config(text="Imagen seleccionada: " + ruta)
             self._actualizar_preview()
 
+    def _mostrar_error_copiable(self, titulo, texto, parent=None):
+        """Muestra el error completo en una ventana con copia directa al portapapeles."""
+        ventana = tk.Toplevel(parent or self.root)
+        ventana.title(titulo)
+        ventana.transient(parent or self.root)
+        ventana.geometry("760x520")
+        ventana.minsize(520, 320)
+
+        contenedor = ttk.Frame(ventana, padding=10)
+        contenedor.pack(fill="both", expand=True)
+
+        visor = tk.Text(contenedor, wrap="word", undo=False)
+        barra = ttk.Scrollbar(contenedor, orient="vertical", command=visor.yview)
+        visor.configure(yscrollcommand=barra.set)
+        barra.pack(side="right", fill="y")
+        visor.pack(side="left", fill="both", expand=True)
+        visor.insert("1.0", str(texto))
+        visor.configure(state="disabled")
+
+        botones = ttk.Frame(ventana, padding=(10, 0, 10, 10))
+        botones.pack(fill="x")
+
+        estado = ttk.Label(botones, text="")
+        estado.pack(side="left")
+
+        def copiar_log():
+            ventana.clipboard_clear()
+            ventana.clipboard_append(str(texto))
+            ventana.update()
+            estado.config(text="Log copiado al portapapeles.")
+
+        ttk.Button(botones, text="Copiar log", command=copiar_log).pack(side="right", padx=(6, 0))
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side="right")
+        ventana.protocol("WM_DELETE_WINDOW", ventana.destroy)
+        ventana.lift()
+        ventana.focus_force()
+
     def _registrar_diagnostico_navegacion(self, mensaje):
         """Registra temporalmente el recorrido de Continuar sin guardar respuestas."""
         try:
@@ -920,7 +957,7 @@ class CapturadorApp:
         except Exception:
             detalle = traceback.format_exc()
             self._registrar_diagnostico_navegacion("EXCEPCIÓN en Continuar:\n" + detalle)
-            messagebox.showerror(
+            self._mostrar_error_copiable(
                 "Error al continuar",
                 "Se produjo un error al avanzar. El diagnóstico se guardó en:\n%s\n\n%s"
                 % (self._settings_dir / "capturador_navigation.log", detalle),
