@@ -48,6 +48,7 @@ class CapturadorApp:
         self._preview_after_id = None
         self._preview_photo = None
         self._final_preview_photo = None
+        self._final_preview_dialog = None
         self._fdt_path = None
         self._draft_dirs = []
         atexit.register(self._limpiar_temporales)
@@ -958,6 +959,19 @@ class CapturadorApp:
         return True
 
     def _mostrar_previsualizacion_final(self):
+        # Reutilizar la ventana existente; no generar otra previsualización
+        # ni abrir ventanas vacías por clics repetidos en Finalizar.
+        if self._final_preview_dialog is not None:
+            try:
+                if self._final_preview_dialog.winfo_exists():
+                    self._final_preview_dialog.deiconify()
+                    self._final_preview_dialog.lift()
+                    self._final_preview_dialog.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self._final_preview_dialog = None
+
         if not self._cargar_plantilla_si_es_necesario():
             return
 
@@ -972,10 +986,19 @@ class CapturadorApp:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Previsualización del archivo terminado")
+        self._final_preview_dialog = dialog
         dialog.configure(bg="#202020")
         dialog.transient(self.root)
         dialog.geometry("1000x720")
         dialog.minsize(760, 560)
+
+        def cerrar_previsualizacion():
+            if self._final_preview_dialog is dialog:
+                self._final_preview_dialog = None
+            if dialog.winfo_exists():
+                dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", cerrar_previsualizacion)
 
         area = tk.Frame(dialog, bg="#101010")
         area.pack(fill="both", expand=True, padx=12, pady=(12, 6))
@@ -1123,7 +1146,7 @@ class CapturadorApp:
         botones.pack(fill="x", padx=12, pady=(4, 12))
 
         tk.Button(
-            botones, text="Cerrar", command=dialog.destroy,
+            botones, text="Cerrar", command=cerrar_previsualizacion,
             bg="#303030", fg="white", relief="flat",
         ).pack(side="left")
 
